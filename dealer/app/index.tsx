@@ -20,7 +20,7 @@ export default function HomeScreen() {
         </View>
 
         <View className="space-y-2">
-          <Text className="text-black text-sm">Password</Text>
+          <Text className="text-black text-sm">Passwords</Text>
           <TextInput
             className="w-full p-2 border border-gray-300 rounded-md"
             placeholder="Enter password"
