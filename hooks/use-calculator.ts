@@ -1,89 +1,100 @@
-import { useQuery } from '@tanstack/react-query';
-import { router } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useQuery } from "@tanstack/react-query";
+import { router } from "expo-router";
+import { useCallback, useState } from "react";
 
 export const useCalculator = () => {
-  const [display, setDisplay] = useState('0');
+  const [display, setDisplay] = useState("0");
   const [firstOperand, setFirstOperand] = useState<number | null>(null);
   const [operator, setOperator] = useState<string | null>(null);
   const [waitingForSecondOperand, setWaitingForSecondOperand] = useState(false);
   const [secondOperand, setSecondOperand] = useState<string | null>(null);
   const [equation, setEquation] = useState<string>("");
-  const [pinInput, setPinInput] = useState('');
+  const [pinInput, setPinInput] = useState("");
 
   const { data: equationData } = useQuery({
-    queryKey: ['/user/get-initial-user-creds/'],
+    queryKey: ["/user/get-initial-user-creds/"],
     queryFn: () => {
-      return fetch('https://threedln-be.onrender.com/user/get-initial-user-creds/', {
-        headers: {
-          'User-Type': "DEALER"
+      return fetch(
+        "https://threedln-be.onrender.com/user/get-initial-user-creds/",
+        {
+          headers: {
+            "User-Type": "DEALER",
+          },
         }
-      }).then(res => res.json());
-    }
-  })
+      ).then((res) => res.json());
+    },
+  });
 
-  const handleNumberInput = useCallback((digit: string) => {
-    if (equation) {
-      // Now user is entering PIN
-      const updatedPin = pinInput + digit;
-      setPinInput(updatedPin);
-      console.log("updatedPin", updatedPin, "pinInput", pinInput);
-      const correctPin = equationData?.[equation];
-      if (correctPin && Number(updatedPin) === Number(correctPin)) {
-        router.navigate('/login');
+  const handleNumberInput = useCallback(
+    (digit: string) => {
+      if (equation) {
+        // Now user is entering PIN
+        const updatedPin = pinInput + digit;
+        setPinInput(updatedPin);
+        console.log("updatedPin", updatedPin, "pinInput", pinInput);
+        const correctPin = equationData?.[equation];
+        if (correctPin && Number(updatedPin) === Number(correctPin)) {
+          router.navigate("/login");
+        }
+        return;
       }
-      return;
-    }
-    if (waitingForSecondOperand) {
-      setDisplay(digit);
-      setWaitingForSecondOperand(false);
-      setSecondOperand(digit);
-    } else {
-      const newDisplay = display === '0' ? digit : display + digit;
-      setDisplay(newDisplay);
-      if (operator && firstOperand !== null) {
-        setSecondOperand((prev) => (prev ? prev + digit : digit));
+      if (waitingForSecondOperand) {
+        setDisplay(digit);
+        setWaitingForSecondOperand(false);
+        setSecondOperand(digit);
+      } else {
+        const newDisplay = display === "0" ? digit : display + digit;
+        setDisplay(newDisplay);
+        if (operator && firstOperand !== null) {
+          setSecondOperand((prev) => (prev ? prev + digit : digit));
+        }
       }
-    }
-  }, [
-    display,
-    waitingForSecondOperand,
-    operator,
-    firstOperand,
-    pinInput,
-    equation,
-    equationData
-  ]);
+    },
+    [
+      display,
+      waitingForSecondOperand,
+      operator,
+      firstOperand,
+      pinInput,
+      equation,
+      equationData,
+    ]
+  );
 
+  const handleOperator = useCallback(
+    (nextOperator: string) => {
+      const inputValue = parseFloat(display);
 
-  const handleOperator = useCallback((nextOperator: string) => {
-    const inputValue = parseFloat(display);
+      if (firstOperand === null) {
+        setFirstOperand(inputValue);
+      } else if (operator) {
+        const result = performCalculation(operator, firstOperand, inputValue);
+        setDisplay(String(result));
+        setFirstOperand(result);
+      }
 
-    if (firstOperand === null) {
-      setFirstOperand(inputValue);
-    } else if (operator) {
-      const result = performCalculation(operator, firstOperand, inputValue);
-      setDisplay(String(result));
-      setFirstOperand(result);
-    }
+      setWaitingForSecondOperand(true);
+      setOperator(nextOperator);
+      setSecondOperand(null); // Reset second operand for new input
+    },
+    [display, firstOperand, operator]
+  );
 
-    setWaitingForSecondOperand(true);
-    setOperator(nextOperator);
-    setSecondOperand(null); // Reset second operand for new input
-  }, [display, firstOperand, operator]);
-
-
-  const performCalculation = (op: string, first: number, second: number): number => {
+  const performCalculation = (
+    op: string,
+    first: number,
+    second: number
+  ): number => {
     switch (op) {
-      case '+':
+      case "+":
         return first + second;
-      case '-':
+      case "-":
         return first - second;
-      case '*':
+      case "*":
         return first * second;
-      case '/':
+      case "/":
         return first / second;
-      case '%':
+      case "%":
         return first % second;
       default:
         return second;
@@ -97,9 +108,9 @@ export const useCalculator = () => {
     const result = performCalculation(operator, firstOperand, inputValue);
 
     const equation = `${firstOperand}${operator}${secondOperand ?? display}`;
-    console.log('Equation:', equation);  // ✅ You’ll see "2+5"
+    console.log("Equation:", equation); // ✅ You’ll see "2+5"
     if (equationData && !!equationData[equation]) {
-      setDisplay("")
+      setDisplay("");
       setFirstOperand(null);
       setEquation(equation);
     } else {
@@ -111,7 +122,6 @@ export const useCalculator = () => {
     setWaitingForSecondOperand(true);
     setSecondOperand(null);
   }, [display, firstOperand, operator, secondOperand]);
-
 
   const handleClear = useCallback(() => {
     setDisplay("0");
@@ -127,7 +137,7 @@ export const useCalculator = () => {
     if (display.length > 1) {
       setDisplay(display.slice(0, -1));
     } else {
-      setDisplay('0');
+      setDisplay("0");
     }
   }, [display]);
 
@@ -138,6 +148,6 @@ export const useCalculator = () => {
     handleClear,
     handleEqual,
     handleDelete,
-    pinInput
+    pinInput,
   };
 };
