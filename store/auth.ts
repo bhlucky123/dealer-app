@@ -17,8 +17,12 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  token: null,
+  user: {
+    id: "567",
+    name: "Dealer User",
+  },
+  token:
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzUzMTEzNTkwLCJpYXQiOjE3NTA1MjE1OTAsImp0aSI6IjAzMTk3MWZlN2E5ZjQxM2RiMzA2OWMxZTUzYzQzOTI5IiwidXNlcl9pZCI6Mn0.zo4lOisu95CykMeqcdNzqvy_w6pU7-UaCsktnyFIWRI",
   loading: false,
   error: null,
 

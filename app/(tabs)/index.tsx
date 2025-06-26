@@ -17,22 +17,40 @@ type Draw = {
 };
 
 export default function HomeScreen() {
-  const { data, error } = useQuery<Draw[]>({
+  const { data, error, isLoading } = useQuery<Draw[]>({
     queryKey: ["/draw/list/"],
     queryFn: async () => {
       const res = await api.get("/draw/list/");
       return res?.data || [];
     },
   });
+  if (error) {
+    console.error("Draws Errors:", error);
+  }
+
+  console.log("draws", data);
 
   const { setSelectedDraw } = useDrawStore();
 
   return (
     <View className="flex-1 bg-white p-4">
       <Text className="text-xl font-bold mb-4">Draw List</Text>
+      {isLoading && <Text>Loading...</Text>}
 
       <FlatList
-        data={data}
+        data={[
+          {
+            color_theme: "red",
+            cut_off_time: "11:47:48",
+            draw_time: "11:51:49",
+            id: 1,
+            name: "bh lucky",
+            non_single_digit_price: 10,
+            single_digit_number_price: 12,
+            valid_from: "2025-06-10",
+            valid_till: "2025-06-30",
+          },
+        ]}
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <TouchableOpacity
