@@ -1,5 +1,8 @@
+import { useAuthStore } from "@/store/auth";
+import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { router } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
   Alert,
@@ -8,7 +11,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { SelectList } from "react-native-dropdown-select-list";
 
@@ -29,35 +32,90 @@ type Totals = {
   c_amount: number;
 };
 
+type DrawSessionResponse = {
+  id: number;
+  session: {
+    active: boolean;
+    reason: string;
+    active_session_id: number | null;
+  };
+  name: string;
+  valid_from: string;
+  valid_till: string;
+  cut_off_time: string;
+  draw_time: string;
+  color_theme: string;
+  non_single_digit_price: number;
+  single_digit_number_price: number;
+};
+
+const RangeOptions = [
+  { key: "1", value: "Book" },
+  { key: "2", value: "Range" },
+  { key: "3", value: "Set" },
+];
+
 const BookingScreen: React.FC = () => {
   const [customerName, setCustomerName] = useState<string>("");
-  const [drawSession, setDrawSession] = useState<string>("1");
+  const [drawSession, setDrawSession] = useState<string>("3");
   const [selectedRange, setSelectedRange] = useState<string>("");
   const [numberInput, setNumberInput] = useState<string>("");
   const [countInput, setCountInput] = useState<string>("");
+  const [bCountInput, setBCountInput] = useState<string>("");
   const [bookingDetails, setBookingDetails] = useState<BookingDetail[]>([]);
+  const [rangeOptions, setRangeOptions] = useState(RangeOptions);
 
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [editingEntry, setEditingEntry] = useState<BookingDetail | null>(null);
 
+  const { selectedDraw } = useDrawStore();
+  const { user } = useAuthStore();
+
   const countInputRef = useRef<TextInput>(null);
   const numInputRef = useRef<TextInput>(null);
-
-  const rangeOptions = [
-    { key: "1", value: "Book" },
-    { key: "2", value: "Range" },
-    { key: "3", value: "Set" },
-    { key: "4", value: "100s" },
-    { key: "5", value: "111s" },
-    { key: "6", value: "1s" },
-  ];
 
   const buttonsMap: Record<string, string[]> = {
     "1": ["A", "B", "C", "ALL"],
     "2": ["AB", "BC", "AC", "ALL"],
     "3": ["SUPER", "BOX", "BOTH"],
   };
+
+  const {
+    data: DrawSessionDetails,
+    error,
+    isError,
+  } = useQuery<DrawSessionResponse>({
+    queryKey: ["/draw/get-session/", selectedDraw?.id],
+    queryFn: async () => {
+      const response = await api.get(`/draw/get-session/${selectedDraw?.id}/`);
+      return response.data;
+    },
+    enabled: !!selectedDraw?.id,
+    select: (response) => response,
+  });
+
+  if (isError || error || !DrawSessionDetails?.session?.active) {
+    return (
+      <View className="flex-1 justify-center items-center bg-white">
+        <View className="bg-red-100 border border-red-400 rounded-lg px-6 py-4 shadow-md">
+          <Text className="text-red-700 text-base font-semibold text-center">
+            You're not allowed to book the number now. Try later
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              router.push("/(tabs)");
+            }}
+            className="mt-4 bg-red-600 px-4 py-2 rounded"
+          >
+            <Text className="text-white text-center font-semibold">
+              Go Back
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   const { mutate } = useMutation({
     mutationFn: async (data: any) => api.post("/draw-booking/create/", data),
@@ -67,12 +125,15 @@ const BookingScreen: React.FC = () => {
       clearInputs();
       setEditIndex(null);
     },
-    onError: () => {
+    onError: (error) => {
+      console.log("error", error);
       Alert.alert("Error", "Failed to submit.");
     },
   });
 
-  const getBookingType = (): string => {
+  type BookingType = "single_digit" | "double_digit" | "triple_digit" | "";
+
+  const getBookingType = (): BookingType => {
     switch (drawSession) {
       case "1":
         return "single_digit";
@@ -86,16 +147,94 @@ const BookingScreen: React.FC = () => {
   };
 
   const addBooking = (subType: string): void => {
-    if (!numberInput || !countInput) {
+    if (!numberInput) {
+      Alert.alert("Missing fields", "Enter number.");
+      return;
+    }
+
+    if (!countInput && (subType !== "BOX" && subType !== "BOTH")) {
       Alert.alert("Missing fields", "Enter number and count.");
       return;
     }
 
+    if ((subType === "BOX" || subType === "BOTH") && !bCountInput) {
+      Alert.alert("Missing fields", "Enter B.Count.");
+      return;
+    }
+
+    const bookingType = getBookingType();
     const number = parseInt(numberInput);
     const count = parseInt(countInput);
-    const amount = count * 5;
-    const d_amount = parseFloat((amount * 1.8).toFixed(2));
-    const c_amount = amount * 2;
+    const bCount = parseInt(bCountInput);
+
+    // Get price and commission based on booking type
+    const isSingle = bookingType === "single_digit";
+    const price = isSingle
+      ? DrawSessionDetails.single_digit_number_price
+      : DrawSessionDetails.non_single_digit_price;
+    const commission = isSingle
+      ? user?.single_digit_number_commission ?? 0
+      : user?.commission ?? 0;
+
+    if (subType === "BOTH") {
+      // Add SUPER
+      const amountSuper = count * price;
+      const d_amountSuper = parseFloat((amountSuper - commission).toFixed(2));
+      const c_amountSuper = amountSuper;
+      const superEntry: BookingDetail = {
+        lsk: "SUPER",
+        number,
+        count,
+        amount: amountSuper,
+        d_amount: d_amountSuper,
+        c_amount: c_amountSuper,
+        type: bookingType,
+        sub_type: "SUPER",
+      };
+      // Add BOX
+      const amountBox = bCount * price;
+      const d_amountBox = parseFloat((amountBox - commission).toFixed(2));
+      const c_amountBox = amountBox;
+      const boxEntry: BookingDetail = {
+        lsk: "BOX",
+        number,
+        count: bCount,
+        amount: amountBox,
+        d_amount: d_amountBox,
+        c_amount: c_amountBox,
+        type: bookingType,
+        sub_type: "BOX",
+      };
+      setBookingDetails((prev) => [...prev, superEntry, boxEntry]);
+      clearInputs();
+      setBCountInput("");
+      return;
+    }
+
+    if (subType === "BOX") {
+      const amount = bCount * price;
+      const d_amount = parseFloat((amount - commission).toFixed(2));
+      const c_amount = amount;
+      const newEntry: BookingDetail = {
+        lsk: subType,
+        number,
+        count: bCount,
+        amount,
+        d_amount,
+        c_amount,
+        type: bookingType,
+        sub_type: subType,
+      };
+      setBookingDetails((prev) => [...prev, newEntry]);
+      clearInputs();
+      setBCountInput("");
+      return;
+    }
+
+    // Default (SUPER or others)
+    const amount = count * price;
+    const d_amount = parseFloat((amount - commission).toFixed(2));
+    const c_amount = amount;
 
     const newEntry: BookingDetail = {
       lsk: subType,
@@ -104,7 +243,7 @@ const BookingScreen: React.FC = () => {
       amount,
       d_amount,
       c_amount,
-      type: getBookingType(),
+      type: bookingType,
       sub_type: subType,
     };
 
@@ -117,9 +256,14 @@ const BookingScreen: React.FC = () => {
       customer_name: customerName,
       draw_session: parseInt(drawSession),
       booked_agent: 3,
-      booking_details: bookingDetails.map(({ number, count, type, sub_type }) => ({
-        number, count, type, sub_type,
-      })),
+      booking_details: bookingDetails.map(
+        ({ number, count, type, sub_type }) => ({
+          number,
+          count,
+          type,
+          sub_type,
+        })
+      ),
     };
     mutate(data);
   };
@@ -169,11 +313,24 @@ const BookingScreen: React.FC = () => {
   const clearInputs = () => {
     setCountInput("");
     setNumberInput("");
+    setBCountInput("")
     numInputRef.current?.focus();
   };
 
   const handleDrawSession = (num: string) => {
     clearInputs();
+    if (num === "3") {
+      setRangeOptions(RangeOptions);
+    }
+    if (num !== "3") {
+      setRangeOptions([
+        { key: "1", value: "Book" },
+        { key: "2", value: "Range" },
+      ]);
+      if (selectedRange === "3") {
+        setSelectedRange("1");
+      }
+    }
     setDrawSession(num.toString());
   };
 
@@ -226,11 +383,21 @@ const BookingScreen: React.FC = () => {
         <TextInput
           ref={numInputRef}
           value={numberInput}
-          onChangeText={setNumberInput}
+          onChangeText={(text) => {
+            const formatted = text.replace(/[^0-9]/g, "");
+            setNumberInput(formatted);
+
+            const requiredLength = parseInt(drawSession);
+            if (formatted.length >= requiredLength) {
+              countInputRef.current?.focus();
+            }
+          }}
+          maxLength={3}
           keyboardType="numeric"
           placeholder="Number"
           className="flex-1 border border-gray-400 px-3 py-2 rounded"
         />
+
         <TextInput
           ref={countInputRef}
           value={countInput}
@@ -239,6 +406,16 @@ const BookingScreen: React.FC = () => {
           placeholder="Count"
           className="flex-1 border border-gray-400 px-3 py-2 rounded"
         />
+
+        {drawSession === "3" && (
+          <TextInput
+            value={bCountInput}
+            onChangeText={setBCountInput}
+            keyboardType="numeric"
+            placeholder="B.Count"
+            className="flex-1 border border-gray-400 px-3 py-2 rounded"
+          />
+        )}
       </View>
 
       <View className="flex-row flex-wrap mb-3 gap-2">
@@ -261,19 +438,32 @@ const BookingScreen: React.FC = () => {
           <Text className="w-[16%] text-xs font-bold text-center">NUMBER</Text>
           <Text className="w-[12%] text-xs font-bold text-center">COUNT</Text>
           <Text className="w-[20%] text-xs font-bold text-center">AMOUNT</Text>
-          <Text className="w-[20%] text-xs font-bold text-center">D.AMOUNT</Text>
-          <Text className="w-[10%] text-xs font-bold text-center">C.AMOUNT</Text>
+          <Text className="w-[20%] text-xs font-bold text-center">
+            D.AMOUNT
+          </Text>
+          <Text className="w-[10%] text-xs font-bold text-center">
+            C.AMOUNT
+          </Text>
           <Text className="w-[10%] text-xs font-bold text-center">ACTION</Text>
         </View>
 
         {bookingDetails.map((entry, index) => (
-          <View key={index} className="flex-row border-t border-gray-400 py-2 items-center">
+          <View
+            key={index}
+            className="flex-row border-t border-gray-400 py-2 items-center"
+          >
             <Text className="w-[12%] text-xs text-center">{entry.lsk}</Text>
             <Text className="w-[16%] text-xs text-center">{entry.number}</Text>
             <Text className="w-[12%] text-xs text-center">{entry.count}</Text>
-            <Text className="w-[20%] text-xs text-center">₹ {entry.amount}</Text>
-            <Text className="w-[20%] text-xs text-center">₹ {entry.d_amount}</Text>
-            <Text className="w-[10%] text-xs text-center">₹ {entry.c_amount}</Text>
+            <Text className="w-[20%] text-xs text-center">
+              ₹ {entry.amount}
+            </Text>
+            <Text className="w-[20%] text-xs text-center">
+              ₹ {entry.d_amount}
+            </Text>
+            <Text className="w-[10%] text-xs text-center">
+              ₹ {entry.c_amount}
+            </Text>
             <View className="w-[10%] flex-row justify-center items-center">
               <TouchableOpacity onPress={() => handleEdit(index)}>
                 <Text style={{ color: "blue", marginRight: 8 }}>✏️</Text>
@@ -289,62 +479,99 @@ const BookingScreen: React.FC = () => {
       <View className="flex-row justify-between mt-4 bg-gray-200 p-2 items-center">
         <View>
           <Text className="font-semibold text-xs">COUNT</Text>
-          <Text className="font-semibold text-xs text-center mt-1">{totals.count}</Text>
+          <Text className="font-semibold text-xs text-center mt-1">
+            {totals.count}
+          </Text>
         </View>
         <View>
           <Text className="font-semibold text-xs">D.AMOUNT</Text>
-          <Text className="font-semibold text-xs text-center mt-1">₹ {totals.d_amount}</Text>
+          <Text className="font-semibold text-xs text-center mt-1">
+            ₹ {totals.d_amount}
+          </Text>
         </View>
         <View>
           <Text className="font-semibold text-xs">C.AMOUNT</Text>
-          <Text className="font-semibold text-xs text-center mt-1">₹ {totals.c_amount}</Text>
+          <Text className="font-semibold text-xs text-center mt-1">
+            ₹ {totals.c_amount}
+          </Text>
         </View>
         <TouchableOpacity
           onPress={handleSubmit}
           className="bg-green-800 rounded px-3 py-2"
         >
-          <Text className="text-white text-center font-bold text-lg">SUBMIT</Text>
+          <Text className="text-white text-center font-bold text-lg">
+            SUBMIT
+          </Text>
         </TouchableOpacity>
       </View>
 
       {/* Modal for editing */}
-      <Modal visible={editModalVisible} transparent animationType="slide">
-        <View className="flex-1 justify-center items-center bg-black/40 px-4">
-          <View className="bg-white p-4 rounded w-full">
-            <Text className="text-lg font-bold mb-3">Edit Booking</Text>
-            <TextInput
-              placeholder="Number"
-              keyboardType="numeric"
-              value={editingEntry?.number?.toString() || ""}
-              onChangeText={(text) =>
-                setEditingEntry((prev) => prev && { ...prev, number: parseInt(text) || 0 })
-              }
-              className="border px-3 py-2 rounded mb-2"
-            />
-            <TextInput
-              placeholder="Count"
-              keyboardType="numeric"
-              value={editingEntry?.count?.toString() || ""}
-              onChangeText={(text) =>
-                setEditingEntry((prev) => prev && { ...prev, count: parseInt(text) || 0 })
-              }
-              className="border px-3 py-2 rounded mb-2"
-            />
-            <TextInput
-              placeholder="Sub Type"
-              value={editingEntry?.sub_type || ""}
-              onChangeText={(text) =>
-                setEditingEntry((prev) => prev && { ...prev, sub_type: text, lsk: text })
-              }
-              className="border px-3 py-2 rounded mb-2"
-            />
+      <Modal visible={editModalVisible} transparent animationType="fade">
+        <View className="flex-1 justify-center items-center bg-black/50 px-4">
+          <View className="bg-white p-6 rounded-2xl w-full max-w-md shadow-lg">
+            <Text className="text-xl font-bold mb-4 text-center text-green-800">
+              Edit Booking
+            </Text>
 
-            <View className="flex-row justify-between mt-2">
-              <TouchableOpacity onPress={() => setEditModalVisible(false)}>
-                <Text className="text-red-500 font-semibold">Cancel</Text>
+            <View className="mb-3">
+              <Text className="mb-1 font-semibold text-gray-700">Number</Text>
+              <TextInput
+                placeholder="Number"
+                keyboardType="numeric"
+                value={editingEntry?.number?.toString() || ""}
+                onChangeText={(text) =>
+                  setEditingEntry(
+                    (prev) => prev && { ...prev, number: parseInt(text) || 0 }
+                  )
+                }
+                className="border border-gray-300 px-4 py-2 rounded-lg bg-gray-50 text-base"
+                autoFocus
+                returnKeyType="next"
+              />
+            </View>
+
+            <View className="mb-3">
+              <Text className="mb-1 font-semibold text-gray-700">Count</Text>
+              <TextInput
+                placeholder="Count"
+                keyboardType="numeric"
+                value={editingEntry?.count?.toString() || ""}
+                onChangeText={(text) =>
+                  setEditingEntry(
+                    (prev) => prev && { ...prev, count: parseInt(text) || 0 }
+                  )
+                }
+                className="border border-gray-300 px-4 py-2 rounded-lg bg-gray-50 text-base"
+                returnKeyType="next"
+              />
+            </View>
+
+            <View className="mb-3">
+              <Text className="mb-1 font-semibold text-gray-700">Sub Type</Text>
+              <TextInput
+                placeholder="Sub Type"
+                value={editingEntry?.sub_type || ""}
+                onChangeText={(text) =>
+                  setEditingEntry(
+                    (prev) => prev && { ...prev, sub_type: text, lsk: text }
+                  )
+                }
+                className="border border-gray-300 px-4 py-2 rounded-lg bg-gray-50 text-base"
+              />
+            </View>
+
+            <View className="flex-row justify-end mt-6 gap-3">
+              <TouchableOpacity
+                onPress={() => setEditModalVisible(false)}
+                className="px-5 py-2 rounded-lg bg-gray-100 border border-gray-300"
+              >
+                <Text className="text-gray-700 font-semibold">Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={saveEdit}>
-                <Text className="text-green-700 font-semibold">Save</Text>
+              <TouchableOpacity
+                onPress={saveEdit}
+                className="px-5 py-2 rounded-lg bg-green-700"
+              >
+                <Text className="text-white font-semibold">Save</Text>
               </TouchableOpacity>
             </View>
           </View>

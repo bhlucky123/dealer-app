@@ -28,8 +28,6 @@ export default function HomeScreen() {
     console.error("Draws Errors:", error);
   }
 
-  console.log("draws", data);
-
   const { setSelectedDraw } = useDrawStore();
 
   return (
