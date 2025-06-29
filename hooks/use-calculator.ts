@@ -25,13 +25,14 @@ export const useCalculator = () => {
     },
   });
 
+  console.log("equationData", equationData);
+
   const handleNumberInput = useCallback(
     (digit: string) => {
       if (equation) {
         // Now user is entering PIN
         const updatedPin = pinInput + digit;
         setPinInput(updatedPin);
-        console.log("updatedPin", updatedPin, "pinInput", pinInput);
         const correctPin = equationData?.[equation];
         if (correctPin && Number(updatedPin) === Number(correctPin)) {
           router.navigate("/login");

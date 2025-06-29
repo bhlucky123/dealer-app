@@ -3,7 +3,11 @@ import { create } from "zustand";
 
 interface User {
   id: string;
-  name: string;
+  username: string;
+  user_type: string;
+  commission: number;
+  single_digit_number_commission: number;
+  cap_amount: number;
 }
 
 interface AuthState {
@@ -19,7 +23,11 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   user: {
     id: "567",
-    name: "Dealer User",
+    username: "Dealer User",
+    cap_amount: 10000,
+    commission: 10,
+    single_digit_number_commission: 20,
+    user_type: "DEALER",
   },
   token:
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzUzMTEzNTkwLCJpYXQiOjE3NTA1MjE1OTAsImp0aSI6IjAzMTk3MWZlN2E5ZjQxM2RiMzA2OWMxZTUzYzQzOTI5IiwidXNlcl9pZCI6Mn0.zo4lOisu95CykMeqcdNzqvy_w6pU7-UaCsktnyFIWRI",
@@ -53,10 +61,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const data = await response.json();
       console.log("data", data);
       set({
-        user: {
-          id: data.user_id || "",
-          name: data.username || "",
-        },
+        user: data.user_details,
         token: data.access,
         loading: false,
         error: null,

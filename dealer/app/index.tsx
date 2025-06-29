@@ -3,7 +3,6 @@ import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function HomeScreen() {
   const handleLogin = () => {
-    console.log('Login');
     router.push('/(tabs)');
   }
   return (
