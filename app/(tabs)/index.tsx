@@ -37,16 +37,17 @@ export default function HomeScreen() {
 
       <FlatList
         data={[
+          ...(data || []),
           {
             color_theme: "red",
             cut_off_time: "11:47:48",
             draw_time: "11:51:49",
-            id: 1,
-            name: "bh lucky",
+            id: 14,
+            name: "bh lucky dummy",
             non_single_digit_price: 10,
             single_digit_number_price: 12,
             valid_from: "2025-06-10",
-            valid_till: "2025-06-30",
+            valid_till: "2025-07-30",
           },
         ]}
         keyExtractor={(item) => item.id.toString()}
