@@ -54,7 +54,7 @@ export default function HomeScreen() {
           <TouchableOpacity
             onPress={() => {
               setSelectedDraw(item);
-              router.push(`/(tabs)/${item.id}/options`);
+              router.push(`/${item.id}/options`);
             }}
             className="mb-4 rounded-xl overflow-hidden"
           >

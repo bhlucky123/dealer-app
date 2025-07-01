@@ -8,12 +8,13 @@ import {
   Alert,
   KeyboardAvoidingView,
   Modal,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { SelectList } from "react-native-dropdown-select-list";
+import RNPickerSelect from "react-native-picker-select";
 
 type BookingDetail = {
   lsk: string;
@@ -50,16 +51,19 @@ type DrawSessionResponse = {
 };
 
 const RangeOptions = [
-  { key: "1", value: "Book" },
-  { key: "2", value: "Range" },
-  { key: "3", value: "Set" },
+  { label: "Book", value: "Book" },
+  { label: "Range", value: "Range" },
+  { label: "Set", value: "Set" },
 ];
 
 const BookingScreen: React.FC = () => {
   const [customerName, setCustomerName] = useState<string>("");
   const [drawSession, setDrawSession] = useState<string>("3");
-  const [selectedRange, setSelectedRange] = useState<string>("");
+  const [selectedRange, setSelectedRange] = useState<"Book" | "Set" | "Range">(
+    "Book"
+  );
   const [numberInput, setNumberInput] = useState<string>("");
+  const [endNumberInput, setEndNumberInput] = useState<string>("");
   const [countInput, setCountInput] = useState<string>("");
   const [bCountInput, setBCountInput] = useState<string>("");
   const [bookingDetails, setBookingDetails] = useState<BookingDetail[]>([]);
@@ -74,6 +78,7 @@ const BookingScreen: React.FC = () => {
 
   const countInputRef = useRef<TextInput>(null);
   const numInputRef = useRef<TextInput>(null);
+  const endNumInputRef = useRef<TextInput>(null);
 
   const buttonsMap: Record<string, string[]> = {
     "1": ["A", "B", "C", "ALL"],
@@ -93,7 +98,10 @@ const BookingScreen: React.FC = () => {
     },
     enabled: !!selectedDraw?.id,
     select: (response) => response,
+    refetchOnMount: true,
   });
+
+  console.log("error", error, "active", DrawSessionDetails?.session);
 
   if (isError || error || !DrawSessionDetails?.session?.active) {
     return (
@@ -147,107 +155,185 @@ const BookingScreen: React.FC = () => {
   };
 
   const addBooking = (subType: string): void => {
+    const digitsRequired = parseInt(drawSession);
+    const numberLen = numberInput.length;
+    const endLen = endNumberInput.length;
+
     if (!numberInput) {
       Alert.alert("Missing fields", "Enter number.");
       return;
     }
 
-    if (!countInput && (subType !== "BOX" && subType !== "BOTH")) {
-      Alert.alert("Missing fields", "Enter number and count.");
-      return;
-    }
-
-    if ((subType === "BOX" || subType === "BOTH") && !bCountInput) {
-      Alert.alert("Missing fields", "Enter B.Count.");
+    if (numberLen !== digitsRequired) {
+      Alert.alert(
+        "Invalid input",
+        `Please enter a ${drawSession}-digit number.`
+      );
       return;
     }
 
     const bookingType = getBookingType();
-    const number = parseInt(numberInput);
-    const count = parseInt(countInput);
-    const bCount = parseInt(bCountInput);
-
-    // Get price and commission based on booking type
     const isSingle = bookingType === "single_digit";
     const price = isSingle
       ? DrawSessionDetails.single_digit_number_price
       : DrawSessionDetails.non_single_digit_price;
     const commission = isSingle
-      ? user?.single_digit_number_commission ?? 0
-      : user?.commission ?? 0;
+      ? (user?.single_digit_number_commission ?? 0)
+      : (user?.commission ?? 0);
 
-    if (subType === "BOTH") {
-      // Add SUPER
-      const amountSuper = count * price;
-      const d_amountSuper = parseFloat((amountSuper - commission).toFixed(2));
-      const c_amountSuper = amountSuper;
-      const superEntry: BookingDetail = {
-        lsk: "SUPER",
+    const parseNum = (value: string) => parseInt(value) || 0;
+    const count = parseNum(countInput);
+    const bCount = parseNum(bCountInput);
+
+    const createEntry = (number: number, count: number, type: string) => {
+      const amt = count * price;
+      return {
+        lsk: type,
         number,
         count,
-        amount: amountSuper,
-        d_amount: d_amountSuper,
-        c_amount: c_amountSuper,
+        amount: amt,
+        d_amount: parseFloat((amt - commission).toFixed(2)),
+        c_amount: amt,
         type: bookingType,
-        sub_type: "SUPER",
+        sub_type: type,
       };
-      // Add BOX
-      const amountBox = bCount * price;
-      const d_amountBox = parseFloat((amountBox - commission).toFixed(2));
-      const c_amountBox = amountBox;
-      const boxEntry: BookingDetail = {
-        lsk: "BOX",
-        number,
-        count: bCount,
-        amount: amountBox,
-        d_amount: d_amountBox,
-        c_amount: c_amountBox,
-        type: bookingType,
-        sub_type: "BOX",
+    };
+
+    // ---------- Range Booking ----------
+    if (selectedRange === "Range") {
+      if (!endNumberInput) {
+        Alert.alert("Missing fields", "Enter end number.");
+        return;
+      }
+
+      if (endLen !== digitsRequired) {
+        Alert.alert(
+          "Invalid input",
+          `Please enter a ${drawSession}-digit number.`
+        );
+        return;
+      }
+
+      const start = parseNum(numberInput);
+      const end = parseNum(endNumberInput);
+      if (isNaN(start) || isNaN(end) || start > end) {
+        Alert.alert(
+          "Invalid Range",
+          "Start should be less than or equal to end."
+        );
+        return;
+      }
+
+      const newEntries: BookingDetail[] = [];
+
+      for (let i = start; i <= end; i++) {
+        if (subType === "BOTH") {
+          newEntries.push(createEntry(i, count, "SUPER"));
+          newEntries.push(createEntry(i, bCount, "BOX"));
+        } else {
+          const actualCount = subType === "BOX" ? bCount : count;
+          newEntries.push(createEntry(i, actualCount, subType));
+        }
+      }
+
+      setBookingDetails((prev) => [...prev, ...newEntries]);
+      clearInputs();
+      setEndNumberInput("");
+      setBCountInput("");
+      return;
+    }
+
+    // ---------- Set Booking ----------
+    if (selectedRange === "Set") {
+      if (drawSession !== "3") {
+        Alert.alert(
+          "Invalid",
+          "Set combinations only apply to 3-digit numbers."
+        );
+        return;
+      }
+
+      // Pad number to 3 digits and create permutations
+      const padded = numberInput.padStart(3, "0");
+      const digits = padded.split("");
+
+      const generatePermutations = (arr: string[]) => {
+        const result = new Set<string>();
+        const permute = (path: string[], used: boolean[]) => {
+          if (path.length === arr.length) {
+            result.add(path.join(""));
+            return;
+          }
+          for (let i = 0; i < arr.length; i++) {
+            if (used[i]) continue;
+            used[i] = true;
+            permute([...path, arr[i]], [...used]);
+            used[i] = false;
+          }
+        };
+        permute([], Array(arr.length).fill(false));
+        return Array.from(result).filter((num) => num.length === 3);
       };
-      setBookingDetails((prev) => [...prev, superEntry, boxEntry]);
+
+      const permutations = generatePermutations(digits);
+
+      const newEntries: BookingDetail[] = [];
+
+      for (let perm of permutations) {
+        const number = parseInt(perm, 10);
+
+        if (subType === "BOTH") {
+          newEntries.push(createEntry(number, count, "SUPER"));
+          newEntries.push(createEntry(number, bCount, "BOX"));
+        } else {
+          const actualCount = subType === "BOX" ? bCount : count;
+          newEntries.push(createEntry(number, actualCount, subType));
+        }
+      }
+
+      setBookingDetails((prev) => [...prev, ...newEntries]);
+      clearInputs();
+      return;
+    }
+
+    // ---------- Normal Booking ----------
+    if (subType === "BOTH") {
+      if (!countInput || !bCountInput) {
+        Alert.alert("Missing fields", "Enter Count and B.Count.");
+        return;
+      }
+
+      const entries = [
+        createEntry(parseNum(numberInput), count, "SUPER"),
+        createEntry(parseNum(numberInput), bCount, "BOX"),
+      ];
+      setBookingDetails((prev) => [...prev, ...entries]);
       clearInputs();
       setBCountInput("");
       return;
     }
 
     if (subType === "BOX") {
-      const amount = bCount * price;
-      const d_amount = parseFloat((amount - commission).toFixed(2));
-      const c_amount = amount;
-      const newEntry: BookingDetail = {
-        lsk: subType,
-        number,
-        count: bCount,
-        amount,
-        d_amount,
-        c_amount,
-        type: bookingType,
-        sub_type: subType,
-      };
-      setBookingDetails((prev) => [...prev, newEntry]);
+      if (!bCountInput) {
+        Alert.alert("Missing fields", "Enter B.Count.");
+        return;
+      }
+
+      const entry = createEntry(parseNum(numberInput), bCount, "BOX");
+      setBookingDetails((prev) => [...prev, entry]);
       clearInputs();
       setBCountInput("");
       return;
     }
 
-    // Default (SUPER or others)
-    const amount = count * price;
-    const d_amount = parseFloat((amount - commission).toFixed(2));
-    const c_amount = amount;
+    // Default (e.g. SUPER only)
+    if (!countInput) {
+      Alert.alert("Missing fields", "Enter Count.");
+      return;
+    }
 
-    const newEntry: BookingDetail = {
-      lsk: subType,
-      number,
-      count,
-      amount,
-      d_amount,
-      c_amount,
-      type: bookingType,
-      sub_type: subType,
-    };
-
-    setBookingDetails((prev) => [...prev, newEntry]);
+    const entry = createEntry(parseNum(numberInput), count, subType);
+    setBookingDetails((prev) => [...prev, entry]);
     clearInputs();
   };
 
@@ -313,7 +399,7 @@ const BookingScreen: React.FC = () => {
   const clearInputs = () => {
     setCountInput("");
     setNumberInput("");
-    setBCountInput("")
+    setBCountInput("");
     numInputRef.current?.focus();
   };
 
@@ -323,160 +409,253 @@ const BookingScreen: React.FC = () => {
       setRangeOptions(RangeOptions);
     }
     if (num !== "3") {
-      setRangeOptions([
-        { key: "1", value: "Book" },
-        { key: "2", value: "Range" },
-      ]);
-      if (selectedRange === "3") {
-        setSelectedRange("1");
+      setRangeOptions(RangeOptions.filter((option) => option.value !== "3"));
+      if (selectedRange === "Set") {
+        setSelectedRange("Book");
       }
     }
     setDrawSession(num.toString());
   };
 
   return (
-    <KeyboardAvoidingView className="p-4 bg-white flex-1">
-      <TextInput
-        placeholder="Customer Name"
-        value={customerName}
-        onChangeText={setCustomerName}
-        className="border border-gray-400 rounded px-3 py-2 mb-4"
-      />
+    <KeyboardAvoidingView
+      className="flex-1"
+      behavior="padding"
+      keyboardVerticalOffset={80}
+    >
+      <View className="p-4 bg-white flex-1 mb-10">
+        <TextInput
+          placeholder="Customer Name"
+          value={customerName}
+          onChangeText={setCustomerName}
+          className="border border-gray-400 rounded px-3 py-2 mb-4"
+        />
 
-      <View className="flex-row items-center mb-4 gap-2">
-        {[1, 2, 3].map((num) => (
-          <TouchableOpacity
-            key={num}
-            onPress={() => handleDrawSession(num.toString())}
-            className={`px-4 py-1 rounded-full border ${
-              drawSession === num.toString() ? "bg-black" : "border-gray-400"
-            }`}
-          >
-            <Text
-              className={`${
-                drawSession === num.toString() ? "text-white" : "text-black"
+        <View className="flex-row items-center mb-4 gap-2">
+          {[1, 2, 3].map((num) => (
+            <TouchableOpacity
+              key={num}
+              onPress={() => handleDrawSession(num.toString())}
+              className={`px-4 py-1 rounded-full border ${
+                drawSession === num.toString() ? "bg-black" : "border-gray-400"
               }`}
             >
-              {num}
-            </Text>
-          </TouchableOpacity>
-        ))}
-        <View className="flex-1 ml-2">
-          <SelectList
-            setSelected={setSelectedRange}
-            data={rangeOptions}
-            save="value"
-            placeholder="Book"
-            search={false}
-            boxStyles={{
-              borderColor: "#9ca3af",
-              borderWidth: 1,
-              borderRadius: 6,
-              paddingHorizontal: 10,
-            }}
-            dropdownStyles={{ borderColor: "#9ca3af" }}
-          />
+              <Text
+                className={`${
+                  drawSession === num.toString() ? "text-white" : "text-black"
+                }`}
+              >
+                {num}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          <View className="flex-1 ml-2">
+            <RNPickerSelect
+              onValueChange={setSelectedRange}
+              items={rangeOptions}
+              value={selectedRange}
+              style={{
+                viewContainer: {
+                  borderColor: "#9ca3af",
+                  borderWidth: 1,
+                  borderRadius: 6,
+                },
+              }}
+            />
+          </View>
         </View>
-      </View>
 
-      <View className="flex-row gap-2 mb-3">
-        <TextInput
-          ref={numInputRef}
-          value={numberInput}
-          onChangeText={(text) => {
-            const formatted = text.replace(/[^0-9]/g, "");
-            setNumberInput(formatted);
-
-            const requiredLength = parseInt(drawSession);
-            if (formatted.length >= requiredLength) {
-              countInputRef.current?.focus();
-            }
-          }}
-          maxLength={3}
-          keyboardType="numeric"
-          placeholder="Number"
-          className="flex-1 border border-gray-400 px-3 py-2 rounded"
-        />
-
-        <TextInput
-          ref={countInputRef}
-          value={countInput}
-          onChangeText={setCountInput}
-          keyboardType="numeric"
-          placeholder="Count"
-          className="flex-1 border border-gray-400 px-3 py-2 rounded"
-        />
-
-        {drawSession === "3" && (
+        <View className="flex-row gap-2 mb-3">
           <TextInput
-            value={bCountInput}
-            onChangeText={setBCountInput}
+            ref={numInputRef}
+            value={numberInput}
+            onChangeText={(text) => {
+              const formatted = text.replace(/[^0-9]/g, "");
+              setNumberInput(formatted);
+
+              const requiredLength = parseInt(drawSession);
+              if (formatted.length >= requiredLength) {
+                if (selectedRange === "Range") {
+                  endNumInputRef.current?.focus();
+                } else {
+                  countInputRef.current?.focus();
+                }
+              }
+            }}
+            maxLength={3}
             keyboardType="numeric"
-            placeholder="B.Count"
+            placeholder={selectedRange === "Range" ? "Start" : "Number"}
             className="flex-1 border border-gray-400 px-3 py-2 rounded"
           />
-        )}
-      </View>
 
-      <View className="flex-row flex-wrap mb-3 gap-2">
-        {buttonsMap[drawSession]?.map((btn) => (
-          <TouchableOpacity
-            key={btn}
-            onPress={() => addBooking(btn)}
-            className="bg-green-700 py-2 rounded items-center"
-            style={{ flexGrow: 1, margin: 4 }}
-          >
-            <Text className="text-white font-semibold">{btn}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+          {selectedRange === "Range" && (
+            <TextInput
+              ref={endNumInputRef}
+              value={endNumberInput}
+              onChangeText={(text) => {
+                const formatted = text.replace(/[^0-9]/g, "");
+                setEndNumberInput(formatted);
 
-      {/* Table Header */}
-      <View className="border border-gray-400 rounded overflow-hidden">
-        <View className="flex-row bg-gray-200 border-gray-400 py-2 items-center">
-          <Text className="w-[12%] text-xs font-bold text-center">LSK</Text>
-          <Text className="w-[16%] text-xs font-bold text-center">NUMBER</Text>
-          <Text className="w-[12%] text-xs font-bold text-center">COUNT</Text>
-          <Text className="w-[20%] text-xs font-bold text-center">AMOUNT</Text>
-          <Text className="w-[20%] text-xs font-bold text-center">
-            D.AMOUNT
-          </Text>
-          <Text className="w-[10%] text-xs font-bold text-center">
-            C.AMOUNT
-          </Text>
-          <Text className="w-[10%] text-xs font-bold text-center">ACTION</Text>
+                const requiredLength = parseInt(drawSession);
+                if (formatted.length >= requiredLength) {
+                  countInputRef.current?.focus();
+                }
+              }}
+              maxLength={3}
+              keyboardType="numeric"
+              placeholder="End"
+              className="flex-1 border border-gray-400 px-3 py-2 rounded"
+            />
+          )}
+
+          <TextInput
+            ref={countInputRef}
+            value={countInput}
+            onChangeText={setCountInput}
+            keyboardType="numeric"
+            placeholder="Count"
+            className="flex-1 border border-gray-400 px-3 py-2 rounded"
+          />
+
+          {drawSession === "3" && (
+            <TextInput
+              value={bCountInput}
+              onChangeText={setBCountInput}
+              keyboardType="numeric"
+              placeholder="B.Count"
+              className="flex-1 border border-gray-400 px-3 py-2 rounded"
+            />
+          )}
         </View>
 
-        {bookingDetails.map((entry, index) => (
-          <View
-            key={index}
-            className="flex-row border-t border-gray-400 py-2 items-center"
-          >
-            <Text className="w-[12%] text-xs text-center">{entry.lsk}</Text>
-            <Text className="w-[16%] text-xs text-center">{entry.number}</Text>
-            <Text className="w-[12%] text-xs text-center">{entry.count}</Text>
-            <Text className="w-[20%] text-xs text-center">
-              ₹ {entry.amount}
+        <View className="flex-row flex-wrap mb-3 gap-2">
+          {buttonsMap[drawSession]?.map((btn) => (
+            <TouchableOpacity
+              key={btn}
+              onPress={() => addBooking(btn)}
+              className="bg-green-700 py-2 rounded items-center"
+              style={{ flexGrow: 1, margin: 4 }}
+            >
+              <Text className="text-white font-semibold">{btn}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Table Header */}
+        <View className="border border-gray-400 rounded overflow-hidden flex-1">
+          <View className="flex-row bg-gray-200 border-gray-400 py-2 items-center">
+            <Text className="w-[12%] text-xs font-bold text-center">LSK</Text>
+            <Text className="w-[16%] text-xs font-bold text-center">
+              NUMBER
             </Text>
-            <Text className="w-[20%] text-xs text-center">
-              ₹ {entry.d_amount}
+            <Text className="w-[12%] text-xs font-bold text-center">COUNT</Text>
+            <Text className="w-[20%] text-xs font-bold text-center">
+              AMOUNT
             </Text>
-            <Text className="w-[10%] text-xs text-center">
-              ₹ {entry.c_amount}
+            <Text className="w-[20%] text-xs font-bold text-center">
+              D.AMOUNT
             </Text>
-            <View className="w-[10%] flex-row justify-center items-center">
-              <TouchableOpacity onPress={() => handleEdit(index)}>
-                <Text style={{ color: "blue", marginRight: 8 }}>✏️</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleDelete(index)}>
-                <Text style={{ color: "red" }}>🗑️</Text>
-              </TouchableOpacity>
-            </View>
+            <Text className="w-[12%] text-xs font-bold text-center">
+              C.AMOUNT
+            </Text>
+            <Text className="w-[8%] text-xs font-bold text-center"></Text>
           </View>
-        ))}
+          <ScrollView>
+            {bookingDetails.map((entry, index) => (
+              <View
+                key={index}
+                className="flex-row border-t border-gray-400 py-2 items-center"
+              >
+                <Text className="w-[12%] text-xs text-center">{entry.lsk}</Text>
+                <Text className="w-[16%] text-xs text-center">
+                  {entry.number}
+                </Text>
+                <Text className="w-[12%] text-xs text-center">
+                  {entry.count}
+                </Text>
+                <Text className="w-[20%] text-xs text-center">
+                  ₹ {entry.amount}
+                </Text>
+                <Text className="w-[20%] text-xs text-center">
+                  ₹ {entry.d_amount}
+                </Text>
+                <Text className="w-[12%] text-xs text-center">
+                  ₹ {entry.c_amount}
+                </Text>
+                <View className="w-[8%] flex-row justify-center items-center">
+                  <TouchableOpacity
+                    onPress={() => setEditIndex(index)}
+                    style={{ padding: 4 }}
+                  >
+                    <Text style={{ fontSize: 18 }}>⋮</Text>
+                  </TouchableOpacity>
+                  {/* 3-dot menu modal */}
+                  {editIndex === index && (
+                    <Modal
+                      transparent
+                      visible={editIndex === index}
+                      animationType="fade"
+                      onRequestClose={() => setEditIndex(null)}
+                    >
+                      <TouchableOpacity
+                        style={{
+                          flex: 1,
+                          backgroundColor: "rgba(0,0,0,0.2)",
+                          justifyContent: "center",
+                          alignItems: "center",
+                        }}
+                        activeOpacity={1}
+                        onPressOut={() => setEditIndex(null)}
+                      >
+                        <View
+                          style={{
+                            backgroundColor: "white",
+                            borderRadius: 8,
+                            paddingVertical: 8,
+                            paddingHorizontal: 20,
+                            minWidth: 120,
+                            elevation: 5,
+                            shadowColor: "#000",
+                            shadowOpacity: 0.1,
+                            shadowRadius: 10,
+                            shadowOffset: { width: 0, height: 2 },
+                          }}
+                        >
+                          <TouchableOpacity
+                            onPress={() => {
+                              setEditIndex(null);
+                              handleEdit(index);
+                            }}
+                            style={{ paddingVertical: 10 }}
+                          >
+                            <Text style={{ color: "blue", fontWeight: "bold" }}>
+                              Edit
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setEditIndex(null);
+                              handleDelete(index);
+                            }}
+                            style={{ paddingVertical: 10 }}
+                          >
+                            <Text style={{ color: "red", fontWeight: "bold" }}>
+                              Delete
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </TouchableOpacity>
+                    </Modal>
+                  )}
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
       </View>
 
-      <View className="flex-row justify-between mt-4 bg-gray-200 p-2 items-center">
+      {/* Fixed footer for totals and submit */}
+      <View className="bg-gray-200 p-2 flex-row justify-between items-center">
         <View>
           <Text className="font-semibold text-xs">COUNT</Text>
           <Text className="font-semibold text-xs text-center mt-1">
