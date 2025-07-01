@@ -2,7 +2,6 @@ import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { router } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
   Alert,
@@ -18,7 +17,7 @@ import RNPickerSelect from "react-native-picker-select";
 
 type BookingDetail = {
   lsk: string;
-  number: number;
+  number: string;
   count: number;
   amount: number;
   d_amount: number;
@@ -101,29 +100,29 @@ const BookingScreen: React.FC = () => {
     refetchOnMount: true,
   });
 
-  console.log("error", error, "active", DrawSessionDetails?.session);
+  console.log("error", error, "DrawSessionDetail", DrawSessionDetails);
 
-  if (isError || error || !DrawSessionDetails?.session?.active) {
-    return (
-      <View className="flex-1 justify-center items-center bg-white">
-        <View className="bg-red-100 border border-red-400 rounded-lg px-6 py-4 shadow-md">
-          <Text className="text-red-700 text-base font-semibold text-center">
-            You're not allowed to book the number now. Try later
-          </Text>
-          <TouchableOpacity
-            onPress={() => {
-              router.push("/(tabs)");
-            }}
-            className="mt-4 bg-red-600 px-4 py-2 rounded"
-          >
-            <Text className="text-white text-center font-semibold">
-              Go Back
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
+  // if (isError || error || !DrawSessionDetails?.session?.active) {
+  //   return (
+  //     <View className="flex-1 justify-center items-center bg-white">
+  //       <View className="bg-red-100 border border-red-400 rounded-lg px-6 py-4 shadow-md">
+  //         <Text className="text-red-700 text-base font-semibold text-center">
+  //           You're not allowed to book the number now. Try later
+  //         </Text>
+  //         <TouchableOpacity
+  //           onPress={() => {
+  //             router.push("/(tabs)");
+  //           }}
+  //           className="mt-4 bg-red-600 px-4 py-2 rounded"
+  //         >
+  //           <Text className="text-white text-center font-semibold">
+  //             Go Back
+  //           </Text>
+  //         </TouchableOpacity>
+  //       </View>
+  //     </View>
+  //   );
+  // }
 
   const { mutate } = useMutation({
     mutationFn: async (data: any) => api.post("/draw-booking/create/", data),
@@ -134,7 +133,15 @@ const BookingScreen: React.FC = () => {
       setEditIndex(null);
     },
     onError: (error) => {
-      console.log("error", error);
+      if (error?.message) {
+        console.error("Backend Message:", error.message);
+      }
+      //  else if (data?.detail) {
+      //   console.error("Backend Detail:", data.detail);
+      // } else {
+      //   console.error("Unknown backend error format", data);
+      // }
+      console.log("error - while submitting booking", error);
       Alert.alert("Error", "Failed to submit.");
     },
   });
@@ -174,22 +181,24 @@ const BookingScreen: React.FC = () => {
 
     const bookingType = getBookingType();
     const isSingle = bookingType === "single_digit";
+
     const price = isSingle
-      ? DrawSessionDetails.single_digit_number_price
-      : DrawSessionDetails.non_single_digit_price;
+      ? DrawSessionDetails?.single_digit_number_price
+      : DrawSessionDetails?.non_single_digit_price;
+
     const commission = isSingle
       ? (user?.single_digit_number_commission ?? 0)
       : (user?.commission ?? 0);
 
-    const parseNum = (value: string) => parseInt(value) || 0;
+    const parseNum = (val: string) => parseInt(val) || 0;
     const count = parseNum(countInput);
     const bCount = parseNum(bCountInput);
 
-    const createEntry = (number: number, count: number, type: string) => {
-      const amt = count * price;
+    const createEntry = (number: string, count: number, type: string) => {
+      const amt = count * (price || 0);
       return {
         lsk: type,
-        number,
+        number, // string with leading zeros
         count,
         amount: amt,
         d_amount: parseFloat((amt - commission).toFixed(2)),
@@ -216,6 +225,7 @@ const BookingScreen: React.FC = () => {
 
       const start = parseNum(numberInput);
       const end = parseNum(endNumberInput);
+
       if (isNaN(start) || isNaN(end) || start > end) {
         Alert.alert(
           "Invalid Range",
@@ -227,12 +237,13 @@ const BookingScreen: React.FC = () => {
       const newEntries: BookingDetail[] = [];
 
       for (let i = start; i <= end; i++) {
+        const paddedNum = i.toString().padStart(digitsRequired, "0");
         if (subType === "BOTH") {
-          newEntries.push(createEntry(i, count, "SUPER"));
-          newEntries.push(createEntry(i, bCount, "BOX"));
+          newEntries.push(createEntry(paddedNum, count, "SUPER"));
+          newEntries.push(createEntry(paddedNum, bCount, "BOX"));
         } else {
           const actualCount = subType === "BOX" ? bCount : count;
-          newEntries.push(createEntry(i, actualCount, subType));
+          newEntries.push(createEntry(paddedNum, actualCount, subType));
         }
       }
 
@@ -253,7 +264,6 @@ const BookingScreen: React.FC = () => {
         return;
       }
 
-      // Pad number to 3 digits and create permutations
       const padded = numberInput.padStart(3, "0");
       const digits = padded.split("");
 
@@ -276,12 +286,10 @@ const BookingScreen: React.FC = () => {
       };
 
       const permutations = generatePermutations(digits);
-
       const newEntries: BookingDetail[] = [];
 
       for (let perm of permutations) {
-        const number = parseInt(perm, 10);
-
+        const number = perm; // Keep as string with leading zeros
         if (subType === "BOTH") {
           newEntries.push(createEntry(number, count, "SUPER"));
           newEntries.push(createEntry(number, bCount, "BOX"));
@@ -303,9 +311,10 @@ const BookingScreen: React.FC = () => {
         return;
       }
 
+      const padded = numberInput.padStart(digitsRequired, "0");
       const entries = [
-        createEntry(parseNum(numberInput), count, "SUPER"),
-        createEntry(parseNum(numberInput), bCount, "BOX"),
+        createEntry(padded, count, "SUPER"),
+        createEntry(padded, bCount, "BOX"),
       ];
       setBookingDetails((prev) => [...prev, ...entries]);
       clearInputs();
@@ -319,7 +328,8 @@ const BookingScreen: React.FC = () => {
         return;
       }
 
-      const entry = createEntry(parseNum(numberInput), bCount, "BOX");
+      const padded = numberInput.padStart(digitsRequired, "0");
+      const entry = createEntry(padded, bCount, "BOX");
       setBookingDetails((prev) => [...prev, entry]);
       clearInputs();
       setBCountInput("");
@@ -332,26 +342,31 @@ const BookingScreen: React.FC = () => {
       return;
     }
 
-    const entry = createEntry(parseNum(numberInput), count, subType);
+    const padded = numberInput.padStart(digitsRequired, "0");
+    const entry = createEntry(padded, count, subType);
     setBookingDetails((prev) => [...prev, entry]);
     clearInputs();
   };
 
   const handleSubmit = () => {
-    const data = {
-      customer_name: customerName,
-      draw_session: parseInt(drawSession),
-      booked_agent: 3,
-      booking_details: bookingDetails.map(
-        ({ number, count, type, sub_type }) => ({
-          number,
-          count,
-          type,
-          sub_type,
-        })
-      ),
-    };
-    mutate(data);
+    if (DrawSessionDetails?.session?.active_session_id) {
+      const data = {
+        customer_name: customerName,
+        draw_session: DrawSessionDetails?.session?.active_session_id,
+        booked_agent: Number(user?.id),
+        booking_details: bookingDetails.map(
+          ({ number, count, type, sub_type }) => ({
+            number,
+            count,
+            type,
+            sub_type,
+          })
+        ),
+      };
+
+      console.log("data", data);
+      mutate(data);
+    }
   };
 
   const handleEdit = (index: number) => {
@@ -364,13 +379,29 @@ const BookingScreen: React.FC = () => {
   const saveEdit = () => {
     if (editingEntry && editIndex !== null) {
       const updated = [...bookingDetails];
-      const amount = editingEntry.count * 5;
+
+      const bookingType = editingEntry.type;
+      const isSingle = bookingType === "single_digit";
+
+      const price = isSingle
+        ? DrawSessionDetails?.single_digit_number_price
+        : DrawSessionDetails?.non_single_digit_price;
+
+      const commission = isSingle
+        ? (user?.single_digit_number_commission ?? 0)
+        : (user?.commission ?? 0);
+
+      const amount = editingEntry.count * (price || 0);
+      const d_amount = parseFloat((amount - commission).toFixed(2));
+      const c_amount = amount;
+
       updated[editIndex] = {
         ...editingEntry,
         amount,
-        d_amount: parseFloat((amount * 1.8).toFixed(2)),
-        c_amount: amount * 2,
+        d_amount,
+        c_amount,
       };
+
       setBookingDetails(updated);
       setEditModalVisible(false);
       setEditIndex(null);
@@ -700,7 +731,8 @@ const BookingScreen: React.FC = () => {
                 value={editingEntry?.number?.toString() || ""}
                 onChangeText={(text) =>
                   setEditingEntry(
-                    (prev) => prev && { ...prev, number: parseInt(text) || 0 }
+                    (prev) =>
+                      prev && { ...prev, number: text.replace(/[^0-9]/g, "") }
                   )
                 }
                 className="border border-gray-300 px-4 py-2 rounded-lg bg-gray-50 text-base"
@@ -727,16 +759,44 @@ const BookingScreen: React.FC = () => {
 
             <View className="mb-3">
               <Text className="mb-1 font-semibold text-gray-700">Sub Type</Text>
-              <TextInput
-                placeholder="Sub Type"
-                value={editingEntry?.sub_type || ""}
-                onChangeText={(text) =>
-                  setEditingEntry(
-                    (prev) => prev && { ...prev, sub_type: text, lsk: text }
-                  )
-                }
-                className="border border-gray-300 px-4 py-2 rounded-lg bg-gray-50 text-base"
-              />
+              <View className="flex-row gap-4 mt-2">
+                {["SUPER", "BOX"].map((type) => (
+                  <TouchableOpacity
+                    key={type}
+                    className="flex-row items-center"
+                    onPress={() =>
+                      setEditingEntry(
+                        (prev) => prev && { ...prev, sub_type: type, lsk: type }
+                      )
+                    }
+                  >
+                    <View
+                      style={{
+                        height: 20,
+                        width: 20,
+                        borderRadius: 10,
+                        borderWidth: 2,
+                        borderColor: "#059669",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginRight: 8,
+                      }}
+                    >
+                      {editingEntry?.sub_type === type && (
+                        <View
+                          style={{
+                            height: 10,
+                            width: 10,
+                            borderRadius: 5,
+                            backgroundColor: "#059669",
+                          }}
+                        />
+                      )}
+                    </View>
+                    <Text className="text-base">{type}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
 
             <View className="flex-row justify-end mt-6 gap-3">
@@ -750,7 +810,7 @@ const BookingScreen: React.FC = () => {
                 onPress={saveEdit}
                 className="px-5 py-2 rounded-lg bg-green-700"
               >
-                <Text className="text-white font-semibold">Save</Text>
+                <Text className="text-white font-semibold">Edit</Text>
               </TouchableOpacity>
             </View>
           </View>

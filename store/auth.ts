@@ -22,7 +22,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: {
-    id: "567",
+    id: "3",
     username: "Dealer User",
     cap_amount: 10000,
     commission: 10,

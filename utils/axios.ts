@@ -28,7 +28,22 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Handle global error messages/logging here if needed
+    if (error.response) {
+      const { status, data } = error.response;
+      console.log("❌ Axios Error:", status, data);
+
+      // Example: extracting common message formats
+      // if (data?.message) {
+      //   console.error("Backend Message:", data.message);
+      // } else if (data?.detail) {
+      //   console.error("Backend Detail:", data.detail);
+      // } else {
+      //   console.error("Unknown backend error format", data);
+      // }
+    } else {
+      console.error("❌ Network or config error", error.message);
+    }
+
     return Promise.reject(error);
   }
 );
