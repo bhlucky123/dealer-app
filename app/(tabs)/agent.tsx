@@ -10,12 +10,13 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
   ScrollView,
   StatusBar,
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 
 // Agent type
@@ -359,8 +360,16 @@ export default function AgentTab() {
   const [showForm, setShowForm] = useState(false);
   const [editData, setEditData] = useState<Agent | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
-  const { data: agents = [], isLoading } = useQuery<Agent[]>({
+  const {
+    data: agents = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery<Agent[]>({
     queryKey: ["agents"],
     queryFn: () => api.get("/agent/agent/").then((res) => res.data),
   });
@@ -423,6 +432,16 @@ export default function AgentTab() {
         },
       ]
     );
+  };
+
+  // Pull to refresh handler
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   if (showForm) {
@@ -511,10 +530,29 @@ export default function AgentTab() {
       </View>
 
       {/* Content */}
-      {isLoading ? (
+      {isLoading || isFetching ? (
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator size="large" color="#3B82F6" />
           <Text className="text-gray-500 mt-4 font-medium">Loading agents...</Text>
+        </View>
+      ) : isError ? (
+        <View className="flex-1 justify-center items-center px-8">
+          <Text className="text-6xl mb-4">⚠️</Text>
+          <Text className="text-xl font-bold text-gray-800 mb-2">
+            Failed to load agents
+          </Text>
+          <Text className="text-gray-500 text-center mb-8">
+            {error && typeof error === "object" && "message" in error
+              ? (error as any).message
+              : "An unexpected error occurred. Please try again."}
+          </Text>
+          <TouchableOpacity
+            onPress={() => refetch()}
+            className="bg-blue-600 px-8 py-4 rounded-xl active:scale-95"
+            activeOpacity={0.9}
+          >
+            <Text className="text-white font-bold text-lg">Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : filteredAgents.length === 0 ? (
         <View className="flex-1 justify-center items-center px-8">
@@ -537,6 +575,15 @@ export default function AgentTab() {
               <Text className="text-white font-bold text-lg">Create First Agent</Text>
             </TouchableOpacity>
           )}
+          {/* Allow pull to refresh even on empty */}
+          <FlatList
+            data={[]}
+            renderItem={null}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            style={{ width: 0, height: 0 }}
+          />
         </View>
       ) : (
         <FlatList
@@ -554,10 +601,11 @@ export default function AgentTab() {
               onDelete={() => handleDelete(item.id.toString())}
             />
           )}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
         />
       )}
-
-
     </View>
   );
 }
