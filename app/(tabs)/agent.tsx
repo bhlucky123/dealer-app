@@ -1,6 +1,8 @@
 import useAgent from "@/hooks/use-agent";
+import { useAuthStore } from "@/store/auth";
 import api from "@/utils/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { MoveLeft } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -48,18 +50,18 @@ const AgentForm = ({
   defaultValues?: Partial<Agent>;
   onCancel: () => void;
 }) => {
+  const { user } = useAuthStore()
   const [form, setForm] = useState({
-    name: defaultValues.name || "",
     username: defaultValues.username || "",
     password: "",
     is_active: defaultValues.is_active ?? true,
     calculate_str: defaultValues.calculate_str || "",
-    secret_pin: defaultValues.secret_pin?.toString() || "1234",
-    commission: defaultValues.commission?.toString() || "1",
+    secret_pin: defaultValues.secret_pin?.toString() || "",
+    commission: defaultValues.commission?.toString() || "",
     single_digit_number_commission:
-      defaultValues.single_digit_number_commission?.toString() || "0.5",
-    cap_amount: defaultValues.cap_amount?.toString() || "1000",
-    assigned_dealer: defaultValues.assigned_dealer?.toString() || "1",
+      defaultValues.single_digit_number_commission?.toString() || "",
+    cap_amount: defaultValues.cap_amount?.toString() || "",
+    assigned_dealer: user?.id?.toString() || "",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -72,6 +74,9 @@ const AgentForm = ({
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
+    if (!form.assigned_dealer || !form.assigned_dealer.trim()) {
+      newErrors.assigned_dealer = "Dealer ID is required";
+    }
     if (!form.username.trim()) newErrors.username = "Username is required";
     if (!defaultValues?.id && !form.password.trim())
       newErrors.password = "Password is required";
@@ -83,6 +88,7 @@ const AgentForm = ({
     if (Number(form.commission) < 0)
       newErrors.commission = "Commission cannot be negative";
     if (Number(form.cap_amount) < 0) newErrors.cap_amount = "Cap cannot be negative";
+
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -104,7 +110,6 @@ const AgentForm = ({
   };
 
   const inputFields = [
-    { key: "name", label: "Full Name", keyboardType: "default" as const, secureTextEntry: false, icon: "👤" },
     { key: "username", label: "Username", keyboardType: "default" as const, secureTextEntry: false, icon: "@" },
     { key: "password", label: "Password", keyboardType: "default" as const, secureTextEntry: true, optional: !!defaultValues?.id, icon: "🔒" },
     { key: "calculate_str", label: "Calculate String", keyboardType: "default" as const, secureTextEntry: false, icon: "🧮" },
@@ -112,28 +117,27 @@ const AgentForm = ({
     { key: "commission", label: "Commission (%)", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💰" },
     { key: "single_digit_number_commission", label: "Single Digit Commission (%)", keyboardType: "numeric" as const, secureTextEntry: false, icon: "📊" },
     { key: "cap_amount", label: "Cap Amount", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🎯" },
-    { key: "assigned_dealer", label: "Assigned Dealer ID", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🏪" },
   ];
 
   return (
     <View className="flex-1 bg-gradient-to-br from-blue-50 to-indigo-100">
       <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
-      
+
       {/* Header */}
       <View className="bg-white shadow-sm border-b border-gray-100">
         <View className="flex-row items-center justify-between px-6 pt-12 pb-4">
           <TouchableOpacity
             onPress={onCancel}
-            className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center"
+            className="ntw-w-10 ntw-h-10 ntw-rounded-full ntw-bg-gray-100 ntw-items-center ntw-justify-center"
             activeOpacity={0.7}
           >
-            <Text className="text-gray-600 text-lg">←</Text>
+            <MoveLeft />
           </TouchableOpacity>
-          
+
           <Text className="text-xl font-bold text-gray-800">
             {defaultValues?.id ? "Edit Agent" : "Create Agent"}
           </Text>
-          
+
           <View className="w-10" />
         </View>
       </View>
@@ -151,24 +155,24 @@ const AgentForm = ({
             const isFocused = focusedField === key;
             const hasError = !!errors[key];
             const hasValue = !!form[key as keyof typeof form];
-            
+
             return (
               <View key={key} className="mb-6">
                 <Text className="text-gray-700 font-semibold mb-2 ml-1">
                   {icon} {label}
                   {!optional && <Text className="text-red-500"> *</Text>}
                 </Text>
-                
+
                 <View className={`relative ${hasError ? 'mb-1' : ''}`}>
                   <TextInput
                     placeholder={optional ? `${label} (optional)` : `Enter ${label.toLowerCase()}`}
                     className={`
                       border-2 rounded-xl px-4 py-4 bg-white text-gray-800 font-medium
-                      ${hasError 
-                        ? 'border-red-300 bg-red-50' 
-                        : isFocused 
-                          ? 'border-blue-400 bg-blue-50' 
-                          : hasValue 
+                      ${hasError
+                        ? 'border-red-300 bg-red-50'
+                        : isFocused
+                          ? 'border-blue-400 bg-blue-50'
+                          : hasValue
                             ? 'border-green-300 bg-green-50'
                             : 'border-gray-200'
                       }
@@ -184,7 +188,7 @@ const AgentForm = ({
                     autoCapitalize={key === "username" ? "none" : "sentences"}
                     placeholderTextColor="#9CA3AF"
                   />
-                  
+
                   {/* Success indicator */}
                   {hasValue && !hasError && !isFocused && (
                     <View className="absolute right-4 top-1/2 -mt-2">
@@ -192,7 +196,7 @@ const AgentForm = ({
                     </View>
                   )}
                 </View>
-                
+
                 {hasError && (
                   <Text className="text-red-500 text-sm mt-1 ml-1 font-medium">
                     {errors[key]}
@@ -211,8 +215,8 @@ const AgentForm = ({
               onPress={() => handleChange('is_active', (!form.is_active).toString())}
               className={`
                 flex-row items-center justify-between p-4 rounded-xl border-2
-                ${form.is_active 
-                  ? 'bg-green-50 border-green-300' 
+                ${form.is_active
+                  ? 'bg-green-50 border-green-300'
                   : 'bg-gray-50 border-gray-300'
                 }
               `}
@@ -237,7 +241,7 @@ const AgentForm = ({
               onPress={handleSubmit}
               activeOpacity={0.9}
             >
-              <Text className="text-white font-bold text-center text-lg">
+              <Text className="bg-green-600 px-4 py-2 rounded-xl font-bold text-center text-lg text-white">
                 {defaultValues?.id ? "Update Agent" : "Create Agent"}
               </Text>
             </TouchableOpacity>
@@ -249,112 +253,96 @@ const AgentForm = ({
 };
 
 // Enhanced Agent Card Component
-const AgentCard = ({ 
-  item, 
-  onEdit, 
-  onDelete 
-}: { 
-  item: Agent; 
-  onEdit: () => void; 
-  onDelete: () => void; 
+const AgentCard = ({
+  item,
+  onEdit,
+  onDelete,
+}: {
+  item: Agent;
+  onEdit: () => void;
+  onDelete: () => void;
 }) => {
   return (
-    <View className="bg-white mx-4 mb-4 rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-      {/* Status indicator */}
-      <View className={`h-1 ${item.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
-      
-      <View className="p-6">
+    <View className="bg-white mx-4 mb-4 rounded-2xl shadow border border-gray-200">
+      {/* Status bar */}
+      <View className={`h-1 ${item.is_active ? 'bg-green-500' : 'bg-gray-400'}`} />
+
+      <View className="p-5">
         {/* Header */}
         <View className="flex-row items-center justify-between mb-4">
           <View className="flex-row items-center">
-            <View className={`
-              w-12 h-12 rounded-full items-center justify-center mr-3
-              ${item.is_active ? 'bg-green-100' : 'bg-gray-100'}
-            `}>
-              <Text className="text-2xl">👤</Text>
+            <View
+              className={`w-11 h-11 rounded-full justify-center items-center mr-3 ${item.is_active ? 'bg-green-100' : 'bg-gray-100'
+                }`}
+            >
+              <Text className="text-xl">👤</Text>
             </View>
+
             <View>
-              <Text className="text-xl font-bold text-gray-800">
-                {item.username}
-              </Text>
-              <Text className={`text-sm font-medium ${
-                item.is_active ? 'text-green-600' : 'text-red-600'
-              }`}>
-                {item.is_active ? '● Active' : '● Inactive'}
+              <Text className="text-lg font-semibold text-gray-800">{item.username}</Text>
+              <Text
+                className={`text-xs font-medium ${item.is_active ? 'text-green-600' : 'text-gray-500'
+                  }`}
+              >
+                {item.is_active ? 'Active' : 'Inactive'}
               </Text>
             </View>
           </View>
-          
-          <View className="flex-row space-x-2">
+
+          <View className="flex-row gap-2">
             <TouchableOpacity
               onPress={onEdit}
-              className="bg-blue-100 px-4 py-2 rounded-lg active:scale-95"
+              className="px-3 py-1.5 bg-gray-100 rounded-md"
               activeOpacity={0.8}
             >
-              <Text className="text-blue-700 font-semibold">Edit</Text>
+              <Text className="text-gray-800 text-sm">Edit</Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity
               onPress={onDelete}
-              className="bg-red-100 px-4 py-2 rounded-lg active:scale-95"
+              className="px-3 py-1.5 bg-red-100 rounded-md"
               activeOpacity={0.8}
             >
-              <Text className="text-red-700 font-semibold">Delete</Text>
+              <Text className="text-red-600 text-sm">Delete</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Stats Grid */}
+        {/* Info grid */}
         <View className="flex-row flex-wrap -mx-2">
-          <View className="w-1/2 px-2 mb-3">
-            <View className="bg-blue-50 p-3 rounded-xl">
-              <Text className="text-blue-600 text-xs font-semibold uppercase tracking-wide">
-                Commission
-              </Text>
-              <Text className="text-blue-800 text-lg font-bold">
-                {item.commission}%
-              </Text>
+          {[
+            {
+              label: 'Commission',
+              value: `${item.commission}%`,
+            },
+            {
+              label: 'Cap Amount',
+              value: `$${item?.cap_amount?.toLocaleString() || '0'}`,
+            },
+            {
+              label: 'Single Digit',
+              value: `${item.single_digit_number_commission}%`,
+            },
+            {
+              label: 'Dealer ID',
+              value: `#${item.assigned_dealer}`,
+            },
+          ].map(({ label, value }, index) => (
+            <View key={index} className="w-1/2 px-2 mb-3">
+              <View className="bg-gray-50 p-3 rounded-lg">
+                <Text className="text-xs text-gray-500 font-medium uppercase mb-1">
+                  {label}
+                </Text>
+                <Text className="text-base font-semibold text-gray-800">{value}</Text>
+              </View>
             </View>
-          </View>
-          
-          <View className="w-1/2 px-2 mb-3">
-            <View className="bg-purple-50 p-3 rounded-xl">
-              <Text className="text-purple-600 text-xs font-semibold uppercase tracking-wide">
-                Cap Amount
-              </Text>
-              <Text className="text-purple-800 text-lg font-bold">
-                ${item?.cap_amount?.toLocaleString()}
-              </Text>
-            </View>
-          </View>
-          
-          <View className="w-1/2 px-2">
-            <View className="bg-green-50 p-3 rounded-xl">
-              <Text className="text-green-600 text-xs font-semibold uppercase tracking-wide">
-                Single Digit
-              </Text>
-              <Text className="text-green-800 text-lg font-bold">
-                {item.single_digit_number_commission}%
-              </Text>
-            </View>
-          </View>
-          
-          <View className="w-1/2 px-2">
-            <View className="bg-orange-50 p-3 rounded-xl">
-              <Text className="text-orange-600 text-xs font-semibold uppercase tracking-wide">
-                Dealer ID
-              </Text>
-              <Text className="text-orange-800 text-lg font-bold">
-                #{item.assigned_dealer}
-              </Text>
-            </View>
-          </View>
+          ))}
         </View>
 
-        {/* Last login info */}
+        {/* Last login */}
         {item.last_login && (
-          <View className="mt-4 pt-4 border-t border-gray-100">
-            <Text className="text-gray-500 text-sm">
+          <View className="pt-4 border-t border-gray-100 mt-2">
+            <Text className="text-xs text-gray-500">
               Last login: {new Date(item.last_login).toLocaleDateString()}
             </Text>
           </View>
@@ -363,6 +351,7 @@ const AgentCard = ({
     </View>
   );
 };
+
 
 // Main Agent Tab with enhanced UI
 export default function AgentTab() {
@@ -412,8 +401,8 @@ export default function AgentTab() {
 
   const handleDelete = (id: string) => {
     Alert.alert(
-      "Delete Agent", 
-      "This action cannot be undone. Are you sure you want to delete this agent?", 
+      "Delete Agent",
+      "This action cannot be undone. Are you sure you want to delete this agent?",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -452,49 +441,63 @@ export default function AgentTab() {
   return (
     <View className="flex-1 bg-gray-50">
       <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
-      
+
       {/* Header */}
-      <View className="bg-white shadow-sm border-b border-gray-100">
-        <View className="px-6 pt-12 pb-6">
-          <Text className="text-3xl font-bold text-gray-800 mb-4">
+      <View className="bg-white border-b border-gray-200 shadow-sm">
+        <View className="px-6 pt-10 pb-6">
+          {/* Title */}
+          <Text className="text-2xl font-bold text-gray-800 mb-4">
             Agent Management
           </Text>
-          
+
           {/* Search Bar */}
           <View className="relative">
             <TextInput
               placeholder="Search agents..."
-              className="bg-gray-100 rounded-xl px-4 py-3 pr-10 text-gray-800"
+              className="bg-gray-100 rounded-lg px-4 py-3 pr-10 text-gray-800"
               value={searchQuery}
               onChangeText={setSearchQuery}
               placeholderTextColor="#9CA3AF"
             />
-            <View className="absolute right-3 top-1/2 -mt-2">
-              <Text className="text-gray-400 text-lg">🔍</Text>
+            <View className="absolute right-3 top-1/2 -mt-3">
+              <Text className="text-gray-400 text-base">🔍</Text>
             </View>
           </View>
-          
+
           {/* Stats */}
-          <View className="flex-row justify-between mt-4">
-            <View className="bg-blue-50 px-4 py-2 rounded-lg">
-              <Text className="text-blue-600 text-sm font-semibold">Total</Text>
-              <Text className="text-blue-800 text-xl font-bold">{agents.length}</Text>
-            </View>
-            <View className="bg-green-50 px-4 py-2 rounded-lg">
-              <Text className="text-green-600 text-sm font-semibold">Active</Text>
-              <Text className="text-green-800 text-xl font-bold">
-                {agents.filter(a => a.is_active).length}
-              </Text>
-            </View>
-            <View className="bg-red-50 px-4 py-2 rounded-lg">
-              <Text className="text-red-600 text-sm font-semibold">Inactive</Text>
-              <Text className="text-red-800 text-xl font-bold">
-                {agents.filter(a => !a.is_active).length}
-              </Text>
-            </View>
+          <View className="flex-row justify-between mt-5">
+            {[
+              {
+                label: 'Total',
+                count: agents.length,
+                bg: 'bg-gray-50',
+                text: 'text-gray-700',
+              },
+              {
+                label: 'Active',
+                count: agents.filter(a => a.is_active).length,
+                bg: 'bg-green-50',
+                text: 'text-green-700',
+              },
+              {
+                label: 'Inactive',
+                count: agents.filter(a => !a.is_active).length,
+                bg: 'bg-red-50',
+                text: 'text-red-700',
+              },
+            ].map((stat, index) => (
+              <View
+                key={index}
+                className={`flex-1 mx-1 px-4 py-2 rounded-lg ${stat.bg}`}
+              >
+                <Text className={`text-sm font-medium ${stat.text}`}>{stat.label}</Text>
+                <Text className={`text-xl font-bold ${stat.text}`}>{stat.count}</Text>
+              </View>
+            ))}
           </View>
         </View>
       </View>
+
 
       {/* Content */}
       {isLoading ? (
@@ -509,7 +512,7 @@ export default function AgentTab() {
             {searchQuery ? 'No agents found' : 'No agents yet'}
           </Text>
           <Text className="text-gray-500 text-center mb-8">
-            {searchQuery 
+            {searchQuery
               ? `No agents match "${searchQuery}"`
               : 'Get started by creating your first agent'
             }
