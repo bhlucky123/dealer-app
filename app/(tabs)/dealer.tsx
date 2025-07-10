@@ -1,4 +1,3 @@
-// Adapted from Agent Management to Dealer Management
 import useDealer from "@/hooks/use-dealer";
 import api from "@/utils/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,6 +9,7 @@ import {
     FlatList,
     KeyboardAvoidingView,
     Platform,
+    RefreshControl,
     ScrollView,
     StatusBar,
     Text,
@@ -287,8 +287,16 @@ export default function DealerManagement() {
   const [showForm, setShowForm] = useState(false);
   const [editData, setEditData] = useState<Dealer | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
-  const { data: dealers = [], isLoading } = useQuery<Dealer[]>({
+  const {
+    data: dealers = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery<Dealer[]>({
     queryKey: ["dealers"],
     queryFn: () => api.get("/administrator/dealer/").then((res) => res.data),
   });
@@ -337,6 +345,15 @@ export default function DealerManagement() {
     ]);
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   if (showForm) {
     return <DealerForm onSubmit={editData ? handleEdit : handleCreate} defaultValues={editData || {}} onCancel={() => { setShowForm(false); setEditData(null); }} />;
   }
@@ -358,10 +375,22 @@ export default function DealerManagement() {
           onChangeText={setSearchQuery}
         />
       </View>
-      {isLoading ? (
+      {isLoading && !isFetching ? (
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator size="large" color="#3B82F6" />
           <Text className="mt-4 text-gray-500">Loading dealers...</Text>
+        </View>
+      ) : isError ? (
+        <View className="flex-1 justify-center items-center px-8">
+          <Text className="text-red-500 text-lg font-semibold mb-2">Failed to load dealers</Text>
+          <Text className="text-gray-500 mb-4">{(error as any)?.message || "An error occurred."}</Text>
+          <TouchableOpacity
+            onPress={() => refetch()}
+            className="bg-blue-600 px-6 py-3 rounded-xl"
+            activeOpacity={0.8}
+          >
+            <Text className="text-white font-bold text-lg">Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -375,6 +404,19 @@ export default function DealerManagement() {
               onDelete={() => handleDelete(item.id.toString())}
             />
           )}
+          refreshControl={
+            <RefreshControl
+              refreshing={isFetching || refreshing}
+              onRefresh={onRefresh}
+              colors={["#3B82F6"]}
+              tintColor="#3B82F6"
+            />
+          }
+          ListEmptyComponent={
+            <View className="flex-1 justify-center items-center mt-16">
+              <Text className="text-gray-500 text-lg">No dealers found.</Text>
+            </View>
+          }
         />
       )}
     </View>

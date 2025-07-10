@@ -7,8 +7,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Platform,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -21,22 +23,22 @@ const DrawForm = ({ initialData, onClose }: { initialData?: any; onClose: () => 
   const [form, setForm] = useState(
     initialData
       ? {
-        ...initialData,
-        valid_from: new Date(initialData.valid_from),
-        valid_till: new Date(initialData.valid_till),
-        cut_off_time: new Date(`1970-01-01T${initialData.cut_off_time}`),
-        draw_time: new Date(`1970-01-01T${initialData.draw_time}`),
-      }
+          ...initialData,
+          valid_from: new Date(initialData.valid_from),
+          valid_till: new Date(initialData.valid_till),
+          cut_off_time: new Date(`1970-01-01T${initialData.cut_off_time}`),
+          draw_time: new Date(`1970-01-01T${initialData.draw_time}`),
+        }
       : {
-        name: "",
-        valid_from: new Date(),
-        valid_till: new Date(),
-        cut_off_time: new Date(),
-        draw_time: new Date(),
-        color_theme: "#8B5CF6",
-        non_single_digit_price: 0,
-        single_digit_number_price: 0,
-      }
+          name: "",
+          valid_from: new Date(),
+          valid_till: new Date(),
+          cut_off_time: new Date(),
+          draw_time: new Date(),
+          color_theme: "#8B5CF6",
+          non_single_digit_price: 0,
+          single_digit_number_price: 0,
+        }
   );
   const [showDatePicker, setShowDatePicker] = useState<null | string>(null);
   const { createDraw, updateDraw } = useDraw();
@@ -92,7 +94,7 @@ const DrawForm = ({ initialData, onClose }: { initialData?: any; onClose: () => 
             keyboardType={key.includes("price") ? "numeric" : "default"}
             value={form[key].toString()}
             onChangeText={(text) =>
-              setForm((prev) => ({
+              setForm((prev: typeof form) => ({
                 ...prev,
                 [key]: key.includes("price") ? Number(text) : text,
               }))
@@ -116,7 +118,6 @@ const DrawForm = ({ initialData, onClose }: { initialData?: any; onClose: () => 
         </TouchableOpacity>
       ))}
 
-
       <TouchableOpacity
         className="bg-primary py-3 rounded-xl mt-2"
         onPress={handleSubmit}
@@ -132,7 +133,7 @@ const DrawForm = ({ initialData, onClose }: { initialData?: any; onClose: () => 
           value={form[showDatePicker]}
           display={Platform.OS === "android" ? "default" : "spinner"}
           onChange={(event, date) => {
-            if (date) setForm((prev) => ({ ...prev, [showDatePicker]: date }));
+            if (date) setForm((prev: typeof form) => ({ ...prev, [showDatePicker]: date }));
             setShowDatePicker(null);
           }}
         />
@@ -142,18 +143,36 @@ const DrawForm = ({ initialData, onClose }: { initialData?: any; onClose: () => 
 };
 
 export default function HomeScreen() {
-  const { data, error, isLoading } = useQuery({
+  const queryClient = useQueryClient();
+  const { setSelectedDraw } = useDrawStore();
+  const [showForm, setShowForm] = useState(false);
+  const [editDraw, setEditDraw] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const {
+    data,
+    error,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useQuery({
     queryKey: ["/draw/list/"],
     queryFn: async () => {
       const res = await api.get("/draw/list/");
       return res?.data || [];
     },
   });
-  const { setSelectedDraw } = useDrawStore();
-  const [showForm, setShowForm] = useState(false);
-  const [editDraw, setEditDraw] = useState(null);
 
   const draws = data || [];
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   if (showForm) {
     return <DrawForm initialData={editDraw} onClose={() => setShowForm(false)} />;
@@ -163,7 +182,25 @@ export default function HomeScreen() {
     <View className="flex-1 bg-light p-4 mt-3">
       <Text className="text-2xl font-bold text-dark mb-4">🎯 Draw List</Text>
 
-      {isLoading && <Text className="text-gray-500">Loading...</Text>}
+      {(isLoading || isFetching) && (
+        <View className="mb-4 flex-row items-center">
+          <ActivityIndicator size="small" color="#8B5CF6" />
+          <Text className="text-gray-500 ml-2">Loading...</Text>
+        </View>
+      )}
+
+      {error && (
+        <View className="mb-4 bg-red-100 border border-red-300 rounded-lg p-3">
+          <Text className="text-red-700 font-semibold">Failed to load draws.</Text>
+          <Text className="text-red-500 text-xs mt-1">{error?.message || "Unknown error"}</Text>
+          <TouchableOpacity
+            className="mt-2 bg-red-200 px-3 py-1 rounded"
+            onPress={() => refetch()}
+          >
+            <Text className="text-red-800 font-medium">Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <FlatList
         data={draws}
@@ -193,7 +230,20 @@ export default function HomeScreen() {
             </View>
           </TouchableOpacity>
         )}
-        ListEmptyComponent={<Text className="text-gray-400 text-center mt-20">No draws available.</Text>}
+        ListEmptyComponent={
+          !isLoading && !error ? (
+            <Text className="text-gray-400 text-center mt-20">No draws available.</Text>
+          ) : null
+        }
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing || isFetching}
+            onRefresh={handleRefresh}
+            colors={["#8B5CF6"]}
+            tintColor="#8B5CF6"
+          />
+        }
+        contentContainerStyle={draws.length === 0 && !isLoading && !error ? { flex: 1, justifyContent: "center" } : undefined}
       />
 
       <TouchableOpacity
