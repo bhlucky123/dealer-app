@@ -263,7 +263,7 @@ const AgentCard = ({
   onDelete: () => void;
 }) => {
   return (
-    <View className="bg-white mx-4 mb-4 rounded-2xl shadow border border-gray-200">
+    <View className="bg-white mx-4 mb-4 rounded-xl border border-gray-200 overflow-hidden">
       {/* Status bar */}
       <View className={`h-1 ${item.is_active ? 'bg-green-500' : 'bg-gray-400'}`} />
 
@@ -445,10 +445,22 @@ export default function AgentTab() {
       {/* Header */}
       <View className="bg-white border-b border-gray-200 shadow-sm">
         <View className="px-6 pt-10 pb-6">
-          {/* Title */}
-          <Text className="text-2xl font-bold text-gray-800 mb-4">
-            Agent Management
-          </Text>
+          <View className="flex-row justify-between items-center  mb-4" >
+            {/* Title */}
+            <Text className="text-2xl font-bold text-gray-800">
+              Agent Management
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                setEditData(null);
+                setShowForm(true);
+              }}
+              className="w-16 h-16 bg-blue-600 rounded-full shadow-xl items-center justify-center active:scale-95"
+              activeOpacity={0.9}
+            >
+              <Text className="text-white text-2xl font-light">+</Text>
+            </TouchableOpacity>
+          </View>
 
           {/* Search Bar */}
           <View className="relative">
@@ -498,7 +510,6 @@ export default function AgentTab() {
         </View>
       </View>
 
-
       {/* Content */}
       {isLoading ? (
         <View className="flex-1 justify-center items-center">
@@ -546,17 +557,7 @@ export default function AgentTab() {
         />
       )}
 
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        onPress={() => {
-          setEditData(null);
-          setShowForm(true);
-        }}
-        className="absolute bottom-8 right-6 w-16 h-16 bg-blue-600 rounded-full shadow-xl items-center justify-center active:scale-95"
-        activeOpacity={0.9}
-      >
-        <Text className="text-white text-2xl font-light">+</Text>
-      </TouchableOpacity>
+
     </View>
   );
 }
