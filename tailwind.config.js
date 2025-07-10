@@ -8,7 +8,18 @@ module.exports = {
   ],
   presets: [require("nativewind/preset")],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        primary: '#8B5CF6',     // Vibrant Purple
+        secondary: '#22C55E',   // Emerald Green
+        gold: '#FFD700',        // Classic Gold
+        royal: '#1E3A8A',       // Royal Blue
+        dark: '#111827',        // Charcoal Black
+        light: '#F9FAFB',       // Very Light Gray
+        accent: '#F59E0B',      // Amber for highlights
+        error: '#EF4444',       // Red for errors
+      },
+    },
   },
   plugins: [],
 }

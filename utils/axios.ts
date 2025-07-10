@@ -1,8 +1,9 @@
 import { useAuthStore } from "@/store/auth";
 import axios from "axios";
+import { config } from "./config";
 
 const api = axios.create({
-  baseURL: process.env.EXPO_PUBLIC_API_BASE_URL,
+  baseURL: config.apiBaseUrl,
   timeout: 10000,
   headers: {
     "Content-Type": "application/json",
@@ -41,7 +42,7 @@ api.interceptors.response.use(
       //   console.error("Unknown backend error format", data);
       // }
     } else {
-      console.error("❌ Network or config error", error.message);
+      console.error("❌ Network or config error", error);
     }
 
     return Promise.reject(error);

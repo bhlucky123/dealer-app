@@ -1,3 +1,4 @@
+import { config } from "@/utils/config";
 import { router } from "expo-router";
 import { create } from "zustand";
 
@@ -30,7 +31,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     user_type: "DEALER",
   },
   token:
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzUzMTEzNTkwLCJpYXQiOjE3NTA1MjE1OTAsImp0aSI6IjAzMTk3MWZlN2E5ZjQxM2RiMzA2OWMxZTUzYzQzOTI5IiwidXNlcl9pZCI6Mn0.zo4lOisu95CykMeqcdNzqvy_w6pU7-UaCsktnyFIWRI",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU0NzMxMzg4LCJpYXQiOjE3NTIxMzkzODgsImp0aSI6ImI0NDhmMTljNjk0ZTRmY2U5NTZkYTI0Yzk1MWY0OGNmIiwidXNlcl9pZCI6MSwidXNlcl90eXBlIjoiQURNSU4ifQ.voP8IZzIxVhy374PLysDmBCqqOAlpYFaOy1KQyEWp7Q",
   loading: false,
   error: null,
 
@@ -38,7 +39,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ loading: true, error: null });
     try {
       const response = await fetch(
-        "https://threedln-be.onrender.com/dealer/login/",
+        `${config.apiBaseUrl}/dealer/login/`,
         {
           method: "POST",
           headers: {
