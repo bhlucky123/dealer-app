@@ -20,7 +20,7 @@ import {
 } from "react-native";
 
 // Agent type
-type Agent = {
+export type Agent = {
   id: number;
   password: string;
   last_login: string | null;
@@ -121,7 +121,7 @@ const AgentForm = ({
   ];
 
   return (
-    <View className="flex-1 bg-gradient-to-br from-blue-50 to-indigo-100">
+    <View className="flex-1 mb-5">
       <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
 
       {/* Header */}
@@ -151,6 +151,7 @@ const AgentForm = ({
           className="flex-1 px-6 pt-6"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 32 }}
         >
           {inputFields.map(({ key, label, keyboardType, secureTextEntry, optional, icon }) => {
             const isFocused = focusedField === key;
@@ -179,7 +180,13 @@ const AgentForm = ({
                       }
                       shadow-sm
                     `}
-                    value={form[key as keyof typeof form]}
+                    value={
+                      typeof form[key as keyof typeof form] === "boolean"
+                        ? form[key as keyof typeof form]
+                          ? "true"
+                          : "false"
+                        : (form[key as keyof typeof form] as string | undefined)
+                    }
                     onChangeText={(text) => handleChange(key, text)}
                     onFocus={() => setFocusedField(key)}
                     onBlur={() => setFocusedField(null)}
@@ -235,19 +242,19 @@ const AgentForm = ({
               </View>
             </TouchableOpacity>
           </View>
-
-          <View className="pb-8">
-            <TouchableOpacity
-              className="bg-gradient-to-r from-blue-600 to-blue-700 py-4 rounded-xl shadow-lg active:scale-95"
-              onPress={handleSubmit}
-              activeOpacity={0.9}
-            >
-              <Text className="bg-green-600 px-4 py-2 rounded-xl font-bold text-center text-lg text-white">
-                {defaultValues?.id ? "Update Agent" : "Create Agent"}
-              </Text>
-            </TouchableOpacity>
-          </View>
         </ScrollView>
+        {/* Submit button always visible at the bottom */}
+        <View className="px-6 pb-6 pt-2 bg-white border-t border-gray-100">
+          <TouchableOpacity
+            className="rounded-xl shadow-lg active:scale-95"
+            onPress={handleSubmit}
+            activeOpacity={0.9}
+          >
+            <Text className="bg-green-600 px-4 py-2 rounded-xl font-bold text-center text-lg text-white">
+              {defaultValues?.id ? "Update Agent" : "Create Agent"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </KeyboardAvoidingView>
     </View>
   );

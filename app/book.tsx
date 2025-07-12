@@ -162,6 +162,8 @@ const BookingScreen: React.FC = () => {
   };
 
   const addBooking = (subType: string): void => {
+    console.log("on add booking",DrawSessionDetails);
+    
     const digitsRequired = parseInt(drawSession);
     const numberLen = numberInput.length;
     const endLen = endNumberInput.length;

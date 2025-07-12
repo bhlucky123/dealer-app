@@ -7,12 +7,28 @@ const OptionsPage = () => {
   const { drawId } = useLocalSearchParams();
   const { selectedDraw } = useDrawStore();
 
+  // Define menu items with their corresponding routes
   const menuItems = [
-    "Sales Report",
-    "Daily Report",
-    "Winnings",
-    "Last Sale",
-    "Result",
+    {
+      label: "Sales Report",
+      route: `/sales-report`,
+    },
+    {
+      label: "Daily Report",
+      route: `/daily-report/${drawId}`,
+    },
+    {
+      label: "Winnings",
+      route: `/winnings/${drawId}`,
+    },
+    {
+      label: "Last Sale",
+      route: `/last-sale/${drawId}`,
+    },
+    {
+      label: "Result",
+      route: `/result`,
+    },
   ];
 
   return (
@@ -25,7 +41,7 @@ const OptionsPage = () => {
         className="bg-gray-100 rounded-lg py-4 px-4 mb-3"
         activeOpacity={0.7}
         onPress={() => {
-          router.push("/book")
+          router.push("/book");
         }}
       >
         <Text className="text-center text-base text-black">Book Ticket</Text>
@@ -36,9 +52,11 @@ const OptionsPage = () => {
           key={index}
           className="bg-gray-100 rounded-lg py-4 px-4 mb-3"
           activeOpacity={0.7}
-          onPress={() => console.log(item)}
+          onPress={() => {
+            router.push(item.route);
+          }}
         >
-          <Text className="text-center text-base text-black">{item}</Text>
+          <Text className="text-center text-base text-black">{item.label}</Text>
         </TouchableOpacity>
       ))}
     </View>
