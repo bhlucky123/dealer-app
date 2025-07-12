@@ -41,7 +41,27 @@ const useDraw = () => {
     },
   });
 
-  return { createDraw, updateDraw };
+
+  const createDrawResult = useMutation({
+    mutationFn: async ({
+      draw_id,
+      ...rest
+    }: {
+      draw_id: number;
+      first_prize: string;
+      second_prize: string;
+      third_prize: string;
+      fourth_prize: string;
+      fifth_prize: string;
+      complementary_prizes: string[];
+    }) => {
+      const res = await api.post(`/draw-result/result/${draw_id}`, rest);
+      return res?.data;
+    },
+  });
+
+
+  return { createDraw, updateDraw, createDrawResult };
 };
 
 export default useDraw;

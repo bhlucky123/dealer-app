@@ -34,7 +34,7 @@ const useDealer = () => {
 
   const editMutation = useMutation<Dealer, Error, EditDealerParams>({
     mutationFn: ({ id, ...payload }) =>
-      api.put(`/administrator/dealer/${id}/`, payload).then((res) => res.data),
+      api.patch(`/administrator/dealer/${id}/`, payload).then((res) => res.data),
   });
 
   const deleteMutation = useMutation<void, Error, DeleteDealerParams>({
