@@ -41,11 +41,13 @@ api.interceptors.response.use(
       // } else {
       //   console.error("Unknown backend error format", data);
       // }
+      return Promise.reject({status: status || 500, message: data || "something went wrong"});
+
     } else {
       console.error("❌ Network or config error", error);
+      return Promise.reject(error);
     }
 
-    return Promise.reject(error);
   }
 );
 
