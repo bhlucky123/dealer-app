@@ -1,4 +1,4 @@
- import useDealer from "@/hooks/use-dealer";
+import useDealer from "@/hooks/use-dealer";
 import api from "@/utils/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MoveLeft } from "lucide-react-native";
@@ -116,7 +116,7 @@ const DealerForm = ({
     ];
 
     return (
-        <View className="flex-1 bg-gradient-to-br from-gray-50 to-blue-50">
+        <View className="flex-1">
             <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
 
             {/* Header */}
@@ -297,12 +297,16 @@ export default function DealerManagement() {
         isLoading,
         isError,
         error,
-        refetch,
         isFetching,
+        refetch
     } = useQuery<Dealer[]>({
         queryKey: ["dealers"],
         queryFn: () => api.get("/administrator/dealer/").then((res) => res.data),
+        retry: false, // Do not retry on error, only call once
     });
+
+    console.log("errorss", error);
+
 
     const { createDealer, editDealer, deleteDealer } = useDealer();
 
@@ -359,6 +363,37 @@ export default function DealerManagement() {
         }
     };
 
+    if (isError) {
+        return (
+            <View className="flex-1 justify-center items-center px-8 bg-white">
+                <View className="bg-red-50 border border-red-200 rounded-2xl px-6 py-8 shadow-md items-center w-full">
+                    <View className="bg-red-100 rounded-full p-4 mb-4">
+                        <Text className="text-3xl">⚠️</Text>
+                    </View>
+                    <Text className="text-red-600 text-xl font-bold mb-2 text-center">Failed to load dealers</Text>
+                    <Text className="text-gray-600 mb-6 text-center">
+                        {
+                            typeof (error as any)?.message === "object" && (error as any)?.message?.detail
+                                ? (error as any).message.detail
+                                : (typeof (error as any)?.message === "string"
+                                    ? (error as any).message
+                                    : "An error occurred while loading dealers. Please try again.")
+                        }
+                    </Text>
+                    {/* {((error as any)?.status !== 403) && ( */}
+                        <TouchableOpacity
+                            onPress={() => refetch()}
+                            className="flex-row items-center justify-center bg-blue-600 px-8 py-3 rounded-xl shadow active:scale-95"
+                            activeOpacity={0.85}
+                        >
+                            <Text className="text-white font-bold text-lg mr-2">Retry</Text>
+                            <Text className="text-white text-xl">↻</Text>
+                        </TouchableOpacity>
+                    {/* )} */}
+                </View>
+            </View>
+        )
+    }
     if (showForm) {
         return <DealerForm onSubmit={editData ? handleEdit : handleCreate} defaultValues={editData || {}} onCancel={() => { setShowForm(false); setEditData(null); }} />;
     }
@@ -384,18 +419,6 @@ export default function DealerManagement() {
                 <View className="flex-1 justify-center items-center">
                     <ActivityIndicator size="large" color="#3B82F6" />
                     <Text className="mt-4 text-gray-500">Loading dealers...</Text>
-                </View>
-            ) : isError ? (
-                <View className="flex-1 justify-center items-center px-8">
-                    <Text className="text-red-500 text-lg font-semibold mb-2">Failed to load dealers</Text>
-                    <Text className="text-gray-500 mb-4">{(error as any)?.message || "An error occurred."}</Text>
-                    <TouchableOpacity
-                        onPress={() => refetch()}
-                        className="bg-blue-600 px-6 py-3 rounded-xl"
-                        activeOpacity={0.8}
-                    >
-                        <Text className="text-white font-bold text-lg">Retry</Text>
-                    </TouchableOpacity>
                 </View>
             ) : (
                 <FlatList

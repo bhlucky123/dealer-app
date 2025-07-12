@@ -33,8 +33,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     single_digit_number_commission: 20,
     user_type: "DEALER",
   },
-  token: DealerToken,
-  // token: AdminToken,
+  // token: DealerToken,
+  token: AdminToken,
   loading: false,
   error: null,
 

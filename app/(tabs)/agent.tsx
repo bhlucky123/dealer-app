@@ -121,7 +121,7 @@ const AgentForm = ({
   ];
 
   return (
-    <View className="flex-1 mb-5">
+    <View className="flex-1">
       <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
 
       {/* Header */}
@@ -129,7 +129,7 @@ const AgentForm = ({
         <View className="flex-row items-center justify-between px-6 pt-12 pb-4">
           <TouchableOpacity
             onPress={onCancel}
-            className="ntw-w-10 ntw-h-10 ntw-rounded-full ntw-bg-gray-100 ntw-items-center ntw-justify-center"
+            className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center active:scale-95"
             activeOpacity={0.7}
           >
             <MoveLeft />
@@ -146,12 +146,13 @@ const AgentForm = ({
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         className="flex-1"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
         <ScrollView
           className="flex-1 px-6 pt-6"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 32 }}
+          contentContainerStyle={{ paddingBottom: 50 }}
         >
           {inputFields.map(({ key, label, keyboardType, secureTextEntry, optional, icon }) => {
             const isFocused = focusedField === key;
@@ -161,7 +162,8 @@ const AgentForm = ({
             return (
               <View key={key} className="mb-6">
                 <Text className="text-gray-700 font-semibold mb-2 ml-1">
-                  {icon} {label}
+                  <Text>{icon} </Text>
+                  <Text>{label}</Text>
                   {!optional && <Text className="text-red-500"> *</Text>}
                 </Text>
 
@@ -190,7 +192,7 @@ const AgentForm = ({
                     onChangeText={(text) => handleChange(key, text)}
                     onFocus={() => setFocusedField(key)}
                     onBlur={() => setFocusedField(null)}
-                    keyboardType={keyboardType}
+                    keyboardType={key.includes("commission") || key === "cap_amount" || key === "secret_pin" ? "numeric" : keyboardType}
                     secureTextEntry={secureTextEntry}
                     maxLength={key === "secret_pin" ? 4 : undefined}
                     autoCapitalize={key === "username" ? "none" : "sentences"}
@@ -198,7 +200,7 @@ const AgentForm = ({
                   />
 
                   {/* Success indicator */}
-                  {hasValue && !hasError && !isFocused && (
+                  {hasValue && !hasError && !isFocused && key !== "password" && (
                     <View className="absolute right-4 top-1/2 -mt-2">
                       <Text className="text-green-500 text-lg">✓</Text>
                     </View>
@@ -217,10 +219,11 @@ const AgentForm = ({
           {/* Status Toggle */}
           <View className="mb-8">
             <Text className="text-gray-700 font-semibold mb-3 ml-1">
-              🔄 Account Status
+              <Text>🔄</Text>
+              <Text> Account Status</Text>
             </Text>
             <TouchableOpacity
-              onPress={() => handleChange('is_active', (!form.is_active).toString())}
+              onPress={() => handleChange('is_active', !form.is_active)}
               className={`
                 flex-row items-center justify-between p-4 rounded-xl border-2
                 ${form.is_active
@@ -232,7 +235,7 @@ const AgentForm = ({
             >
               <Text className="text-gray-700 font-medium">Active Account</Text>
               <View className={`
-                w-12 h-6 rounded-full p-1 
+                w-12 h-6 rounded-full p-1
                 ${form.is_active ? 'bg-green-500' : 'bg-gray-400'}
               `}>
                 <View className={`
@@ -242,19 +245,20 @@ const AgentForm = ({
               </View>
             </TouchableOpacity>
           </View>
+
+          <View className="pb-20">
+            {/* Added padding-bottom for the submit button */}
+            <TouchableOpacity
+              className="bg-blue-600 py-4 rounded-xl shadow-lg active:scale-95"
+              onPress={handleSubmit}
+              activeOpacity={0.9}
+            >
+              <Text className="text-white text-center font-bold text-lg">
+                {defaultValues?.id ? "Update Agent" : "Create Agent"}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
-        {/* Submit button always visible at the bottom */}
-        <View className="px-6 pb-6 pt-2 bg-white border-t border-gray-100">
-          <TouchableOpacity
-            className="rounded-xl shadow-lg active:scale-95"
-            onPress={handleSubmit}
-            activeOpacity={0.9}
-          >
-            <Text className="bg-green-600 px-4 py-2 rounded-xl font-bold text-center text-lg text-white">
-              {defaultValues?.id ? "Update Agent" : "Create Agent"}
-            </Text>
-          </TouchableOpacity>
-        </View>
       </KeyboardAvoidingView>
     </View>
   );
@@ -401,6 +405,8 @@ export default function AgentTab() {
   };
 
   const handleEdit = (data: any) => {
+    console.log("editData", editData);
+    
     editAgent(
       { ...data, id: editData?.id },
       {
