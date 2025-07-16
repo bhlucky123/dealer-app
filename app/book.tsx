@@ -183,6 +183,16 @@ const BookingScreen: React.FC = () => {
 
     const bookingType = getBookingType();
     const isSingle = bookingType === "single_digit";
+    const parseNum = (val: string) => parseInt(val) || 0;
+    const count = parseNum(countInput);
+    const bCount = parseNum(bCountInput);
+    if (isSingle && count < 5) {
+      Alert.alert(
+        "Invalid input",
+        "For single digit bookings, the minimum count is 5. Please enter a count of at least 5."
+      );
+      return;
+    }
 
     const price = isSingle
       ? DrawSessionDetails?.single_digit_number_price
@@ -192,9 +202,7 @@ const BookingScreen: React.FC = () => {
       ? (user?.single_digit_number_commission ?? 0)
       : (user?.commission ?? 0);
 
-    const parseNum = (val: string) => parseInt(val) || 0;
-    const count = parseNum(countInput);
-    const bCount = parseNum(bCountInput);
+   
 
     const createEntry = (number: string, count: number, type: string) => {
       const amt = count * (price || 0);
