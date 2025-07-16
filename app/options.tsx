@@ -1,11 +1,12 @@
+import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
-import { router, useLocalSearchParams } from "expo-router";
+import { router } from "expo-router";
 import React from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 
 const OptionsPage = () => {
-  const { drawId } = useLocalSearchParams();
   const { selectedDraw } = useDrawStore();
+  const { user } = useAuthStore()
 
   // Define menu items with their corresponding routes
   const menuItems = [
@@ -15,15 +16,15 @@ const OptionsPage = () => {
     },
     {
       label: "Daily Report",
-      route: `/daily-report/${drawId}`,
+      route: `/daily-report`,
     },
     {
       label: "Winnings",
-      route: `/winnings/${drawId}`,
+      route: `/winnings`,
     },
     {
       label: "Last Sale",
-      route: `/last-sale/${drawId}`,
+      route: `/last-sale`,
     },
     {
       label: "Result",
@@ -37,15 +38,20 @@ const OptionsPage = () => {
         {selectedDraw?.name || "Draw Options"}
       </Text>
 
-      <TouchableOpacity
-        className="bg-gray-100 rounded-lg py-4 px-4 mb-3"
-        activeOpacity={0.7}
-        onPress={() => {
-          router.push("/book");
-        }}
-      >
-        <Text className="text-center text-base text-black">Book Ticket</Text>
-      </TouchableOpacity>
+
+      {
+        (user?.user_type === "DEALER" || user?.user_type === "AGENT") && (
+          <TouchableOpacity
+            className="bg-gray-100 rounded-lg py-4 px-4 mb-3"
+            activeOpacity={0.7}
+            onPress={() => {
+              router.push("/book");
+            }}
+          >
+            <Text className="text-center text-base text-black">Book Ticket</Text>
+          </TouchableOpacity>
+        )
+      }
 
       {menuItems.map((item, index) => (
         <TouchableOpacity

@@ -1,4 +1,5 @@
 import useDraw from "@/hooks/use-draw";
+import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
 import { AntDesign, Feather } from "@expo/vector-icons";
@@ -18,27 +19,43 @@ import {
   View,
 } from "react-native";
 
+// Helper for color contrast
+function getContrastYIQ(hexcolor: string) {
+  hexcolor = hexcolor.replace("#", "");
+  if (hexcolor.length === 3) {
+    hexcolor = hexcolor
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  const r = parseInt(hexcolor.substr(0, 2), 16);
+  const g = parseInt(hexcolor.substr(2, 2), 16);
+  const b = parseInt(hexcolor.substr(4, 2), 16);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 128 ? "#222" : "#fff";
+}
+
 const DrawForm = ({ initialData, onClose }: { initialData?: any; onClose: () => void }) => {
   const isEdit = !!initialData;
   const [form, setForm] = useState(
     initialData
       ? {
-          ...initialData,
-          valid_from: new Date(initialData.valid_from),
-          valid_till: new Date(initialData.valid_till),
-          cut_off_time: new Date(`1970-01-01T${initialData.cut_off_time}`),
-          draw_time: new Date(`1970-01-01T${initialData.draw_time}`),
-        }
+        ...initialData,
+        valid_from: new Date(initialData.valid_from),
+        valid_till: new Date(initialData.valid_till),
+        cut_off_time: new Date(`1970-01-01T${initialData.cut_off_time}`),
+        draw_time: new Date(`1970-01-01T${initialData.draw_time}`),
+      }
       : {
-          name: "",
-          valid_from: new Date(),
-          valid_till: new Date(),
-          cut_off_time: new Date(),
-          draw_time: new Date(),
-          color_theme: "#8B5CF6",
-          non_single_digit_price: 0,
-          single_digit_number_price: 0,
-        }
+        name: "",
+        valid_from: new Date(),
+        valid_till: new Date(),
+        cut_off_time: new Date(),
+        draw_time: new Date(),
+        color_theme: "#8B5CF6",
+        non_single_digit_price: 0,
+        single_digit_number_price: 0,
+      }
   );
   const [showDatePicker, setShowDatePicker] = useState<null | string>(null);
 
@@ -75,73 +92,202 @@ const DrawForm = ({ initialData, onClose }: { initialData?: any; onClose: () => 
     onClose();
   };
 
+  // Color palette for color_theme selection
+  const colorPalette = [
+    "#8B5CF6", // indigo
+    "#F59E42", // orange
+    "#F43F5E", // rose
+    "#10B981", // emerald
+    "#3B82F6", // blue
+    "#FBBF24", // yellow
+    "#6366F1", // indigo-500
+    "#A21CAF", // purple
+    "#F472B6", // pink
+    "#22D3EE", // cyan
+  ];
+
   return (
-    <ScrollView className="flex-1 bg-white px-6 py-8">
-      <TouchableOpacity className="mb-4 flex-row items-center" onPress={onClose}>
-        <AntDesign name="arrowleft" size={24} color="black" />
-        <Text className="ml-2 text-base font-medium text-gray-700">Back</Text>
-      </TouchableOpacity>
+    <View style={{ flex: 1, backgroundColor: "#fff" }}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#fff" }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 32, paddingBottom: 48 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <TouchableOpacity className="mb-6 flex-row items-center" onPress={onClose}>
+          <AntDesign name="arrowleft" size={24} color="#6366F1" />
+          <Text className="ml-2 text-lg font-semibold text-indigo-700">Back</Text>
+        </TouchableOpacity>
 
-      <Text className="text-2xl font-bold mb-6 text-primary">{isEdit ? "Edit" : "Create"} Draw</Text>
+        <Text className="text-3xl font-extrabold mb-8 text-indigo-700 tracking-tight">
+          {isEdit ? "Edit" : "Create"} Draw
+        </Text>
 
-      {["name", "color_theme", "non_single_digit_price", "single_digit_number_price"].map((key) => (
-        <View key={key} className="mb-4">
-          <Text className="text-sm font-semibold mb-1 text-gray-700">
-            {key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-          </Text>
+        {/* Name */}
+        <View className="mb-5">
+          <Text className="text-base font-semibold mb-2 text-gray-700">Draw Name</Text>
           <TextInput
-            className="border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-base"
-            placeholder={key.replace(/_/g, " ")}
-            keyboardType={key.includes("price") ? "numeric" : "default"}
-            value={form[key].toString()}
-            onChangeText={(text) =>
-              setForm((prev: typeof form) => ({
-                ...prev,
-                [key]: key.includes("price") ? Number(text) : text,
-              }))
-            }
+            className="border border-gray-300 rounded-xl px-4 py-3 bg-gray-50 text-base"
+            placeholder="Enter draw name"
+            value={form.name}
+            onChangeText={(text) => setForm((prev) => ({ ...prev, name: text }))}
           />
         </View>
-      ))}
 
-      {["valid_from", "valid_till", "cut_off_time", "draw_time"].map((key) => (
-        <TouchableOpacity
-          key={key}
-          className="border border-gray-200 rounded-lg px-3 py-3 mb-4 bg-gray-50"
-          onPress={() => setShowDatePicker(key)}
-        >
-          <Text className="text-gray-700 text-base font-medium">
-            {key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}:{" "}
-            <Text className="font-normal">
-              {key.includes("time")
-                ? form[key].toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
-                : form[key].toLocaleDateString()}
+        {/* Color Theme */}
+        <View className="mb-5">
+          <Text className="text-base font-semibold mb-2 text-gray-700">Color Theme</Text>
+          <View className="flex-row flex-wrap gap-2">
+            {colorPalette.map((color) => (
+              <TouchableOpacity
+                key={color}
+                onPress={() => setForm((prev) => ({ ...prev, color_theme: color }))}
+                style={{
+                  backgroundColor: color,
+                  borderWidth: form.color_theme === color ? 3 : 1,
+                  borderColor: form.color_theme === color ? "#6366F1" : "#e5e7eb",
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  marginRight: 10,
+                  marginBottom: 10,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                activeOpacity={0.7}
+              >
+                {form.color_theme === color && (
+                  <AntDesign name="check" size={20} color={getContrastYIQ(color)} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Prices */}
+        <View className="mb-5 flex-row gap-4">
+          <View style={{ flex: 1 }}>
+            <Text className="text-base font-semibold mb-2 text-gray-700">Non-Single Digit Price</Text>
+            <TextInput
+              className="border border-gray-300 rounded-xl px-4 py-3 bg-gray-50 text-base"
+              placeholder="0"
+              keyboardType="numeric"
+              value={form.non_single_digit_price.toString()}
+              onChangeText={(text) =>
+                setForm((prev) => ({
+                  ...prev,
+                  non_single_digit_price: Number(text.replace(/[^0-9.]/g, "")),
+                }))
+              }
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text className="text-base font-semibold mb-2 text-gray-700">Single Digit Price</Text>
+            <TextInput
+              className="border border-gray-300 rounded-xl px-4 py-3 bg-gray-50 text-base"
+              placeholder="0"
+              keyboardType="numeric"
+              value={form.single_digit_number_price.toString()}
+              onChangeText={(text) =>
+                setForm((prev) => ({
+                  ...prev,
+                  single_digit_number_price: Number(text.replace(/[^0-9.]/g, "")),
+                }))
+              }
+            />
+          </View>
+        </View>
+
+        {/* Dates & Times */}
+        <View className="mb-5">
+          <Text className="text-base font-semibold mb-2 text-gray-700">Valid From</Text>
+          <TouchableOpacity
+            className="border border-gray-300 rounded-xl px-4 py-3 bg-gray-50 mb-3"
+            onPress={() => setShowDatePicker("valid_from")}
+          >
+            <Text className="text-gray-800 text-base">
+              {form.valid_from.toLocaleDateString()}
             </Text>
-          </Text>
-        </TouchableOpacity>
-      ))}
+          </TouchableOpacity>
 
-      <TouchableOpacity
-        className="bg-primary py-3 rounded-xl mt-2 shadow-md"
-        onPress={handleSubmit}
-      >
-        <Text className="text-white text-center font-bold text-lg">
-          {isEdit ? "Update" : "Create"} Draw
-        </Text>
-      </TouchableOpacity>
+          <Text className="text-base font-semibold mb-2 text-gray-700">Valid Till</Text>
+          <TouchableOpacity
+            className="border border-gray-300 rounded-xl px-4 py-3 bg-gray-50 mb-3"
+            onPress={() => setShowDatePicker("valid_till")}
+          >
+            <Text className="text-gray-800 text-base">
+              {form.valid_till.toLocaleDateString()}
+            </Text>
+          </TouchableOpacity>
 
-      {showDatePicker && (
-        <DateTimePicker
-          mode={showDatePicker.includes("time") ? "time" : "date"}
-          value={form[showDatePicker]}
-          display={Platform.OS === "android" ? "default" : "spinner"}
-          onChange={(event, date) => {
-            if (date) setForm((prev: typeof form) => ({ ...prev, [showDatePicker]: date }));
-            setShowDatePicker(null);
-          }}
-        />
-      )}
-    </ScrollView>
+          <Text className="text-base font-semibold mb-2 text-gray-700">Cut Off Time</Text>
+          <TouchableOpacity
+            className="border border-gray-300 rounded-xl px-4 py-3 bg-gray-50 mb-3"
+            onPress={() => setShowDatePicker("cut_off_time")}
+          >
+            <Text className="text-gray-800 text-base">
+              {form.cut_off_time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}
+            </Text>
+          </TouchableOpacity>
+
+          <Text className="text-base font-semibold mb-2 text-gray-700">Draw Time</Text>
+          <TouchableOpacity
+            className="border border-gray-300 rounded-xl px-4 py-3 bg-gray-50"
+            onPress={() => setShowDatePicker("draw_time")}
+          >
+            <Text className="text-gray-800 text-base">
+              {form.draw_time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={{ marginBottom: 32 }}>
+          <TouchableOpacity
+            onPress={handleSubmit}
+            activeOpacity={0.85}
+            style={{
+              marginTop: 24,
+              marginBottom: 32,
+              borderRadius: 16,
+              backgroundColor: "#4f46e5", // indigo-600
+              shadowColor: "#6366f1", // indigo-500
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.22,
+              shadowRadius: 12,
+              elevation: 8,
+              paddingVertical: 18,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text
+              style={{
+                color: "#fff",
+                fontWeight: "bold",
+                fontSize: 18,
+                letterSpacing: 1,
+                textAlign: "center",
+                textTransform: "uppercase",
+              }}
+            >
+              {isEdit ? "Update" : "Create"} Draw
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {showDatePicker && (
+          <DateTimePicker
+            mode={showDatePicker.includes("time") ? "time" : "date"}
+            value={form[showDatePicker]}
+            display={Platform.OS === "android" ? "default" : "spinner"}
+            onChange={(event, date) => {
+              if (date) setForm((prev: typeof form) => ({ ...prev, [showDatePicker]: date }));
+              setShowDatePicker(null);
+            }}
+          />
+        )}
+      </ScrollView>
+    </View>
   );
 };
 
@@ -151,7 +297,8 @@ export default function HomeScreen() {
   const [showForm, setShowForm] = useState(false);
   const [editDraw, setEditDraw] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeResultDrawId, setActiveResultDrawId] = useState<number | null>(null);
+
+  const { user } = useAuthStore()
 
   const {
     data,
@@ -183,25 +330,54 @@ export default function HomeScreen() {
   }
 
   return (
-    <View className="flex-1 bg-light px-4 pt-6">
-      <Text className="text-3xl font-extrabold text-primary mb-6">🎯 Draw List</Text>
+    <View className="flex-1 bg-[#f5f7fa] px-2 pt-6 relative">
+      {/* HEADER */}
+      <View className="flex-row items-center justify-between mb-6 mt-4">
+        {/* title */}
+        <Text className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight">
+          🎲 Draws
+        </Text>
+
+        {/* add‑button */}
+        {
+          user?.user_type === "ADMIN" && (
+            <TouchableOpacity
+              onPress={() => {
+                setEditDraw(null);
+                setShowForm(true);
+              }}
+              accessibilityLabel="Add new draw"
+              activeOpacity={0.85}
+              className="
+      w-12 h-12 rounded-full bg-blue-600
+      items-center justify-center
+      shadow-md
+      border-2 border-white
+      ios:shadow-lg android:elevation-4
+    "
+            >
+              <AntDesign name="plus" size={26} color="#fff" />
+            </TouchableOpacity>
+          )
+        }
+      </View>
 
       {(isLoading || isFetching) && (
         <View className="mb-4 flex-row items-center justify-center">
-          <ActivityIndicator size="small" color="#8B5CF6" />
-          <Text className="text-gray-500 ml-2">Loading...</Text>
+          <ActivityIndicator size="large" color="#8B5CF6" />
+          <Text className="text-gray-500 ml-3 text-base">Loading draws...</Text>
         </View>
       )}
 
       {error && (
-        <View className="mb-4 bg-red-100 border border-red-300 rounded-lg p-3">
-          <Text className="text-red-700 font-semibold">Failed to load draws.</Text>
+        <View className="mb-4 bg-red-100 border border-red-300 rounded-xl p-4">
+          <Text className="text-red-700 font-bold text-lg">Failed to load draws.</Text>
           <Text className="text-red-500 text-xs mt-1">{error?.message || "Unknown error"}</Text>
           <TouchableOpacity
-            className="mt-2 bg-red-200 px-3 py-1 rounded"
+            className="mt-3 bg-red-200 px-4 py-2 rounded-lg"
             onPress={() => refetch()}
           >
-            <Text className="text-red-800 font-medium">Retry</Text>
+            <Text className="text-red-800 font-semibold text-center">Retry</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -209,51 +385,115 @@ export default function HomeScreen() {
       <FlatList
         data={draws}
         keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <View className="mb-6">
-            <TouchableOpacity
-              onPress={() => {
-                setSelectedDraw(item);
-                router.push(`/${item.id}/options`);
-              }}
-              className="rounded-2xl overflow-hidden shadow-lg"
-              activeOpacity={0.85}
-            >
-              <View
-                className="p-5 rounded-2xl"
+        renderItem={({ item }) => {
+          const textColor = getContrastYIQ(item.color_theme || "#8B5CF6");
+          return (
+            <View className="mb-6">
+              <TouchableOpacity
+                onPress={() => {
+                  setSelectedDraw(item);
+                  router.push(`/options`);
+                }}
+                className="rounded-2xl overflow-hidden shadow-lg"
+                activeOpacity={0.92}
                 style={{
                   backgroundColor: item.color_theme || "#8B5CF6",
-                  borderWidth: 2,
-                  borderColor: "#ede9fe",
+                  borderWidth: 0,
+                  elevation: 6,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.10,
+                  shadowRadius: 8,
                 }}
               >
-                <View className="flex-row justify-between items-center mb-1">
-                  <Text className="text-white text-xl font-bold">{item.name}</Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setEditDraw(item);
-                      setShowForm(true);
+                <View className="p-5">
+                  <View className="flex-row justify-between items-center mb-3">
+                    <Text
+                      className="text-2xl font-extrabold"
+                      style={{
+                        color: textColor,
+                        letterSpacing: 0.5,
+                        textShadowColor: textColor === "#fff" ? "rgba(0,0,0,0.08)" : "rgba(0,0,0,0.03)",
+                        textShadowOffset: { width: 0, height: 1 },
+                        textShadowRadius: 2,
+                      }}
+                    >
+                      {item.name}
+                    </Text>
+                    {user?.user_type === "ADMIN" && (<TouchableOpacity
+                      onPress={() => {
+                        setEditDraw(item);
+                        setShowForm(true);
+                      }}
+                      className="p-2 rounded-xl"
+                      style={{
+                        backgroundColor: textColor === "#fff" ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.07)",
+                        borderWidth: 1,
+                        borderColor: textColor === "#fff" ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.05)",
+                      }}
+                    >
+                      <Feather name="edit" size={22} color={textColor} />
+                    </TouchableOpacity>)}
+                  </View>
+                  <View className="flex-row items-center mb-2">
+                    <View
+                      style={{
+                        backgroundColor: textColor === "#fff" ? "rgba(255,255,255,0.13)" : "rgba(0,0,0,0.04)",
+                        borderRadius: 8,
+                        paddingHorizontal: 8,
+                        paddingVertical: 2,
+                        marginRight: 8,
+                      }}
+                    >
+                      <Text className="text-lg" style={{ color: textColor }}>🗓</Text>
+                    </View>
+                    <Text className="text-base font-semibold" style={{ color: textColor }}>
+                      {item.valid_from} - {item.valid_till}
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center mb-2">
+                    <View
+                      style={{
+                        backgroundColor: textColor === "#fff" ? "rgba(255,255,255,0.13)" : "rgba(0,0,0,0.04)",
+                        borderRadius: 8,
+                        paddingHorizontal: 8,
+                        paddingVertical: 2,
+                        marginRight: 8,
+                      }}
+                    >
+                      <Text className="text-lg" style={{ color: textColor }}>⏰</Text>
+                    </View>
+                    <Text className="text-base font-semibold" style={{ color: textColor }}>
+                      {item.draw_time}
+                    </Text>
+                  </View>
+                  <View
+                    className="flex-row items-center mt-3"
+                    style={{
+                      backgroundColor: textColor === "#fff" ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.03)",
+                      borderRadius: 10,
+                      paddingVertical: 6,
+                      paddingHorizontal: 10,
                     }}
-                    className="p-1 rounded-full bg-white/20"
                   >
-                    <Feather name="edit" size={20} color="white" />
-                  </TouchableOpacity>
+                    <Text className="text-xs mr-2" style={{ color: textColor, opacity: 0.8 }}>
+                      Non-Single Digit Price:
+                    </Text>
+                    <Text className="text-xs font-bold" style={{ color: textColor }}>
+                      {item.non_single_digit_price}
+                    </Text>
+                    <Text className="text-xs mx-2" style={{ color: textColor, opacity: 0.8 }}>
+                      {" "}| Single Digit Price: {" "}
+                    </Text>
+                    <Text className="text-xs font-bold" style={{ color: textColor }}>
+                      {item.single_digit_number_price}
+                    </Text>
+                  </View>
                 </View>
-                <View className="flex-row items-center mb-1">
-                  <Text className="text-white text-sm mr-2">🗓</Text>
-                  <Text className="text-white text-sm">
-                    {item.valid_from} - {item.valid_till}
-                  </Text>
-                </View>
-                <View className="flex-row items-center">
-                  <Text className="text-white text-sm mr-2">⏰</Text>
-                  <Text className="text-white text-sm">{item.draw_time}</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-
-          </View>
-        )}
+              </TouchableOpacity>
+            </View>
+          );
+        }}
         ListEmptyComponent={
           !isLoading && !error ? (
             <Text className="text-gray-400 text-center mt-20 text-lg">No draws available.</Text>
@@ -272,18 +512,10 @@ export default function HomeScreen() {
             ? { flex: 1, justifyContent: "center" }
             : undefined
         }
+        showsVerticalScrollIndicator={false}
       />
 
-      <TouchableOpacity
-        onPress={() => {
-          setEditDraw(null);
-          setShowForm(true);
-        }}
-        className="absolute bottom-8 right-8 bg-primary p-4 rounded-full shadow-lg flex-row items-center justify-center"
-        activeOpacity={0.85}
-      >
-        <AntDesign name="plus" size={28} color="white" />
-      </TouchableOpacity>
+
     </View>
   );
 }

@@ -33,17 +33,17 @@ type DeleteAgentParams = { id: string };
 const useAgent = () => {
   const createMutation = useMutation<Agent, Error, CreateAgentParams>({
     mutationFn: (payload) =>
-      api.post("/agent/create-agent/", payload).then((res) => res.data),
+      api.post("/agent/manage/", payload).then((res) => res.data),
   });
 
   const editMutation = useMutation<Agent, Error, EditAgentParams>({
     mutationFn: ({ id, ...payload }) =>
-      api.put(`/agent/agent/${id}/`, payload).then((res) => res.data),
+      api.patch(`/agent/manage/${id}/`, payload).then((res) => res.data),
   });
 
   const deleteMutation = useMutation<void, Error, DeleteAgentParams>({
     mutationFn: ({ id }) =>
-      api.delete(`/agent/agent/${id}/`).then((res) => res.data),
+      api.delete(`/agent/manage/${id}/`).then((res) => res.data),
   });
 
   return {

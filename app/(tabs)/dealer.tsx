@@ -1,6 +1,8 @@
 import useDealer from "@/hooks/use-dealer";
+import { useAuthStore } from "@/store/auth";
 import api from "@/utils/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { router } from "expo-router";
 import { MoveLeft } from "lucide-react-native";
 import React, { useState } from "react";
 import {
@@ -264,26 +266,39 @@ const DealerForm = ({
     );
 };
 
-const DealerCard = ({ item, onEdit, onDelete }: { item: Dealer; onEdit: () => void; onDelete: () => void }) => (
-    <View className="bg-white mx-4 mb-4 rounded-xl border border-gray-200 overflow-hidden">
-        <View className={`h-1 ${item.is_active ? 'bg-green-500' : 'bg-gray-400'}`} />
-        <View className="p-5">
-            <View className="flex-row justify-between mb-4">
-                <Text className="text-lg font-semibold">{item.username}</Text>
-                <View className="flex-row gap-2">
-                    <TouchableOpacity onPress={onEdit} className="px-3 py-1 bg-gray-100 rounded-md">
-                        <Text>Edit</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={onDelete} className="px-3 py-1 bg-red-100 rounded-md">
-                        <Text className="text-red-600">Delete</Text>
-                    </TouchableOpacity>
+const DealerCard = ({ item, onEdit, onDelete }: { item: Dealer; onEdit: () => void; onDelete: () => void }) => {
+    const { user } = useAuthStore()
+
+    return (
+        < View className="bg-white mx-4 mb-4 rounded-xl border border-gray-200 overflow-hidden" >
+            <View className={`h-1 ${item.is_active ? 'bg-green-500' : 'bg-gray-400'}`} />
+            <View className="p-5">
+                <View className="flex-row justify-between mb-4">
+                    <Text className="text-lg font-semibold">{item.username}</Text>
+                    <View className="flex-row gap-2">
+                        <TouchableOpacity onPress={() => {
+                            router.push("/agent")
+                        }} className="px-3 py-1 bg-gray-100 rounded-md">
+                            <Text>Agent</Text>
+                        </TouchableOpacity>
+                        {
+                            user?.user_type === "ADMIN" && <TouchableOpacity onPress={onEdit} className="px-3 py-1 bg-gray-100 rounded-md">
+                                <Text>Edit</Text>
+                            </TouchableOpacity>
+                        }
+                        {
+                            user?.user_type === "ADMIN" &&
+                            <TouchableOpacity onPress={onDelete} className="px-3 py-1 bg-red-100 rounded-md">
+                                <Text className="text-red-600">Delete</Text>
+                            </TouchableOpacity>}
+                    </View>
                 </View>
+                <Text className="text-sm text-gray-600">Commission: {item.commission}%</Text>
+                <Text className="text-sm text-gray-600">Cap: {item.cap_amount}</Text>
             </View>
-            <Text className="text-sm text-gray-600">Commission: {item.commission}%</Text>
-            <Text className="text-sm text-gray-600">Cap: {item.cap_amount}</Text>
-        </View>
-    </View>
-);
+        </View >
+    )
+};
 
 export default function DealerManagement() {
     const queryClient = useQueryClient();
@@ -381,14 +396,14 @@ export default function DealerManagement() {
                         }
                     </Text>
                     {/* {((error as any)?.status !== 403) && ( */}
-                        <TouchableOpacity
-                            onPress={() => refetch()}
-                            className="flex-row items-center justify-center bg-blue-600 px-8 py-3 rounded-xl shadow active:scale-95"
-                            activeOpacity={0.85}
-                        >
-                            <Text className="text-white font-bold text-lg mr-2">Retry</Text>
-                            <Text className="text-white text-xl">↻</Text>
-                        </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => refetch()}
+                        className="flex-row items-center justify-center bg-blue-600 px-8 py-3 rounded-xl shadow active:scale-95"
+                        activeOpacity={0.85}
+                    >
+                        <Text className="text-white font-bold text-lg mr-2">Retry</Text>
+                        <Text className="text-white text-xl">↻</Text>
+                    </TouchableOpacity>
                     {/* )} */}
                 </View>
             </View>
