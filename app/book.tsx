@@ -1,12 +1,16 @@
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
+import { getThemeColors } from "@/utils/color";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Clipboard } from "lucide-react-native";
 import React, { useRef, useState } from "react";
+import * as RNClipboard from "react-native"; // For Clipboard.getString()
 import {
   Alert,
   KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   Text,
   TextInput,
@@ -72,7 +76,10 @@ const BookingScreen: React.FC = () => {
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [editingEntry, setEditingEntry] = useState<BookingDetail | null>(null);
 
-  const { selectedDraw } = useDrawStore();
+  const { selectedDraw, setSelectedDraw } = useDrawStore();
+
+  const colorTheme = selectedDraw?.color_theme;
+  const themeColors = getThemeColors(colorTheme);
   const { user } = useAuthStore();
 
   const countInputRef = useRef<TextInput>(null);
@@ -102,27 +109,7 @@ const BookingScreen: React.FC = () => {
 
   console.log("error", error, "DrawSessionDetail", DrawSessionDetails);
 
-  // if (isError || error || !DrawSessionDetails?.session?.active) {
-  //   return (
-  //     <View className="flex-1 justify-center items-center bg-white">
-  //       <View className="bg-red-100 border border-red-400 rounded-lg px-6 py-4 shadow-md">
-  //         <Text className="text-red-700 text-base font-semibold text-center">
-  //           You're not allowed to book the number now. Try later
-  //         </Text>
-  //         <TouchableOpacity
-  //           onPress={() => {
-  //             router.push("/(tabs)");
-  //           }}
-  //           className="mt-4 bg-red-600 px-4 py-2 rounded"
-  //         >
-  //           <Text className="text-white text-center font-semibold">
-  //             Go Back
-  //           </Text>
-  //         </TouchableOpacity>
-  //       </View>
-  //     </View>
-  //   );
-  // }
+
 
   const { mutate } = useMutation({
     mutationFn: async (data: any) => api.post("/draw-booking/create/", data),
@@ -161,10 +148,75 @@ const BookingScreen: React.FC = () => {
     }
   };
 
-  const addBooking = (subType: string): void => {
-    console.log("on add booking",DrawSessionDetails);
-    
+  const addBooking = (subType: string, number?: string, count?: number, bCount?: number) => {
+    // If number/count/bCount are provided, use them, else use state
     const digitsRequired = parseInt(drawSession);
+    const bookingType = getBookingType();
+    const isSingle = bookingType === "single_digit";
+    const isDouble = bookingType === "double_digit";
+    const parseNum = (val: string | undefined) => parseInt(val ?? "") || 0;
+    const price = isSingle
+      ? DrawSessionDetails?.single_digit_number_price
+      : DrawSessionDetails?.non_single_digit_price;
+    const commission = isSingle
+      ? (user?.single_digit_number_commission ?? 0)
+      : (user?.commission ?? 0);
+
+    // Helper to create entries with custom lsk
+    const createEntry = (number: string, count: number, lsk: string, subTypeOverride?: string) => {
+      const amt = count * (price || 0);
+      return {
+        lsk,
+        number,
+        count,
+        amount: amt,
+        d_amount: parseFloat((amt - commission).toFixed(2)),
+        c_amount: amt,
+        type: bookingType,
+        sub_type: subTypeOverride ?? lsk,
+      };
+    };
+
+    // If called from handlePastBookings, number/count/bCount are provided
+    if (number && typeof count === "number") {
+      // For triple digit, if subType is BOTH, add both SUPER and BOX
+      if (subType === "BOTH") {
+        setBookingDetails((prev) => [
+          ...prev,
+          createEntry(number.padStart(digitsRequired, "0"), count, "SUPER"),
+          createEntry(number.padStart(digitsRequired, "0"), bCount ?? count, "BOX"),
+        ]);
+      } else if (isDouble && subType === "ALL") {
+        // For double digit and subType 'ALL', add AB, BC, AC
+        const lskArr = ["AB", "BC", "AC"];
+        setBookingDetails((prev) => [
+          ...prev,
+          ...lskArr.map(lsk =>
+            createEntry(number.padStart(digitsRequired, "0"), count, lsk, "ALL")
+          ),
+        ]);
+      } else if (isSingle && subType === "ALL") {
+        // For single digit and subType 'ALL', add A, B, C
+        const lskArr = ["A", "B", "C"];
+        setBookingDetails((prev) => [
+          ...prev,
+          ...lskArr.map(lsk =>
+            createEntry(number.padStart(digitsRequired, "0"), count, lsk, "ALL")
+          ),
+        ]);
+      } else {
+        setBookingDetails((prev) => [
+          ...prev,
+          createEntry(number.padStart(digitsRequired, "0"), count, subType),
+        ]);
+      }
+      return;
+    }
+
+    // Otherwise, fallback to original addBooking logic (for UI)
+    // --- BEGIN original addBooking code ---
+    console.log("on add booking", DrawSessionDetails);
+
     const numberLen = numberInput.length;
     const endLen = endNumberInput.length;
 
@@ -181,42 +233,15 @@ const BookingScreen: React.FC = () => {
       return;
     }
 
-    const bookingType = getBookingType();
-    const isSingle = bookingType === "single_digit";
-    const parseNum = (val: string) => parseInt(val) || 0;
-    const count = parseNum(countInput);
-    const bCount = parseNum(bCountInput);
-    if (isSingle && count < 5) {
+    const countVal = parseNum(countInput);
+    const bCountVal = parseNum(bCountInput);
+    if (isSingle && countVal < 5) {
       Alert.alert(
         "Invalid input",
         "For single digit bookings, the minimum count is 5. Please enter a count of at least 5."
       );
       return;
     }
-
-    const price = isSingle
-      ? DrawSessionDetails?.single_digit_number_price
-      : DrawSessionDetails?.non_single_digit_price;
-
-    const commission = isSingle
-      ? (user?.single_digit_number_commission ?? 0)
-      : (user?.commission ?? 0);
-
-   
-
-    const createEntry = (number: string, count: number, type: string) => {
-      const amt = count * (price || 0);
-      return {
-        lsk: type,
-        number, // string with leading zeros
-        count,
-        amount: amt,
-        d_amount: parseFloat((amt - commission).toFixed(2)),
-        c_amount: amt,
-        type: bookingType,
-        sub_type: type,
-      };
-    };
 
     // ---------- Range Booking ----------
     if (selectedRange === "Range") {
@@ -249,10 +274,20 @@ const BookingScreen: React.FC = () => {
       for (let i = start; i <= end; i++) {
         const paddedNum = i.toString().padStart(digitsRequired, "0");
         if (subType === "BOTH") {
-          newEntries.push(createEntry(paddedNum, count, "SUPER"));
-          newEntries.push(createEntry(paddedNum, bCount, "BOX"));
+          newEntries.push(createEntry(paddedNum, countVal, "SUPER"));
+          newEntries.push(createEntry(paddedNum, bCountVal, "BOX"));
+        } else if (isDouble && subType === "ALL") {
+          // For double digit and subType 'ALL', add AB, BC, AC
+          ["AB", "BC", "AC"].forEach(lsk => {
+            newEntries.push(createEntry(paddedNum, countVal, lsk, "ALL"));
+          });
+        } else if (isSingle && subType === "ALL") {
+          // For single digit and subType 'ALL', add A, B, C
+          ["A", "B", "C"].forEach(lsk => {
+            newEntries.push(createEntry(paddedNum, countVal, lsk, "ALL"));
+          });
         } else {
-          const actualCount = subType === "BOX" ? bCount : count;
+          const actualCount = subType === "BOX" ? bCountVal : countVal;
           newEntries.push(createEntry(paddedNum, actualCount, subType));
         }
       }
@@ -301,10 +336,20 @@ const BookingScreen: React.FC = () => {
       for (let perm of permutations) {
         const number = perm; // Keep as string with leading zeros
         if (subType === "BOTH") {
-          newEntries.push(createEntry(number, count, "SUPER"));
-          newEntries.push(createEntry(number, bCount, "BOX"));
+          newEntries.push(createEntry(number, countVal, "SUPER"));
+          newEntries.push(createEntry(number, bCountVal, "BOX"));
+        } else if (isDouble && subType === "ALL") {
+          // For double digit and subType 'ALL', add AB, BC, AC
+          ["AB", "BC", "AC"].forEach(lsk => {
+            newEntries.push(createEntry(number, countVal, lsk, "ALL"));
+          });
+        } else if (isSingle && subType === "ALL") {
+          // For single digit and subType 'ALL', add A, B, C
+          ["A", "B", "C"].forEach(lsk => {
+            newEntries.push(createEntry(number, countVal, lsk, "ALL"));
+          });
         } else {
-          const actualCount = subType === "BOX" ? bCount : count;
+          const actualCount = subType === "BOX" ? bCountVal : countVal;
           newEntries.push(createEntry(number, actualCount, subType));
         }
       }
@@ -323,8 +368,8 @@ const BookingScreen: React.FC = () => {
 
       const padded = numberInput.padStart(digitsRequired, "0");
       const entries = [
-        createEntry(padded, count, "SUPER"),
-        createEntry(padded, bCount, "BOX"),
+        createEntry(padded, countVal, "SUPER"),
+        createEntry(padded, bCountVal, "BOX"),
       ];
       setBookingDetails((prev) => [...prev, ...entries]);
       clearInputs();
@@ -339,11 +384,39 @@ const BookingScreen: React.FC = () => {
       }
 
       const padded = numberInput.padStart(digitsRequired, "0");
-      const entry = createEntry(padded, bCount, "BOX");
+      const entry = createEntry(padded, bCountVal, "BOX");
       setBookingDetails((prev) => [...prev, entry]);
       clearInputs();
       setBCountInput("");
       return;
+    }
+
+    if (subType === "ALL") {
+      const padded = numberInput.padStart(digitsRequired, "0");
+      if (isDouble) {
+        // For double digit and subType 'ALL', add AB, BC, AC
+        const lskArr = ["AB", "BC", "AC"];
+        setBookingDetails((prev) => [
+          ...prev,
+          ...lskArr.map(lsk =>
+            createEntry(padded, countVal, lsk, "ALL")
+          ),
+        ]);
+        clearInputs();
+        return;
+      } else if (isSingle) {
+        // For single digit and subType 'ALL', add A, B, C
+        const lskArr = ["A", "B", "C"];
+        setBookingDetails((prev) => [
+          ...prev,
+          ...lskArr.map(lsk =>
+            createEntry(padded, countVal, lsk, "ALL")
+          ),
+        ]);
+        clearInputs();
+        return;
+      }
+      // If not single or double, fallback to default
     }
 
     // Default (e.g. SUPER only)
@@ -353,12 +426,15 @@ const BookingScreen: React.FC = () => {
     }
 
     const padded = numberInput.padStart(digitsRequired, "0");
-    const entry = createEntry(padded, count, subType);
+    const entry = createEntry(padded, countVal, subType);
     setBookingDetails((prev) => [...prev, entry]);
     clearInputs();
+    // --- END original addBooking code ---
   };
 
   const handleSubmit = () => {
+    console.log("on sum=bmit", DrawSessionDetails?.session?.active_session_id);
+
     if (DrawSessionDetails?.session?.active_session_id) {
       const data = {
         customer_name: customerName,
@@ -458,6 +534,181 @@ const BookingScreen: React.FC = () => {
     setDrawSession(num.toString());
   };
 
+  // --- IMPLEMENTED handlePastBookings ---
+  const handlePastBookings = async () => {
+    try {
+      // Use Clipboard API to get string
+      let clipboardText: string = "";
+      if (Platform.OS === "web") {
+        // Web Clipboard API
+        clipboardText = await navigator.clipboard.readText();
+      } else if (RNClipboard?.Clipboard && RNClipboard.Clipboard.getString) {
+        clipboardText = await RNClipboard.Clipboard.getString();
+      } else if ((global as any).Clipboard && (global as any).Clipboard.getString) {
+        clipboardText = await (global as any).Clipboard.getString();
+      } else {
+        // fallback for react-native-clipboard/clipboard
+        try {
+          const { getString } = require("@react-native-clipboard/clipboard");
+          clipboardText = await getString();
+        } catch (e) {
+          Alert.alert("Clipboard Error", "Could not read clipboard.");
+          return;
+        }
+      }
+
+      if (!clipboardText || !clipboardText.trim()) {
+        Alert.alert("Clipboard Empty", "No text found in clipboard.");
+        return;
+      }
+
+      // Split by newlines, commas, or semicolons
+      const lines = clipboardText
+        .split(/[\n,;]+/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+      // Helper: parse a single line into {number, count, subType}
+      function parseLine(line: string) {
+        // Remove extra spaces, normalize
+        let l = line.replace(/\s+/g, " ").trim();
+
+        // Try to extract subType (box/set/ab/ac/bc/a/b/c/all/super/both)
+        let subType = "";
+        let subTypeMatch = l.match(/\b(box|set|super|both|ab|ac|bc|a|b|c|all)\b/i);
+        if (subTypeMatch) {
+          subType = subTypeMatch[1].toUpperCase();
+          l = l.replace(subTypeMatch[0], "").trim();
+        }
+
+        // Find number and count
+        // Accept separators: /, -, =, +, :, #, &, *, ., .., space
+        let match = l.match(
+          /^([0-9]{1,3})\s*([\/\-=\+:#&\*\.]{1,2})\s*([0-9]{1,3})$/i
+        );
+        if (!match) {
+          // Try with space separator
+          match = l.match(/^([0-9]{1,3})\s+([0-9]{1,3})$/);
+        }
+        if (!match) {
+          // Try with number only (single digit, default count 5)
+          match = l.match(/^([0-9]{1,3})$/);
+          if (match) {
+            return {
+              number: match[1],
+              count: 5,
+              subType: subType || "SUPER",
+            };
+          }
+          return null;
+        }
+
+        let number = match[1];
+        let count = parseInt(match[3] || match[2] || "5");
+        if (isNaN(count)) count = 5;
+
+        // If subType is not set, infer from separator
+        if (!subType) {
+          if (match[2]) {
+            const sep = match[2].replace(/\s/g, "");
+            if (sep === "*" || sep === "#") subType = "BOX";
+            else if (sep === "=" || sep === "+") subType = "SUPER";
+            else if (sep === ":") subType = "SUPER";
+            else if (sep === "-") subType = "SUPER";
+            else if (sep === "/") subType = "SUPER";
+            else if (sep === "&") subType = "SUPER";
+            else if (sep === ".") subType = "SUPER";
+            else if (sep === "..") subType = "SUPER";
+          }
+        }
+
+        // If subType is still not set, default for 3-digit is SUPER, for 1/2-digit use ALL
+        if (!subType) {
+          if (number.length === 3) subType = "SUPER";
+          else if (number.length === 2) subType = "ALL";
+          else if (number.length === 1) subType = "ALL";
+        }
+
+        // Special: if subType is BOTH, treat as both SUPER and BOX
+        if (subType === "BOTH") {
+          return { number, count, subType: "BOTH" };
+        }
+
+        // Map AB/AC/BC/A/B/C/ALL to their respective subTypes
+        if (
+          ["AB", "AC", "BC", "A", "B", "C", "ALL"].includes(subType)
+        ) {
+          return { number, count, subType };
+        }
+
+        // For BOX/SUPER/SET
+        if (["BOX", "SUPER", "SET"].includes(subType)) {
+          return { number, count, subType };
+        }
+
+        // Fallback
+        return { number, count, subType: "SUPER" };
+      }
+
+      // For each line, parse and add booking
+      let added = 0;
+      for (let line of lines) {
+        const parsed = parseLine(line);
+        if (!parsed) continue;
+
+        // Determine drawSession based on number length
+        let session = drawSession;
+        if (parsed.number.length === 1) session = "1";
+        else if (parsed.number.length === 2) session = "2";
+        else if (parsed.number.length === 3) session = "3";
+
+        // Set drawSession if different
+        if (drawSession !== session) setDrawSession(session);
+
+        // For triple digit, if subType is BOTH, add both
+        if (session === "3" && parsed.subType === "BOTH") {
+          addBooking("BOTH", parsed.number, parsed.count, parsed.count);
+          added += 2;
+        } else {
+          addBooking(parsed.subType, parsed.number, parsed.count, parsed.count);
+          added += 1;
+        }
+      }
+
+      if (added === 0) {
+        Alert.alert("No valid bookings found in clipboard.");
+      } else {
+        Alert.alert("Success", `Added ${added} booking${added > 1 ? "s" : ""} from clipboard.`);
+      }
+    } catch (err) {
+      Alert.alert("Clipboard Error", "Could not read clipboard.");
+    }
+  };
+
+  // if (isError || error || !DrawSessionDetails?.session?.active) {
+  //   return (
+  //     <View className="flex-1 justify-center items-center bg-white">
+  //       <View className="bg-red-100 border border-red-500 rounded-2xl px-8 py-6 shadow-lg min-w-[300px] max-w-[350px] items-center">
+  //         <Text className="text-red-800 text-lg font-bold text-center mb-3">
+  //           You're not allowed to book the number now. Try later
+  //         </Text>
+  //         <TouchableOpacity
+  //           onPress={() => {
+  //             setSelectedDraw(null)
+  //             router.push("/(tabs)");
+  //           }}
+  //           className="mt-4 bg-red-600 px-6 py-2 rounded-lg min-w-[120px] active:opacity-85"
+  //           activeOpacity={0.85}
+  //         >
+  //           <Text className="text-white text-center font-bold text-base tracking-wide">
+  //             Go Back
+  //           </Text>
+  //         </TouchableOpacity>
+  //       </View>
+  //     </View>
+  //   );
+  // }
+
   return (
     <KeyboardAvoidingView
       className="flex-1"
@@ -465,26 +716,34 @@ const BookingScreen: React.FC = () => {
       keyboardVerticalOffset={80}
     >
       <View className="p-4 bg-white flex-1 mb-10">
-        <TextInput
-          placeholder="Customer Name"
-          value={customerName}
-          onChangeText={setCustomerName}
-          className="border border-gray-400 rounded px-3 py-2 mb-4"
-        />
+        <View className="flex-row items-center mb-4 gap-2">
+          <TextInput
+            placeholder="Customer Name"
+            value={customerName}
+            onChangeText={setCustomerName}
+            className="flex-1 border border-gray-400 rounded px-3 py-2 bg-white text-base"
+            placeholderTextColor="#9ca3af"
+          />
+          <TouchableOpacity
+            onPress={handlePastBookings}
+            className="ml-2 p-2 bg-gray-100 rounded border border-gray-300 active:bg-gray-200"
+            accessibilityLabel="Paste from clipboard"
+          >
+            <Clipboard width={24} height={24} color="#374151" />
+          </TouchableOpacity>
+        </View>
 
         <View className="flex-row items-center mb-4 gap-2">
           {[1, 2, 3].map((num) => (
             <TouchableOpacity
               key={num}
               onPress={() => handleDrawSession(num.toString())}
-              className={`px-4 py-1 rounded-full border ${
-                drawSession === num.toString() ? "bg-black" : "border-gray-400"
-              }`}
+              className={`px-4 py-1 rounded-full border ${drawSession === num.toString() ? "bg-black" : "border-gray-400"
+                }`}
             >
               <Text
-                className={`${
-                  drawSession === num.toString() ? "text-white" : "text-black"
-                }`}
+                className={`${drawSession === num.toString() ? "text-white" : "text-black"
+                  }`}
               >
                 {num}
               </Text>
