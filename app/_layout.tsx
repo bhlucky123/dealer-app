@@ -3,17 +3,22 @@ import { Stack } from "expo-router";
 import "react-native-reanimated";
 import "../global.css";
 
-import { useColorScheme } from "@/hooks/useColorScheme";
 import ReactQueryProvider from "@/providers/react-query-provider";
+import useDrawStore from "@/store/draw";
+import { getThemeColors } from "@/utils/color";
+
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
 
+  const { selectedDraw } = useDrawStore();
+
+  const colorTheme = selectedDraw?.color_theme;
+  const themeColors = getThemeColors(colorTheme);
+
   if (!loaded) {
-    // Async font loading only occurs in development.
     return null;
   }
 
@@ -28,9 +33,13 @@ export default function RootLayout() {
           options={{
             headerShown: true,
             title: "Draw Options",
-            headerStyle: { backgroundColor: "#e0e7ff" }, // Changed to indigo-100
-            headerTitleStyle: { color: "#3730a3", fontWeight: "bold", fontSize: 22 }, // Indigo-800, bolder, larger
-            headerTintColor: "#6366f1", // Indigo-500
+            headerStyle: { backgroundColor: themeColors.headerBackground },
+            headerTitleStyle: {
+              color: themeColors.headerTitle,
+              fontWeight: "bold",
+              fontSize: 22,
+            },
+            headerTintColor: themeColors.headerTint,
             headerShadowVisible: false,
           }}
         />
@@ -40,9 +49,13 @@ export default function RootLayout() {
           options={{
             headerShown: true,
             title: "Book Ticket",
-            headerStyle: { backgroundColor: "#e0e7ff" }, // Changed to indigo-100
-            headerTitleStyle: { color: "#3730a3", fontWeight: "bold", fontSize: 22 }, // Indigo-800, bolder, larger
-            headerTintColor: "#6366f1", // Indigo-500
+            headerStyle: { backgroundColor: themeColors.headerBackground },
+            headerTitleStyle: {
+              color: themeColors.headerTitle,
+              fontWeight: "bold",
+              fontSize: 22,
+            },
+            headerTintColor: themeColors.headerTint,
             headerShadowVisible: false,
           }}
         />
@@ -52,9 +65,13 @@ export default function RootLayout() {
           options={{
             headerShown: true,
             title: "Sales Report",
-            headerStyle: { backgroundColor: "#e0e7ff" }, // Changed to indigo-100
-            headerTitleStyle: { color: "#3730a3", fontWeight: "bold", fontSize: 22 }, // Indigo-800, bolder, larger
-            headerTintColor: "#6366f1", // Indigo-500
+            headerStyle: { backgroundColor: themeColors.headerBackground },
+            headerTitleStyle: {
+              color: themeColors.headerTitle,
+              fontWeight: "bold",
+              fontSize: 22,
+            },
+            headerTintColor: themeColors.headerTint,
             headerShadowVisible: false,
           }}
         />
@@ -64,9 +81,13 @@ export default function RootLayout() {
           options={{
             headerShown: true,
             title: "Daily Report",
-            headerStyle: { backgroundColor: "#e0e7ff" }, // Changed to indigo-100
-            headerTitleStyle: { color: "#3730a3", fontWeight: "bold", fontSize: 22 }, // Indigo-800, bolder, larger
-            headerTintColor: "#6366f1", // Indigo-500
+            headerStyle: { backgroundColor: themeColors.headerBackground },
+            headerTitleStyle: {
+              color: themeColors.headerTitle,
+              fontWeight: "bold",
+              fontSize: 22,
+            },
+            headerTintColor: themeColors.headerTint,
             headerShadowVisible: false,
           }}
         />
@@ -76,9 +97,13 @@ export default function RootLayout() {
           options={{
             headerShown: true,
             title: "Winnings",
-            headerStyle: { backgroundColor: "#e0e7ff" }, // Changed to indigo-100
-            headerTitleStyle: { color: "#3730a3", fontWeight: "bold", fontSize: 22 }, // Indigo-800, bolder, larger
-            headerTintColor: "#6366f1", // Indigo-500
+            headerStyle: { backgroundColor: themeColors.headerBackground },
+            headerTitleStyle: {
+              color: themeColors.headerTitle,
+              fontWeight: "bold",
+              fontSize: 22,
+            },
+            headerTintColor: themeColors.headerTint,
             headerShadowVisible: false,
           }}
         />
@@ -88,9 +113,13 @@ export default function RootLayout() {
           options={{
             headerShown: true,
             title: "Last Sale",
-            headerStyle: { backgroundColor: "#e0e7ff" }, // Changed to indigo-100
-            headerTitleStyle: { color: "#3730a3", fontWeight: "bold", fontSize: 22 }, // Indigo-800, bolder, larger
-            headerTintColor: "#6366f1", // Indigo-500
+            headerStyle: { backgroundColor: themeColors.headerBackground },
+            headerTitleStyle: {
+              color: themeColors.headerTitle,
+              fontWeight: "bold",
+              fontSize: 22,
+            },
+            headerTintColor: themeColors.headerTint,
             headerShadowVisible: false,
           }}
         />
@@ -100,9 +129,13 @@ export default function RootLayout() {
           options={{
             headerShown: true,
             title: "Result",
-            headerStyle: { backgroundColor: "#e0e7ff" }, // Changed to indigo-100
-            headerTitleStyle: { color: "#3730a3", fontWeight: "bold", fontSize: 22 }, // Indigo-800, bolder, larger
-            headerTintColor: "#6366f1", // Indigo-500
+            headerStyle: { backgroundColor: themeColors.headerBackground },
+            headerTitleStyle: {
+              color: themeColors.headerTitle,
+              fontWeight: "bold",
+              fontSize: 22,
+            },
+            headerTintColor: themeColors.headerTint,
             headerShadowVisible: false,
           }}
         />

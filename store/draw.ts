@@ -14,7 +14,7 @@ interface Draw {
 
 interface DrawState {
   selectedDraw: Draw | null;
-  setSelectedDraw: (selectedDraw: Draw) => void;
+  setSelectedDraw: (selectedDraw: Draw | null) => void;
 }
 
 const useDrawStore = create<DrawState>((set) => ({
