@@ -21,20 +21,48 @@ interface AuthState {
   setUser: (user: User | null) => void;
 }
 
-const DealerToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU0OTAxOTI1LCJpYXQiOjE3NTIzMDk5MjUsImp0aSI6ImFmOTk4OGNkMWY5ODQ4M2E4M2I1NzA1ZGFkZjRlZTAxIiwidXNlcl9pZCI6MiwidXNlcl90eXBlIjoiREVBTEVSIn0.WxRdIXHgsTMaGREWe1vRPod3TaQqFslDezti-SPcqao"
-const AdminToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU0OTAxODAxLCJpYXQiOjE3NTIzMDk4MDEsImp0aSI6IjY2ZTVmZDg0MGYwZjQ1YzJiMzE0ZGQ5YjljOGM3ZmQ3IiwidXNlcl9pZCI6MSwidXNlcl90eXBlIjoiQURNSU4ifQ.cowZ9yRbHd3gvGS9lCH96X49FIKzVY7wazVwwwIy5TU"
+const DealerToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU1MDkxODk1LCJpYXQiOjE3NTI0OTk4OTUsImp0aSI6ImQ0Y2YwMTM4MWIwZDQyZDA5OWVlZTdkOTNmMDNjNjc3IiwidXNlcl9pZCI6MiwidXNlcl90eXBlIjoiREVBTEVSIn0.Zg3ClnC91Z20OkSznhOhHPZT9-7r8PLknxuSKGBTzow";
+const AdminToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU1MDkxOTMxLCJpYXQiOjE3NTI0OTk5MzEsImp0aSI6ImZlYmJlNWM0MWMzMDRlNDM4OWQ5ZTc4ZWMyNDZhZTJmIiwidXNlcl9pZCI6MSwidXNlcl90eXBlIjoiQURNSU4ifQ.VrsTxZqezSeKfTDG9f5bF0zr2XXVpz6EHk-epswsyVo";
+const AgentToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU1MTA1NTU1LCJpYXQiOjE3NTI1MTM1NTUsImp0aSI6Ijk4N2U5N2Y4OGM3MzRjYjM5M2MyNzBiMDI3MmNhNGQ3IiwidXNlcl9pZCI6OCwidXNlcl90eXBlIjoiQUdFTlQifQ.tvvBnWvpSvzoHnK1BU5UUYA-otfmT9ea6YqymW0ESTU";
+
+// Dummy users for all roles
+const DummyDealer = {
+  id: "1",
+  username: "Dealer User",
+  cap_amount: 10000,
+  commission: 10,
+  single_digit_number_commission: 20,
+  user_type: "DEALER" as const,
+};
+
+const DummyAdmin = {
+  id: "2",
+  username: "Admin User",
+  cap_amount: 999999,
+  commission: 100,
+  single_digit_number_commission: 100,
+  user_type: "ADMIN" as const,
+};
+
+const DummyAgent = {
+  id: "3",
+  username: "Agent User",
+  cap_amount: 5000,
+  commission: 5,
+  single_digit_number_commission: 10,
+  user_type: "AGENT" as const,
+};
 
 export const useAuthStore = create<AuthState>((set) => ({
-  user: {
-    id: "1",
-    username: "Dealer User",
-    cap_amount: 10000,
-    commission: 10,
-    single_digit_number_commission: 20,
-    user_type: "DEALER",
-  },
+  // Set the default user and token here. Change as needed for testing.
+  // user: DummyDealer,
   // token: DealerToken,
-  token: AdminToken,
+  // To test as admin, uncomment below and comment above:
+  // user: DummyAdmin,
+  // token: AdminToken,
+  // To test as agent, uncomment below and comment above:
+  user: DummyAgent,
+  token: AgentToken,
   loading: false,
   error: null,
 

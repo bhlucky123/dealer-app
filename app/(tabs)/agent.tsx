@@ -274,6 +274,7 @@ const AgentCard = ({
   onEdit: () => void;
   onDelete: () => void;
 }) => {
+  const { user } = useAuthStore()
   return (
     <View className="bg-white mx-4 mb-4 rounded-xl border border-gray-200 overflow-hidden">
       {/* Status bar */}
@@ -302,21 +303,25 @@ const AgentCard = ({
           </View>
 
           <View className="flex-row gap-2">
-            <TouchableOpacity
-              onPress={onEdit}
-              className="px-3 py-1.5 bg-gray-100 rounded-md"
-              activeOpacity={0.8}
-            >
-              <Text className="text-gray-800 text-sm">Edit</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={onDelete}
-              className="px-3 py-1.5 bg-red-100 rounded-md"
-              activeOpacity={0.8}
-            >
-              <Text className="text-red-600 text-sm">Delete</Text>
-            </TouchableOpacity>
+            {
+              user?.user_type === "DEALER" || user?.user_type === "ADMIN" && <TouchableOpacity
+                onPress={onEdit}
+                className="px-3 py-1.5 bg-gray-100 rounded-md"
+                activeOpacity={0.8}
+              >
+                <Text className="text-gray-800 text-sm">Edit</Text>
+              </TouchableOpacity>
+            }
+            {
+              user?.user_type === "DEALER" || user?.user_type === "ADMIN" &&
+              <TouchableOpacity
+                onPress={onDelete}
+                className="px-3 py-1.5 bg-red-100 rounded-md"
+                activeOpacity={0.8}
+              >
+                <Text className="text-red-600 text-sm">Delete</Text>
+              </TouchableOpacity>
+            }
           </View>
         </View>
 
@@ -372,6 +377,7 @@ export default function AgentTab() {
   const [editData, setEditData] = useState<Agent | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const { user } = useAuthStore()
 
   const {
     data: agents = [],
@@ -382,7 +388,7 @@ export default function AgentTab() {
     isFetching,
   } = useQuery<Agent[]>({
     queryKey: ["agents"],
-    queryFn: () => api.get("/agent/agent/").then((res) => res.data),
+    queryFn: () => api.get("/agent/manage/").then((res) => res.data),
   });
 
   const { createAgent, editAgent, deleteAgent } = useAgent();
@@ -405,8 +411,6 @@ export default function AgentTab() {
   };
 
   const handleEdit = (data: any) => {
-    console.log("editData", editData);
-    
     editAgent(
       { ...data, id: editData?.id },
       {
@@ -482,16 +486,17 @@ export default function AgentTab() {
             <Text className="text-2xl font-bold text-gray-800">
               Agent Management
             </Text>
-            <TouchableOpacity
-              onPress={() => {
-                setEditData(null);
-                setShowForm(true);
-              }}
-              className="w-16 h-16 bg-blue-600 rounded-full shadow-xl items-center justify-center active:scale-95"
-              activeOpacity={0.9}
-            >
-              <Text className="text-white text-2xl font-light">+</Text>
-            </TouchableOpacity>
+            {
+              user?.user_type === "DEALER" || user?.user_type === "ADMIN" && <TouchableOpacity
+                onPress={() => {
+                  setEditData(null);
+                  setShowForm(true);
+                }}
+                className="w-16 h-16 bg-blue-600 rounded-full shadow-xl items-center justify-center active:scale-95"
+                activeOpacity={0.9}
+              >
+                <Text className="text-white text-2xl font-light">+</Text>
+              </TouchableOpacity>}
           </View>
 
           {/* Search Bar */}

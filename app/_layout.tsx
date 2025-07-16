@@ -23,7 +23,89 @@ export default function RootLayout() {
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)/[drawId]/options" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="options"
+          options={{
+            headerShown: true,
+            title: "Draw Options",
+            headerStyle: { backgroundColor: "#e0e7ff" }, // Changed to indigo-100
+            headerTitleStyle: { color: "#3730a3", fontWeight: "bold", fontSize: 22 }, // Indigo-800, bolder, larger
+            headerTintColor: "#6366f1", // Indigo-500
+            headerShadowVisible: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="book"
+          options={{
+            headerShown: true,
+            title: "Book Ticket",
+            headerStyle: { backgroundColor: "#e0e7ff" }, // Changed to indigo-100
+            headerTitleStyle: { color: "#3730a3", fontWeight: "bold", fontSize: 22 }, // Indigo-800, bolder, larger
+            headerTintColor: "#6366f1", // Indigo-500
+            headerShadowVisible: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="sales-report"
+          options={{
+            headerShown: true,
+            title: "Sales Report",
+            headerStyle: { backgroundColor: "#e0e7ff" }, // Changed to indigo-100
+            headerTitleStyle: { color: "#3730a3", fontWeight: "bold", fontSize: 22 }, // Indigo-800, bolder, larger
+            headerTintColor: "#6366f1", // Indigo-500
+            headerShadowVisible: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="daily-report"
+          options={{
+            headerShown: true,
+            title: "Daily Report",
+            headerStyle: { backgroundColor: "#e0e7ff" }, // Changed to indigo-100
+            headerTitleStyle: { color: "#3730a3", fontWeight: "bold", fontSize: 22 }, // Indigo-800, bolder, larger
+            headerTintColor: "#6366f1", // Indigo-500
+            headerShadowVisible: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="winnings"
+          options={{
+            headerShown: true,
+            title: "Winnings",
+            headerStyle: { backgroundColor: "#e0e7ff" }, // Changed to indigo-100
+            headerTitleStyle: { color: "#3730a3", fontWeight: "bold", fontSize: 22 }, // Indigo-800, bolder, larger
+            headerTintColor: "#6366f1", // Indigo-500
+            headerShadowVisible: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="last-sale"
+          options={{
+            headerShown: true,
+            title: "Last Sale",
+            headerStyle: { backgroundColor: "#e0e7ff" }, // Changed to indigo-100
+            headerTitleStyle: { color: "#3730a3", fontWeight: "bold", fontSize: 22 }, // Indigo-800, bolder, larger
+            headerTintColor: "#6366f1", // Indigo-500
+            headerShadowVisible: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="result"
+          options={{
+            headerShown: true,
+            title: "Result",
+            headerStyle: { backgroundColor: "#e0e7ff" }, // Changed to indigo-100
+            headerTitleStyle: { color: "#3730a3", fontWeight: "bold", fontSize: 22 }, // Indigo-800, bolder, larger
+            headerTintColor: "#6366f1", // Indigo-500
+            headerShadowVisible: false,
+          }}
+        />
         <Stack.Screen name="+not-found" />
       </Stack>
     </ReactQueryProvider>
