@@ -1,3 +1,4 @@
+import { config } from "@/utils/config";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useCallback, useState } from "react";
@@ -15,7 +16,7 @@ export const useCalculator = () => {
     queryKey: ["/user/get-initial-user-creds/"],
     queryFn: () => {
       return fetch(
-        "https://threedln-be.onrender.com/user/get-initial-user-creds/",
+        `${config.apiBaseUrl}/user/get-initial-user-creds/`,
         {
           headers: {
             "User-Type": "DEALER",

@@ -3,6 +3,7 @@ import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
 import { getThemeColors } from "@/utils/color";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { router } from "expo-router";
 import { Clipboard } from "lucide-react-native";
 import React, { useRef, useState } from "react";
 import * as RNClipboard from "react-native"; // For Clipboard.getString()
@@ -685,29 +686,29 @@ const BookingScreen: React.FC = () => {
     }
   };
 
-  // if (isError || error || !DrawSessionDetails?.session?.active) {
-  //   return (
-  //     <View className="flex-1 justify-center items-center bg-white">
-  //       <View className="bg-red-100 border border-red-500 rounded-2xl px-8 py-6 shadow-lg min-w-[300px] max-w-[350px] items-center">
-  //         <Text className="text-red-800 text-lg font-bold text-center mb-3">
-  //           You're not allowed to book the number now. Try later
-  //         </Text>
-  //         <TouchableOpacity
-  //           onPress={() => {
-  //             setSelectedDraw(null)
-  //             router.push("/(tabs)");
-  //           }}
-  //           className="mt-4 bg-red-600 px-6 py-2 rounded-lg min-w-[120px] active:opacity-85"
-  //           activeOpacity={0.85}
-  //         >
-  //           <Text className="text-white text-center font-bold text-base tracking-wide">
-  //             Go Back
-  //           </Text>
-  //         </TouchableOpacity>
-  //       </View>
-  //     </View>
-  //   );
-  // }
+  if (isError || error || !DrawSessionDetails?.session?.active) {
+    return (
+      <View className="flex-1 justify-center items-center bg-white">
+        <View className="bg-red-100 border border-red-500 rounded-2xl px-8 py-6 shadow-lg min-w-[300px] max-w-[350px] items-center">
+          <Text className="text-red-800 text-lg font-bold text-center mb-3">
+            You're not allowed to book the number now. Try later
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              setSelectedDraw(null)
+              router.push("/(tabs)");
+            }}
+            className="mt-4 bg-red-600 px-6 py-2 rounded-lg min-w-[120px] active:opacity-85"
+            activeOpacity={0.85}
+          >
+            <Text className="text-white text-center font-bold text-base tracking-wide">
+              Go Back
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView

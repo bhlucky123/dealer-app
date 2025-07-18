@@ -115,8 +115,8 @@ const AgentForm = ({
     { key: "password", label: "Password", keyboardType: "default" as const, secureTextEntry: true, optional: !!defaultValues?.id, icon: "🔒" },
     { key: "calculate_str", label: "Calculate String", keyboardType: "default" as const, secureTextEntry: false, icon: "🧮" },
     { key: "secret_pin", label: "Secret PIN", keyboardType: "numeric" as const, secureTextEntry: true, icon: "🔐" },
-    { key: "commission", label: "Commission (%)", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💰" },
-    { key: "single_digit_number_commission", label: "Single Digit Commission (%)", keyboardType: "numeric" as const, secureTextEntry: false, icon: "📊" },
+    { key: "commission", label: "Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💰" },
+    { key: "single_digit_number_commission", label: "Single Digit Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "📊" },
     { key: "cap_amount", label: "Cap Amount", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🎯" },
   ];
 
@@ -330,27 +330,40 @@ const AgentCard = ({
           {[
             {
               label: 'Commission',
-              value: `${item.commission}%`,
+              value: `₹${item.commission}`,
+              icon: '💰',
+              bg: 'bg-green-50',
+              iconBg: 'bg-green-200',
+              iconColor: 'text-green-600',
             },
             {
               label: 'Cap Amount',
-              value: `$${item?.cap_amount?.toLocaleString() || '0'}`,
+              value: `₹${item?.cap_amount?.toLocaleString() || '0'}`,
+              icon: '🎯',
+              bg: 'bg-blue-50',
+              iconBg: 'bg-blue-200',
+              iconColor: 'text-blue-600',
             },
             {
               label: 'Single Digit',
-              value: `${item.single_digit_number_commission}%`,
+              value: `₹${item.single_digit_number_commission}`,
+              icon: '📊',
+              bg: 'bg-yellow-50',
+              iconBg: 'bg-yellow-200',
+              iconColor: 'text-yellow-600',
             },
-            {
-              label: 'Dealer ID',
-              value: `#${item.assigned_dealer}`,
-            },
-          ].map(({ label, value }, index) => (
+          ].map(({ label, value, icon, bg, iconBg, iconColor }, index) => (
             <View key={index} className="w-1/2 px-2 mb-3">
-              <View className="bg-gray-50 p-3 rounded-lg">
-                <Text className="text-xs text-gray-500 font-medium uppercase mb-1">
-                  {label}
-                </Text>
-                <Text className="text-base font-semibold text-gray-800">{value}</Text>
+              <View className={`flex-row items-center ${bg} p-3 rounded-xl shadow-sm`}>
+                <View className={`w-9 h-9 rounded-full ${iconBg} items-center justify-center mr-3`}>
+                  <Text className={`text-lg ${iconColor}`}>{icon}</Text>
+                </View>
+                <View>
+                  <Text className="text-xs text-gray-500 font-semibold uppercase mb-0.5 tracking-wide">
+                    {label}
+                  </Text>
+                  <Text className="text-base font-bold text-gray-900">{value}</Text>
+                </View>
               </View>
             </View>
           ))}
@@ -487,7 +500,7 @@ export default function AgentTab() {
               Agent Management
             </Text>
             {
-              user?.user_type === "DEALER" || user?.user_type === "ADMIN" && <TouchableOpacity
+              (user?.user_type === "DEALER" || user?.user_type === "ADMIN") && <TouchableOpacity
                 onPress={() => {
                   setEditData(null);
                   setShowForm(true);

@@ -4,7 +4,7 @@ import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery } from "@tanstack/react-query";
-import { Calendar, Feather, Plus, Share2, X } from "lucide-react-native";
+import { AlertCircle, AlertTriangle, Calendar, Plus, Share2, X } from "lucide-react-native";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
@@ -76,26 +76,8 @@ const ResultPage: React.FC = () => {
     if (!selectedDraw?.id) {
         return (
             <View className="flex-1 items-center justify-center bg-gray-50">
-                <Feather name="alert-circle" size={48} color="#a1a1aa" />
+                <AlertCircle size={48} color="#a1a1aa" />
                 <Text className="mt-3 text-lg text-gray-500 font-semibold">No draw selected</Text>
-            </View>
-        );
-    }
-
-    if (isLoading) {
-        return (
-            <View className="flex-1 items-center justify-center bg-gray-50">
-                <ActivityIndicator size="large" color="#15803d" />
-                <Text className="mt-2 text-base text-gray-500">Loading…</Text>
-            </View>
-        );
-    }
-
-    if (error) {
-        return (
-            <View className="flex-1 items-center justify-center bg-gray-50">
-                <Feather name="alert-triangle" size={40} color="#dc2626" />
-                <Text className="mt-2 text-base text-red-600 font-semibold">Failed to load result</Text>
             </View>
         );
     }
@@ -117,6 +99,22 @@ const ResultPage: React.FC = () => {
     }
 
     /* ------------------- View mode ------------------- */
+    // Always show the date filter and plus button, even if error or loading
+    let errorMessage: string = "";
+    let isNoResultYet = false;
+    if (error) {
+        errorMessage =
+            (error as any)?.message?.detail ||
+            (error as any)?.message ||
+            "";
+        if (
+            typeof errorMessage === "string" &&
+            errorMessage.trim() === "No Result matches the given query."
+        ) {
+            isNoResultYet = true;
+        }
+    }
+
     return (
         <ScrollView className="flex-1">
             {/* Date filter */}
@@ -160,8 +158,28 @@ const ResultPage: React.FC = () => {
                 </TouchableOpacity>
             </View>
 
+            {/* Loading state */}
+            {isLoading && (
+                <View className="flex-1 items-center justify-center bg-gray-50 py-8">
+                    <ActivityIndicator size="large" color="#15803d" />
+                    <Text className="mt-2 text-base text-gray-500">Loading…</Text>
+                </View>
+            )}
+
+            {/* Error handling for unpublished or failed result */}
+            {!isLoading && error && (
+                <View className="flex-1 items-center justify-center bg-gray-50 py-8">
+                    <AlertTriangle size={40} color="#f59e42" />
+                    <Text className={`mt-2 text-base font-semibold ${isNoResultYet ? "text-yellow-700" : "text-red-600"}`}>
+                        {isNoResultYet
+                            ? "Result not published yet for this draw"
+                            : "Failed to load result"}
+                    </Text>
+                </View>
+            )}
+
             {/* Prize table */}
-            {data && (
+            {!isLoading && data && (
                 <View className="mx-4 mt-6 border border-gray-300 rounded-lg overflow-hidden">
                     {(
                         [
@@ -188,7 +206,7 @@ const ResultPage: React.FC = () => {
             )}
 
             {/* Complementary grid */}
-            {data && (
+            {!isLoading && data && (
                 <View className="mx-4 mt-6 mb-10 border border-gray-300 rounded-lg overflow-hidden">
                     {Array.from({ length: Math.ceil(data.complementary_prizes.length / 3) }).map((_, r) => (
                         <View key={r} className="flex-row border-b border-gray-200">
@@ -209,8 +227,6 @@ const ResultPage: React.FC = () => {
                     ))}
                 </View>
             )}
-
-
 
             {/* Date picker modal */}
             {showDatePicker && (

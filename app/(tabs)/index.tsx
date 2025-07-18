@@ -330,7 +330,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <View className="flex-1 bg-[#f5f7fa] px-2 pt-6 relative">
+    <View className="flex-1 bg-[#f5f7fa] px-2 pt-6 relative" style={{ paddingBottom: 32 }}>
       {/* HEADER */}
       <View className="flex-row items-center justify-between mb-6 mt-4">
         {/* title */}
@@ -388,107 +388,49 @@ export default function HomeScreen() {
         renderItem={({ item }) => {
           const textColor = getContrastYIQ(item.color_theme || "#8B5CF6");
           return (
-            <View className="mb-6">
+            <View className="mb-4">
               <TouchableOpacity
                 onPress={() => {
                   setSelectedDraw(item);
                   router.push(`/options`);
                 }}
-                className="rounded-2xl overflow-hidden shadow-lg"
-                activeOpacity={0.92}
+                activeOpacity={0.9}
+                className="bg-[#{item.color_theme || '#8B5CF6'}] rounded-lg px-4 py-4 border border-gray-200 flex-col min-h-[70px] justify-center"
                 style={{
                   backgroundColor: item.color_theme || "#8B5CF6",
-                  borderWidth: 0,
-                  elevation: 6,
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.10,
-                  shadowRadius: 8,
                 }}
               >
-                <View className="p-5">
-                  <View className="flex-row justify-between items-center mb-3">
-                    <Text
-                      className="text-2xl font-extrabold"
-                      style={{
-                        color: textColor,
-                        letterSpacing: 0.5,
-                        textShadowColor: textColor === "#fff" ? "rgba(0,0,0,0.08)" : "rgba(0,0,0,0.03)",
-                        textShadowOffset: { width: 0, height: 1 },
-                        textShadowRadius: 2,
-                      }}
-                    >
-                      {item.name}
-                    </Text>
-                    {user?.user_type === "ADMIN" && (<TouchableOpacity
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-base font-bold" style={{ color: textColor }}>
+                    {item.name}
+                  </Text>
+                  {user?.user_type === "ADMIN" && (
+                    <TouchableOpacity
                       onPress={() => {
                         setEditDraw(item);
                         setShowForm(true);
                       }}
-                      className="p-2 rounded-xl"
-                      style={{
-                        backgroundColor: textColor === "#fff" ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.07)",
-                        borderWidth: 1,
-                        borderColor: textColor === "#fff" ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.05)",
-                      }}
+                      className="p-1 rounded bg-transparent"
                     >
-                      <Feather name="edit" size={22} color={textColor} />
-                    </TouchableOpacity>)}
-                  </View>
-                  <View className="flex-row items-center mb-2">
-                    <View
-                      style={{
-                        backgroundColor: textColor === "#fff" ? "rgba(255,255,255,0.13)" : "rgba(0,0,0,0.04)",
-                        borderRadius: 8,
-                        paddingHorizontal: 8,
-                        paddingVertical: 2,
-                        marginRight: 8,
-                      }}
-                    >
-                      <Text className="text-lg" style={{ color: textColor }}>🗓</Text>
-                    </View>
-                    <Text className="text-base font-semibold" style={{ color: textColor }}>
-                      {item.valid_from} - {item.valid_till}
-                    </Text>
-                  </View>
-                  <View className="flex-row items-center mb-2">
-                    <View
-                      style={{
-                        backgroundColor: textColor === "#fff" ? "rgba(255,255,255,0.13)" : "rgba(0,0,0,0.04)",
-                        borderRadius: 8,
-                        paddingHorizontal: 8,
-                        paddingVertical: 2,
-                        marginRight: 8,
-                      }}
-                    >
-                      <Text className="text-lg" style={{ color: textColor }}>⏰</Text>
-                    </View>
-                    <Text className="text-base font-semibold" style={{ color: textColor }}>
-                      {item.draw_time}
-                    </Text>
-                  </View>
-                  <View
-                    className="flex-row items-center mt-3"
-                    style={{
-                      backgroundColor: textColor === "#fff" ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.03)",
-                      borderRadius: 10,
-                      paddingVertical: 6,
-                      paddingHorizontal: 10,
-                    }}
-                  >
-                    <Text className="text-xs mr-2" style={{ color: textColor, opacity: 0.8 }}>
-                      Non-Single Digit Price:
-                    </Text>
-                    <Text className="text-xs font-bold" style={{ color: textColor }}>
-                      {item.non_single_digit_price}
-                    </Text>
-                    <Text className="text-xs mx-2" style={{ color: textColor, opacity: 0.8 }}>
-                      {" "}| Single Digit Price: {" "}
-                    </Text>
-                    <Text className="text-xs font-bold" style={{ color: textColor }}>
-                      {item.single_digit_number_price}
-                    </Text>
-                  </View>
+                      <Feather name="edit" size={18} color={textColor} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <View className="flex-row items-center mt-1">
+                  <Text className="text-xs text-opacity-80" style={{ color: textColor }}>
+                    {item.valid_from} - {item.valid_till}
+                  </Text>
+                  <Text className="text-xs ml-3 text-opacity-80" style={{ color: textColor }}>
+                    {item.draw_time}
+                  </Text>
+                </View>
+                <View className="flex-row items-center mt-1">
+                  <Text className="text-xs text-opacity-70" style={{ color: textColor }}>
+                    Non-Single: <Text className="font-bold" style={{ color: textColor }}>₹{item.non_single_digit_price}</Text>
+                  </Text>
+                  <Text className="text-xs ml-2 text-opacity-70" style={{ color: textColor }}>
+                    Single: <Text className="font-bold" style={{ color: textColor }}>₹{item.single_digit_number_price}</Text>
+                  </Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -507,15 +449,14 @@ export default function HomeScreen() {
             tintColor="#8B5CF6"
           />
         }
-        contentContainerStyle={
-          draws.length === 0 && !isLoading && !error
+        contentContainerStyle={{
+          ...(draws.length === 0 && !isLoading && !error
             ? { flex: 1, justifyContent: "center" }
-            : undefined
-        }
+            : {}),
+          paddingBottom: 40, // Add extra bottom padding for navbar
+        }}
         showsVerticalScrollIndicator={false}
       />
-
-
     </View>
   );
 }

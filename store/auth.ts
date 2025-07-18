@@ -21,8 +21,8 @@ interface AuthState {
   setUser: (user: User | null) => void;
 }
 
+const AdminToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU1MzQwMzgyLCJpYXQiOjE3NTI3NDgzODIsImp0aSI6IjcyZTVlMjM3ZmNkODQ2NzdhNzllMTlmZmNiMzk2Zjk0IiwidXNlcl9pZCI6MSwidXNlcl90eXBlIjoiQURNSU4ifQ.fEkJv75g8jrH5MBZNHE698nijW1NVK5v78-prexPMOM";
 const DealerToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU1MDkxODk1LCJpYXQiOjE3NTI0OTk4OTUsImp0aSI6ImQ0Y2YwMTM4MWIwZDQyZDA5OWVlZTdkOTNmMDNjNjc3IiwidXNlcl9pZCI6MiwidXNlcl90eXBlIjoiREVBTEVSIn0.Zg3ClnC91Z20OkSznhOhHPZT9-7r8PLknxuSKGBTzow";
-const AdminToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU1MDkxOTMxLCJpYXQiOjE3NTI0OTk5MzEsImp0aSI6ImZlYmJlNWM0MWMzMDRlNDM4OWQ5ZTc4ZWMyNDZhZTJmIiwidXNlcl9pZCI6MSwidXNlcl90eXBlIjoiQURNSU4ifQ.VrsTxZqezSeKfTDG9f5bF0zr2XXVpz6EHk-epswsyVo";
 const AgentToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU1MTA1NTU1LCJpYXQiOjE3NTI1MTM1NTUsImp0aSI6Ijk4N2U5N2Y4OGM3MzRjYjM5M2MyNzBiMDI3MmNhNGQ3IiwidXNlcl9pZCI6OCwidXNlcl90eXBlIjoiQUdFTlQifQ.tvvBnWvpSvzoHnK1BU5UUYA-otfmT9ea6YqymW0ESTU";
 
 // Dummy users for all roles
@@ -58,11 +58,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   // user: DummyDealer,
   // token: DealerToken,
   // To test as admin, uncomment below and comment above:
-  // user: DummyAdmin,
-  // token: AdminToken,
+  user: DummyAdmin,
+  token: AdminToken,
   // To test as agent, uncomment below and comment above:
-  user: DummyAgent,
-  token: AgentToken,
+  // user: DummyAgent,
+  // token: AgentToken,
   loading: false,
   error: null,
 
@@ -75,7 +75,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "User-Type": "DEALER",
+            "User-Type": config.userType,
           },
           body: JSON.stringify({ username, password }),
         }

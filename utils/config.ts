@@ -1,3 +1,4 @@
 export const config = {
-  apiBaseUrl: "https://backend-mwz2.onrender.com",
+  apiBaseUrl: "https://3dlnbe-production.up.railway.app",
+  userType:"ADMIN"
 };
