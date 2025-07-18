@@ -55,11 +55,11 @@ const DummyAgent = {
 
 export const useAuthStore = create<AuthState>((set) => ({
   // Set the default user and token here. Change as needed for testing.
-  // user: DummyDealer,
-  // token: DealerToken,
+  user: DummyDealer,
+  token: DealerToken,
   // To test as admin, uncomment below and comment above:
-  user: DummyAdmin,
-  token: AdminToken,
+  // user: DummyAdmin,
+  // token: AdminToken,
   // To test as agent, uncomment below and comment above:
   // user: DummyAgent,
   // token: AgentToken,

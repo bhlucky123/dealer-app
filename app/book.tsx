@@ -3,7 +3,6 @@ import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
 import { getThemeColors } from "@/utils/color";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { router } from "expo-router";
 import { Clipboard } from "lucide-react-native";
 import React, { useRef, useState } from "react";
 import * as RNClipboard from "react-native"; // For Clipboard.getString()
@@ -58,18 +57,22 @@ const RangeOptions = [
   { label: "Book", value: "Book" },
   { label: "Range", value: "Range" },
   { label: "Set", value: "Set" },
+  { label: "Different", value: "Different" },
 ];
 
 const BookingScreen: React.FC = () => {
   const [customerName, setCustomerName] = useState<string>("");
   const [drawSession, setDrawSession] = useState<string>("3");
-  const [selectedRange, setSelectedRange] = useState<"Book" | "Set" | "Range">(
+  // Add "Different" to the union type for selectedRange
+  const [selectedRange, setSelectedRange] = useState<"Book" | "Set" | "Range" | "Different">(
     "Book"
   );
   const [numberInput, setNumberInput] = useState<string>("");
   const [endNumberInput, setEndNumberInput] = useState<string>("");
   const [countInput, setCountInput] = useState<string>("");
   const [bCountInput, setBCountInput] = useState<string>("");
+  // New state for difference input
+  const [differenceInput, setDifferenceInput] = useState<string>("");
   const [bookingDetails, setBookingDetails] = useState<BookingDetail[]>([]);
   const [rangeOptions, setRangeOptions] = useState(RangeOptions);
 
@@ -86,6 +89,8 @@ const BookingScreen: React.FC = () => {
   const countInputRef = useRef<TextInput>(null);
   const numInputRef = useRef<TextInput>(null);
   const endNumInputRef = useRef<TextInput>(null);
+  // New ref for difference input
+  const differenceInputRef = useRef<TextInput>(null);
 
   const buttonsMap: Record<string, string[]> = {
     "1": ["A", "B", "C", "ALL"],
@@ -107,9 +112,6 @@ const BookingScreen: React.FC = () => {
     select: (response) => response,
     refetchOnMount: true,
   });
-
-  console.log("error", error, "DrawSessionDetail", DrawSessionDetails);
-
 
 
   const { mutate } = useMutation({
@@ -214,7 +216,6 @@ const BookingScreen: React.FC = () => {
       return;
     }
 
-    // Otherwise, fallback to original addBooking logic (for UI)
     // --- BEGIN original addBooking code ---
     console.log("on add booking", DrawSessionDetails);
 
@@ -297,6 +298,91 @@ const BookingScreen: React.FC = () => {
       clearInputs();
       setEndNumberInput("");
       setBCountInput("");
+      return;
+    }
+
+    // ---------- Different Booking ----------
+    if (selectedRange === "Different") {
+      // Only for 3-digit numbers
+      if (drawSession !== "3") {
+        Alert.alert(
+          "Invalid",
+          "Different option is only available for 3-digit numbers."
+        );
+        return;
+      }
+      if (!endNumberInput) {
+        Alert.alert("Missing fields", "Enter end number.");
+        return;
+      }
+      if (!differenceInput) {
+        Alert.alert("Missing fields", "Enter difference.");
+        return;
+      }
+      if (endLen !== 3) {
+        Alert.alert(
+          "Invalid input",
+          "Please enter a 3-digit end number."
+        );
+        return;
+      }
+      const start = parseNum(numberInput);
+      const end = parseNum(endNumberInput);
+      const diff = parseNum(differenceInput);
+
+      if (isNaN(start) || isNaN(end) || isNaN(diff) || start > end) {
+        Alert.alert(
+          "Invalid Range",
+          "Start should be less than or equal to end, and difference should be a valid number."
+        );
+        return;
+      }
+      if (diff <= 0) {
+        Alert.alert("Invalid Difference", "Difference must be greater than 0.");
+        return;
+      }
+      // If difference is greater than the range, no booking
+      if (end - start < diff) {
+        Alert.alert(
+          "No bookings",
+          "Difference is greater than the range. No bookings created."
+        );
+        return;
+      }
+
+      const newEntries: BookingDetail[] = [];
+      let i = start;
+      let addedAny = false;
+      while (i <= end) {
+        if (i > end) break;
+        // Only add if in range
+        if (i >= start && i <= end) {
+          const paddedNum = i.toString().padStart(3, "0");
+          if (subType === "BOTH") {
+            newEntries.push(createEntry(paddedNum, countVal, "SUPER"));
+            newEntries.push(createEntry(paddedNum, bCountVal, "BOX"));
+          } else {
+            // Only allow SUPER/BOX for 3-digit
+            const actualCount = subType === "BOX" ? bCountVal : countVal;
+            newEntries.push(createEntry(paddedNum, actualCount, subType));
+          }
+          addedAny = true;
+        }
+        i += diff;
+      }
+      // If the start == end and diff > 0, only one booking
+      if (!addedAny) {
+        Alert.alert(
+          "No bookings",
+          "No bookings created. Please check your start, end, and difference values."
+        );
+        return;
+      }
+      setBookingDetails((prev) => [...prev, ...newEntries]);
+      clearInputs();
+      setEndNumberInput("");
+      setBCountInput("");
+      setDifferenceInput("");
       return;
     }
 
@@ -518,6 +604,7 @@ const BookingScreen: React.FC = () => {
     setCountInput("");
     setNumberInput("");
     setBCountInput("");
+    setDifferenceInput("");
     numInputRef.current?.focus();
   };
 
@@ -527,8 +614,8 @@ const BookingScreen: React.FC = () => {
       setRangeOptions(RangeOptions);
     }
     if (num !== "3") {
-      setRangeOptions(RangeOptions.filter((option) => option.value !== "3"));
-      if (selectedRange === "Set") {
+      setRangeOptions(RangeOptions.filter((option) => option.value !== "Set" && option.value !== "Different"));
+      if (selectedRange === "Set" || selectedRange === "Different") {
         setSelectedRange("Book");
       }
     }
@@ -766,7 +853,9 @@ const BookingScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* Inputs for Book, Range, Set, Different */}
         <View className="flex-row gap-2 mb-3">
+          {/* Start/Number input */}
           <TextInput
             ref={numInputRef}
             value={numberInput}
@@ -776,7 +865,7 @@ const BookingScreen: React.FC = () => {
 
               const requiredLength = parseInt(drawSession);
               if (formatted.length >= requiredLength) {
-                if (selectedRange === "Range") {
+                if (selectedRange === "Range" || selectedRange === "Different") {
                   endNumInputRef.current?.focus();
                 } else {
                   countInputRef.current?.focus();
@@ -785,11 +874,16 @@ const BookingScreen: React.FC = () => {
             }}
             maxLength={3}
             keyboardType="numeric"
-            placeholder={selectedRange === "Range" ? "Start" : "Number"}
+            placeholder={
+              selectedRange === "Range" || selectedRange === "Different"
+                ? "Start"
+                : "Number"
+            }
             className="flex-1 border border-gray-400 px-3 py-2 rounded"
           />
 
-          {selectedRange === "Range" && (
+          {/* End input for Range and Different */}
+          {(selectedRange === "Range" || selectedRange === "Different") && (
             <TextInput
               ref={endNumInputRef}
               value={endNumberInput}
@@ -799,7 +893,11 @@ const BookingScreen: React.FC = () => {
 
                 const requiredLength = parseInt(drawSession);
                 if (formatted.length >= requiredLength) {
-                  countInputRef.current?.focus();
+                  if (selectedRange === "Different") {
+                    differenceInputRef.current?.focus();
+                  } else {
+                    countInputRef.current?.focus();
+                  }
                 }
               }}
               maxLength={3}
@@ -809,6 +907,25 @@ const BookingScreen: React.FC = () => {
             />
           )}
 
+          {/* Difference input for Different */}
+          {selectedRange === "Different" && (
+            <TextInput
+              ref={differenceInputRef}
+              value={differenceInput}
+              onChangeText={(text) => {
+                const formatted = text.replace(/[^0-9]/g, "");
+                setDifferenceInput(formatted);
+                // Optionally, focus count after difference
+                // countInputRef.current?.focus();
+              }}
+              maxLength={3}
+              keyboardType="numeric"
+              placeholder="Difference"
+              className="flex-1 border border-gray-400 px-3 py-2 rounded"
+            />
+          )}
+
+          {/* Count input */}
           <TextInput
             ref={countInputRef}
             value={countInput}
@@ -818,6 +935,7 @@ const BookingScreen: React.FC = () => {
             className="flex-1 border border-gray-400 px-3 py-2 rounded"
           />
 
+          {/* B.Count input for 3-digit only */}
           {drawSession === "3" && (
             <TextInput
               value={bCountInput}
