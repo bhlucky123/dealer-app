@@ -22,17 +22,13 @@ const DailyReport = () => {
   const [showFromPicker, setShowFromPicker] = useState(false);
   const [showToPicker, setShowToPicker] = useState(false);
   const [allGames, setAllGames] = useState(false);
-  const [dayTotal, setDayTotal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const buildQuery = () => {
     const params: Record<string, any> = {};
     if (fromDate) params.date_time__gte = fromDate.toISOString().split("T")[0];
     if (toDate) params.date_time__lte = toDate.toISOString().split("T")[0];
-    // if (dayTotal) params.day_total = true;
     if (selectedDraw?.id && !allGames) params.draw_session__draw__id = selectedDraw.id;
-    console.log("params", params);
-
     return params;
   };
 
@@ -46,13 +42,10 @@ const DailyReport = () => {
   });
 
   const renderTableHeader = (cols: string[]) => (
-    <View className="flex-row bg-gray-200/70 border-b border-gray-300 py-1">
-      {cols.map((c) => (
-        <Text
-          key={c}
-          className="flex-1 text-[9px] font-bold text-center text-gray-700 uppercase tracking-wider"
-        >
-          {c}
+    <View className="flex-row bg-gray-100 border-b border-gray-200 py-2">
+      {cols.map((col) => (
+        <Text key={col} className="flex-1 text-xs font-semibold text-center text-gray-700 uppercase">
+          {col}
         </Text>
       ))}
     </View>
@@ -60,42 +53,35 @@ const DailyReport = () => {
 
   const renderSummaryRow = (item: any, isTotal = false) => (
     <View
-      className={`flex-row py-1 ${isTotal ? "bg-gray-100" : ""} border-b border-gray-100`}
       key={isTotal ? "summary-total" : item.draw + (item.agent?.username || "")}
+      className={`flex-row py-2 border-b border-gray-100 ${isTotal ? "bg-gray-100" : "bg-white"}`}
     >
-      <Text className="flex-1 text-[11px] text-center text-gray-800">
+      <Text className="flex-1 text-xs text-center text-gray-800">
         {isTotal ? "Total" : item.agent?.username || item.dealer?.username || "-"}
       </Text>
-      <Text className="flex-1 text-[11px] text-center text-gray-800">{item.draw || ""}</Text>
-      <Text className="flex-1 text-[11px] text-center text-gray-800">{item.total_amount}</Text>
-      <Text className="flex-1 text-[11px] text-center text-gray-800">{item.total_win || 0}</Text>
-      <Text className="flex-1 text-[11px] text-center text-gray-800">
-        {(item.total_amount || 0) - (item.total_win || 0)}
-      </Text>
+      <Text className="flex-1 text-xs text-center text-gray-800">{item.draw}</Text>
+      <Text className="flex-1 text-xs text-center text-gray-800">{item.total_amount}</Text>
+      <Text className="flex-1 text-xs text-center text-gray-800">{item.total_win || 0}</Text>
     </View>
   );
 
   const renderDetailRow = (item: any, isTotal = false) => (
     <View
-      className={`flex-row py-1 ${isTotal ? "bg-gray-100" : ""} border-b border-gray-100`}
       key={isTotal ? "detail-total" : item.date + item.draw + item.agent?.username}
+      className={`flex-row py-2 border-b border-gray-100 ${isTotal ? "bg-gray-100" : "bg-white"}`}
     >
-      <Text className={`flex-1 text-[${isTotal ? '11px' : '9px'}] text-center text-gray-800`}>
+      <Text className="flex-1 text-xs text-center text-gray-800">
         {isTotal ? "Total" : item.date}
       </Text>
-      <Text className="flex-1 text-[11px] text-center text-gray-800">
-        {isTotal ? "" : item.agent?.username || item.dealer?.username || "-"}
+      <Text className="flex-1 text-xs text-center text-gray-800">
+        {item.agent?.username || item.dealer?.username || "-"}
       </Text>
-      <Text className="flex-1 text-[11px] text-center text-gray-800">{item.draw}</Text>
-      <Text className="flex-1 text-[11px] text-center text-gray-800">{item.total_amount}</Text>
-      <Text className="flex-1 text-[11px] text-center text-gray-800">{item.total_win || 0}</Text>
-      <Text className="flex-1 text-[11px] text-center text-gray-800">
-        {(item.total_amount || 0) - (item.total_win || 0)}
-      </Text>
+      <Text className="flex-1 text-xs text-center text-gray-800">{item.draw}</Text>
+      <Text className="flex-1 text-xs text-center text-gray-800">{item.total_amount}</Text>
+      <Text className="flex-1 text-xs text-center text-gray-800">{item.total_win || 0}</Text>
     </View>
   );
 
-  // Pull-to-refresh handler
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -107,67 +93,65 @@ const DailyReport = () => {
 
   return (
     <View className="flex-1 bg-white">
-
-      {/* Filters */}
-      <View className="px-4 pt-4 gap-3">
-        {/* Dates */}
+      {/* Filter section */}
+      <View className="px-4 pt-4 space-y-4">
         <View className="flex-row gap-3">
-          {[
-            { label: "FROM", date: fromDate, show: setShowFromPicker },
-            { label: "TO", date: toDate, show: setShowToPicker },
-          ].map(({ label, date, show }, idx) => (
-            <TouchableOpacity
-              key={label}
-              onPress={() => show(true)}
-              className="flex-1 border border-gray-400 rounded-lg px-3 py-2 flex-row justify-between items-center"
-            >
-              <Text className="text-[12px] text-gray-600">{date ? date.toLocaleDateString() : label}</Text>
-              <Calendar color="#6B7280" size={16} />
-            </TouchableOpacity>
-          ))}
+          {[{ label: "FROM", date: fromDate, show: setShowFromPicker }, { label: "TO", date: toDate, show: setShowToPicker }].map(
+            ({ label, date, show }) => (
+              <TouchableOpacity
+                key={label}
+                onPress={() => show(true)}
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 flex-row justify-between items-center bg-white"
+                activeOpacity={0.7}
+                style={{ elevation: 0 }}
+              >
+                <Text className="text-sm text-gray-600">
+                  {date ? date.toLocaleDateString() : label}
+                </Text>
+                <Calendar size={16} color="#6B7280" />
+              </TouchableOpacity>
+            )
+          )}
         </View>
-        {/* Checkboxes */}
-        <View className="flex-row items-center justify-between gap-6">
-          <View className="flex gap-3">
-            <TouchableOpacity
-              className="flex-row items-center gap-2"
-              onPress={() => setAllGames((p) => !p)}
-            >
-              <View className={`w-4 h-4 rounded border ${allGames ? "bg-green-600 border-green-600" : "border-gray-500"}`} />
-              <Text className="text-gray-700 text-[12px]">All Games</Text>
-            </TouchableOpacity>
-          </View>
-          {/* <TouchableOpacity
-            className="flex-row items-center gap-2"
-            onPress={() => setDayTotal((p) => !p)}
-          >
-            <View className={`w-4 h-4 rounded border ${dayTotal ? "bg-green-600 border-green-600" : "border-gray-500"}`} />
-            <Text className="text-gray-700 text-[12px]">Day Total</Text>
-          </TouchableOpacity> */}
-        </View>
+
+        <TouchableOpacity
+          onPress={() => setAllGames((prev) => !prev)}
+          className="flex-row items-center gap-2 mt-2"
+          activeOpacity={0.7}
+        >
+          <View
+            className={`w-4 h-4 rounded border ${allGames ? "bg-green-600 border-green-600" : "border-gray-400"} `}
+            style={{ elevation: 0 }}
+          />
+          <Text className="text-sm text-gray-700">All Games</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Loading */}
+      {/* Loading state */}
       {isLoading && (
-        <View className="flex-1 justify-center items-center"><ActivityIndicator /></View>
+        <View className="flex-1 justify-center items-center">
+          <ActivityIndicator size="large" color="#16a34a" />
+        </View>
       )}
 
-      {/* Error */}
+      {/* Error state */}
       {!isLoading && error && (
         <View className="flex-1 justify-center items-center px-4">
-          <Text className="text-red-600 text-center text-[14px] font-semibold">
-            {error?.message ? `Error: ${error.message}` : "An error occurred while fetching the report."}
+          <Text className="text-red-600 text-center text-sm font-semibold">
+            {error?.message || "Failed to fetch report."}
           </Text>
           <TouchableOpacity
-            className="mt-4 px-4 py-2 bg-green-600 rounded"
             onPress={() => refetch()}
+            className="mt-4 px-4 py-2 bg-green-600 rounded"
+            activeOpacity={0.7}
+            style={{ elevation: 0 }}
           >
-            <Text className="text-white font-semibold text-[14px]">Refetch</Text>
+            <Text className="text-white font-semibold text-sm">Retry</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Data */}
+      {/* Report content */}
       {!isLoading && !error && (
         <ScrollView
           className="mt-4 px-4"
@@ -180,26 +164,40 @@ const DailyReport = () => {
             />
           }
         >
-          {/* SUMMARY */}
-          <View className="border border-gray-300 rounded-lg overflow-hidden">
-            <Text className="bg-gray-200 px-3 py-1 font-bold text-sm">SUMMARY</Text>
-            {renderTableHeader(["SUBDEALER", "GAME", "SALE", "WIN", "BAL"])}
-            {data?.summary?.map((s: any) => renderSummaryRow(s))}
-            {data?.summary && renderSummaryRow(data.summary.reduce((acc: any, cur: any) => ({
-              total_amount: (acc.total_amount || 0) + cur.total_amount,
-              total_win: (acc.total_win || 0) + (cur.total_win || 0),
-            }), {}), true)}
+          {/* Summary Table */}
+          <View className="border border-gray-200 rounded-lg overflow-hidden bg-white" style={{ elevation: 0 }}>
+            <Text className="bg-gray-100 px-3 py-2 font-bold text-sm border-b border-gray-200">SUMMARY</Text>
+            {renderTableHeader(["SUBDEALER", "GAME", "SALE", "WIN"])}
+            {data?.summary?.map((item: any) => renderSummaryRow(item))}
+            {data?.summary &&
+              renderSummaryRow(
+                data.summary.reduce(
+                  (acc: any, cur: any) => ({
+                    total_amount: (acc.total_amount || 0) + cur.total_amount,
+                    total_win: (acc.total_win || 0) + (cur.total_win || 0),
+                  }),
+                  {}
+                ),
+                true
+              )}
           </View>
 
-          {/* DETAILED */}
-          <View className="border border-gray-300 rounded-lg mt-4 overflow-hidden">
-            <Text className="bg-gray-200 px-3 py-1 font-bold text-sm">DETAILED</Text>
-            {renderTableHeader(["DATE", "SUBDEALER", "GAME", "SALE", "WIN", "BAL"])}
-            {data?.report?.map((d: any) => renderDetailRow(d))}
-            {data?.report && renderDetailRow(data.report.reduce((acc: any, cur: any) => ({
-              total_amount: (acc.total_amount || 0) + cur.total_amount,
-              total_win: (acc.total_win || 0) + (cur.total_win || 0),
-            }), {}), true)}
+          {/* Detailed Table */}
+          <View className="border border-gray-200 rounded-lg mt-6 overflow-hidden bg-white" style={{ elevation: 0 }}>
+            <Text className="bg-gray-100 px-3 py-2 font-bold text-sm border-b border-gray-200">DETAILED</Text>
+            {renderTableHeader(["DATE", "SUBDEALER", "GAME", "SALE", "WIN"])}
+            {data?.report?.map((item: any) => renderDetailRow(item))}
+            {data?.report &&
+              renderDetailRow(
+                data.report.reduce(
+                  (acc: any, cur: any) => ({
+                    total_amount: (acc.total_amount || 0) + cur.total_amount,
+                    total_win: (acc.total_win || 0) + (cur.total_win || 0),
+                  }),
+                  {}
+                ),
+                true
+              )}
           </View>
         </ScrollView>
       )}

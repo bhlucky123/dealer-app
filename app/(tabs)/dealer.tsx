@@ -112,8 +112,8 @@ const DealerForm = ({
         { key: "password", label: "Password", keyboardType: "default" as const, secureTextEntry: true, optional: !!defaultValues?.id, icon: "🔒" }, // Optional for edit
         { key: "calculate_str", label: "Calculate String", keyboardType: "default" as const, secureTextEntry: false, icon: "🧮" },
         { key: "secret_pin", label: "Secret PIN", keyboardType: "numeric" as const, secureTextEntry: true, icon: "🔑" },
-        { key: "commission", label: "Commission (%)", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💰" },
-        { key: "single_digit_number_commission", label: "Single Digit Commission (%)", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🎯" },
+        { key: "commission", label: "Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💰" },
+        { key: "single_digit_number_commission", label: "Single Digit Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🎯" },
         { key: "cap_amount", label: "Cap Amount", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💲" },
     ];
 
@@ -293,8 +293,21 @@ const DealerCard = ({ item, onEdit, onDelete }: { item: Dealer; onEdit: () => vo
                             </TouchableOpacity>}
                     </View>
                 </View>
-                <Text className="text-sm text-gray-600">Commission: {item.commission}%</Text>
-                <Text className="text-sm text-gray-600">Cap: {item.cap_amount}</Text>
+                <View className="flex-row items-center mb-2">
+                    <Text className="text-xs text-gray-500 mr-2">💰</Text>
+                    <Text className="text-sm text-gray-700 font-medium flex-1">Commission:</Text>
+                    <Text className="text-sm text-gray-800 font-bold">₹{item.commission}</Text>
+                </View>
+                <View className="flex-row items-center mb-2">
+                    <Text className="text-xs text-gray-500 mr-2">🎯</Text>
+                    <Text className="text-sm text-gray-700 font-medium flex-1">Single Digit Comm.:</Text>
+                    <Text className="text-sm text-gray-800 font-bold">₹{item.single_digit_number_commission}</Text>
+                </View>
+                <View className="flex-row items-center">
+                    <Text className="text-xs text-gray-500 mr-2">💲</Text>
+                    <Text className="text-sm text-gray-700 font-medium flex-1">Cap Amount:</Text>
+                    <Text className="text-sm text-gray-800 font-bold">{item.cap_amount}</Text>
+                </View>
             </View>
         </View >
     )

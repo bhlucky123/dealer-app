@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Clipboard } from "lucide-react-native";
+import { useRef, useState } from "react";
+import * as RNClipboard from "react-native"; // For Clipboard.getString()
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 type PrizeKey = "first_prize" | "second_prize" | "third_prize" | "fourth_prize" | "fifth_prize";
 const PRIZE_LABELS: Record<PrizeKey, string> = {
@@ -29,17 +31,99 @@ const DrawResultForm = ({ onSubmit, initialData }: Props) => {
         third_prize: initialData?.third_prize || '',
         fourth_prize: initialData?.fourth_prize || '',
         fifth_prize: initialData?.fifth_prize || '',
-        complementary_prizes: initialData?.complementary_prizes || Array(20).fill(''),
+        complementary_prizes: initialData?.complementary_prizes || Array(30).fill(''),
     });
 
-    const handleInput = (key: PrizeKey, value: string) => {
+    // Refs for main prize inputs
+    const mainPrizeRefs = [
+        useRef<TextInput>(null),
+        useRef<TextInput>(null),
+        useRef<TextInput>(null),
+        useRef<TextInput>(null),
+        useRef<TextInput>(null),
+    ];
+
+    // Refs for complementary prize inputs
+    const complementaryRefs = Array.from({ length: 30 }, () => useRef<TextInput>(null));
+
+    const handleInput = (key: PrizeKey, value: string, idx: number) => {
         setForm((prev) => ({ ...prev, [key]: value }));
+        // If 3 digits, focus next input
+        if (value.length === 3 && idx < mainPrizeRefs.length - 1) {
+            setTimeout(() => {
+                mainPrizeRefs[idx + 1].current?.focus();
+            }, 10);
+        }
     };
 
     const handleComplementaryChange = (index: number, value: string) => {
         const updated = [...form.complementary_prizes];
         updated[index] = value;
         setForm((prev) => ({ ...prev, complementary_prizes: updated }));
+        // If 3 digits, focus next input
+        if (value.length === 3 && index < complementaryRefs.length - 1) {
+            setTimeout(() => {
+                complementaryRefs[index + 1].current?.focus();
+            }, 10);
+        }
+    };
+
+    // Handler for the "Paste" button - now reads from clipboard using RNClipboard.Clipboard.getString()
+    const handlePasteComplementary = async () => {
+        try {
+            // RNClipboard.Clipboard.getString() returns a Promise<string>
+            // @ts-ignore
+            const clipboardContent = await RNClipboard.Clipboard.getString();
+            // Try to extract 30 numbers (3 digits each) from the clipboard
+            // Accepts: "123 456 789 ..." or "123,456,789" or "123\n456\n789" etc.
+            let prizes = clipboardContent
+                .replace(/[^0-9\s,]/g, "") // remove non-numeric, non-separator chars
+                .split(/[\s,]+/)
+                .filter(Boolean)
+                .map((x: string) => x.trim())
+                .filter((x: string) => x.length > 0);
+
+            // If any prize is longer than 3 digits, split it into 3-digit chunks
+            let expanded: string[] = [];
+            for (const p of prizes) {
+                if (p.length === 3) {
+                    expanded.push(p);
+                } else if (p.length > 3) {
+                    // Split into 3-digit groups
+                    for (let i = 0; i < p.length; i += 3) {
+                        const chunk = p.slice(i, i + 3);
+                        if (chunk.length === 3) expanded.push(chunk);
+                    }
+                }
+            }
+            // Only take the first 30
+            expanded = expanded.slice(0, 30);
+
+            if (expanded.length < 30) {
+                Alert.alert(
+                    "Not enough prizes",
+                    `Found only ${expanded.length} prizes in clipboard. 30 required.`
+                );
+                // Optionally, fill the rest with empty strings
+                while (expanded.length < 30) expanded.push("");
+            }
+
+            setForm((prev) => ({
+                ...prev,
+                complementary_prizes: expanded,
+            }));
+
+            // Focus the first empty complementary input after paste
+            setTimeout(() => {
+                const firstEmpty = expanded.findIndex((v) => !v);
+                if (firstEmpty !== -1) {
+                    complementaryRefs[firstEmpty].current?.focus();
+                }
+            }, 100);
+
+        } catch (err) {
+            Alert.alert("Paste Error", "Failed to read from clipboard.");
+        }
     };
 
     return (
@@ -70,12 +154,20 @@ const DrawResultForm = ({ onSubmit, initialData }: Props) => {
                                 </Text>
                                 <View className="w-24 border-l border-gray-300 px-2 py-1.5">
                                     <TextInput
+                                        ref={mainPrizeRefs[idx]}
                                         className="text-center text-[13px] font-mono font-bold text-gray-900 bg-white rounded-md border border-gray-300 px-2 py-1"
                                         keyboardType="numeric"
                                         placeholder="e.g. 123"
                                         value={typeof form[key] === "string" ? form[key] : ""}
-                                        onChangeText={(text) => handleInput(key, text)}
+                                        onChangeText={(text) => handleInput(key, text, idx)}
                                         maxLength={10}
+                                        returnKeyType={idx < mainPrizeRefs.length - 1 ? "next" : "done"}
+                                        blurOnSubmit={idx === mainPrizeRefs.length - 1}
+                                        onSubmitEditing={() => {
+                                            if (idx < mainPrizeRefs.length - 1) {
+                                                mainPrizeRefs[idx + 1].current?.focus();
+                                            }
+                                        }}
                                     />
                                 </View>
                             </View>
@@ -83,28 +175,55 @@ const DrawResultForm = ({ onSubmit, initialData }: Props) => {
                     </View>
 
                     {/* Complementary grid style inputs */}
-                    <Text className="mx-4 mt-8 mb-2 text-base font-semibold text-gray-700 tracking-wide">
-                        Complementary Prizes
-                    </Text>
+                    <View className="mx-4 flex-row items-center mt-8 mb-2">
+                        <Text className="flex-1 text-base font-semibold text-gray-700 tracking-wide">
+                            Complementary Prizes
+                        </Text>
+                        <TouchableOpacity
+                            onPress={handlePasteComplementary}
+                            className="ml-2 flex-row items-center bg-green-100 border border-green-400 px-3 py-1.5 rounded-lg"
+                            activeOpacity={0.8}
+                            style={{
+                                shadowColor: "#16a34a",
+                                shadowOffset: { width: 0, height: 1 },
+                                shadowOpacity: 0.08,
+                                shadowRadius: 2,
+                            }}
+                        >
+                            <Clipboard color="#16a34a" size={18} />
+                            <Text className="ml-1 text-green-700 text-xs font-semibold">Paste</Text>
+                        </TouchableOpacity>
+                    </View>
                     <View className="mx-4 border border-gray-300 rounded-lg overflow-hidden mb-10">
                         {Array.from({ length: Math.ceil(form.complementary_prizes.length / 3) }).map((_, r) => (
                             <View key={r} className="flex-row border-b border-gray-200">
-                                {form.complementary_prizes.slice(r * 3, r * 3 + 3).map((val: string, cIdx: number) => (
-                                    <View
-                                        key={r * 3 + cIdx}
-                                        className="flex-1 border-r border-gray-200 px-2 py-2 bg-white"
-                                        style={{ minWidth: 0 }}
-                                    >
-                                        <TextInput
-                                            className="text-center text-[13px] font-mono font-bold text-gray-900 bg-gray-50 rounded-md border border-gray-300 px-2 py-1"
-                                            keyboardType="numeric"
-                                            placeholder={`Prize ${r * 3 + cIdx + 1}`}
-                                            value={val}
-                                            onChangeText={(text) => handleComplementaryChange(r * 3 + cIdx, text)}
-                                            maxLength={10}
-                                        />
-                                    </View>
-                                ))}
+                                {form.complementary_prizes.slice(r * 3, r * 3 + 3).map((val: string, cIdx: number) => {
+                                    const globalIdx = r * 3 + cIdx;
+                                    return (
+                                        <View
+                                            key={globalIdx}
+                                            className="flex-1 border-r border-gray-200 px-2 py-2 bg-white"
+                                            style={{ minWidth: 0 }}
+                                        >
+                                            <TextInput
+                                                ref={complementaryRefs[globalIdx]}
+                                                className="text-center text-[13px] font-mono font-bold text-gray-900 bg-gray-50 rounded-md border border-gray-300 px-2 py-1"
+                                                keyboardType="numeric"
+                                                placeholder={`Prize ${globalIdx + 1}`}
+                                                value={val}
+                                                onChangeText={(text) => handleComplementaryChange(globalIdx, text)}
+                                                maxLength={10}
+                                                returnKeyType={globalIdx < complementaryRefs.length - 1 ? "next" : "done"}
+                                                blurOnSubmit={globalIdx === complementaryRefs.length - 1}
+                                                onSubmitEditing={() => {
+                                                    if (globalIdx < complementaryRefs.length - 1) {
+                                                        complementaryRefs[globalIdx + 1].current?.focus();
+                                                    }
+                                                }}
+                                            />
+                                        </View>
+                                    );
+                                })}
                                 {/* Fill empty cells if needed */}
                                 {new Array(3 - form.complementary_prizes.slice(r * 3, r * 3 + 3).length)
                                     .fill("")
