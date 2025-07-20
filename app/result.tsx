@@ -44,6 +44,9 @@ const ResultPage: React.FC = () => {
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [filterDate, setFilterDate] = useState<Date | null>(null);
 
+    console.log("selectedDraw", selectedDraw);
+
+
     const { data, isLoading, error, refetch } = useQuery<DrawResult | null>({
         queryKey: ["/draw-result/result/", selectedDraw?.id, filterDate?.toDateString()],
         queryFn: async () => {
@@ -53,11 +56,14 @@ const ResultPage: React.FC = () => {
         enabled: !!selectedDraw?.id,
     });
 
+    console.log("error", error);
+
+
     /* ------------------- helpers ------------------- */
     const handleFormSubmit = async (resultData: any) => {
         await createDrawResult.mutateAsync({
             ...resultData,
-            draw_id: selectedDraw!.id,
+            draw_session: selectedDraw!.id,
         });
         setMode("view");
         setFormData(null);
@@ -208,23 +214,24 @@ const ResultPage: React.FC = () => {
             {/* Complementary grid */}
             {!isLoading && data && (
                 <View className="mx-4 mt-6 mb-10 border border-gray-300 rounded-lg overflow-hidden">
-                    {Array.from({ length: Math.ceil(data.complementary_prizes.length / 3) }).map((_, r) => (
-                        <View key={r} className="flex-row border-b border-gray-200">
-                            {data.complementary_prizes.slice(r * 3, r * 3 + 3).map((p, cIdx) => (
-                                <Text
-                                    key={p}
-                                    className="flex-1 py-2 text-center text-[12px] font-mono border-r border-gray-200"
-                                >
-                                    {p}
-                                </Text>
-                            ))}
-                            {new Array(3 - data.complementary_prizes.slice(r * 3, r * 3 + 3).length)
-                                .fill("")
-                                .map((_, i) => (
-                                    <Text key={`empty-${i}`} className="flex-1 border-r border-gray-200" />
+                    {Array.from({ length: Math.ceil(data.complementary_prizes.length / 3) }).map((_, r) => {
+                        const rowPrizes = data.complementary_prizes.slice(r * 3, r * 3 + 3);
+                        return (
+                            <View key={`row-${r}`} className="flex-row border-b border-gray-200">
+                                {rowPrizes.map((p, cIdx) => (
+                                    <Text
+                                        key={`prize-${r}-${cIdx}`}
+                                        className="flex-1 py-2 text-center text-[12px] font-mono border-r border-gray-200"
+                                    >
+                                        {p}
+                                    </Text>
                                 ))}
-                        </View>
-                    ))}
+                                {Array.from({ length: 3 - rowPrizes.length }).map((_, i) => (
+                                    <Text key={`empty-${r}-${i}`} className="flex-1 border-r border-gray-200" />
+                                ))}
+                            </View>
+                        );
+                    })}
                 </View>
             )}
 

@@ -6,6 +6,7 @@ import "../global.css";
 import ReactQueryProvider from "@/providers/react-query-provider";
 import useDrawStore from "@/store/draw";
 import { getThemeColors } from "@/utils/color";
+import { AlertNotificationRoot } from 'react-native-alert-notification';
 
 
 export default function RootLayout() {
@@ -24,6 +25,7 @@ export default function RootLayout() {
 
   return (
     <ReactQueryProvider>
+      <AlertNotificationRoot>
       <Stack>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
@@ -141,6 +143,7 @@ export default function RootLayout() {
         />
         <Stack.Screen name="+not-found" />
       </Stack>
+      </AlertNotificationRoot>
     </ReactQueryProvider>
   );
 }
