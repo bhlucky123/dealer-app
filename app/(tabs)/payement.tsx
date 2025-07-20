@@ -3,7 +3,20 @@ import api from "@/utils/axios";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Platform, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
 type AgentOrDealer = {
     id: number;
@@ -50,24 +63,14 @@ export default function PaymentTab() {
     const { user } = useAuthStore();
     const queryClient = useQueryClient();
 
-    // State to hold input values for each agent/dealer
-    const [inputAmounts, setInputAmounts] = useState<{ [id: number]: string }>({});
-    const [inputDates, setInputDates] = useState<{ [id: number]: string }>({});
-    const [showDatePicker, setShowDatePicker] = useState<{ [id: number]: boolean }>({});
-    const [datePickerSelectedId, setDatePickerSelectedId] = useState<number | null>(null);
+    // Modal state
+    const [modalVisible, setModalVisible] = useState(false);
+    const [modalItem, setModalItem] = useState<AgentOrDealer | null>(null);
+    const [modalAmount, setModalAmount] = useState<string>("");
+    const [modalDate, setModalDate] = useState<string>("");
+    const [showModalDatePicker, setShowModalDatePicker] = useState(false);
 
-    // Fetch agents with pending balance (for ADMIN)
-    const {
-        data: agentsData,
-        isLoading: isAgentsLoading,
-        refetch: refetchAgents,
-    } = useQuery<{ agents_with_pending_balance: AgentOrDealer[] }>({
-        queryKey: ["/draw-payment/agents-with-pending-balance"],
-        queryFn: () => api.get(`/draw-payment/agents-with-pending-balance/`).then(res => res.data),
-        enabled: user?.user_type === "DEALER",
-    });
-
-    // Fetch dealers with pending balance (for DEALER)
+    // Fetch dealers with pending balance (for ADMIN)
     const {
         data: dealersData,
         isLoading: isDealersLoading,
@@ -78,42 +81,20 @@ export default function PaymentTab() {
         enabled: user?.user_type === "ADMIN",
     });
 
-    console.log("dealersData", dealersData);
-
-
-    // Mutation for ADMIN to update agent's balance
-    const agentToDealerPaymentMutation = useMutation({
-        mutationFn: async ({
-            agentId,
-            amount,
-            date_received,
-        }: {
-            agentId: number;
-            amount: number;
-            date_received: string;
-        }) => {
-            return api.post(`/draw-payment/agent-to-dealer/${agentId}/`, {
-                amount,
-                date_received,
-            });
-        },
-        onSuccess: () => {
-            refetchAgents();
-            Alert.alert("Success", "Agent balance updated successfully");
-        },
-        onError: (error: any) => {
-            // Try to show backend error message if available
-            let msg = "Failed to update agent balance";
-            if (error?.response?.data?.date_received) {
-                msg = error.response.data.date_received.join("\n");
-            } else if (error?.response?.data?.agent) {
-                msg = error.response.data.agent.join("\n");
-            }
-            Alert.alert("Error", msg);
-        }
+    // Fetch agents with pending balance (for DEALER)
+    const {
+        data: agentsData,
+        isLoading: isAgentsLoading,
+        refetch: refetchAgents,
+    } = useQuery<{ agents_with_pending_balance: AgentOrDealer[] }>({
+        queryKey: ["/draw-payment/agents-with-pending-balance"],
+        queryFn: () => api.get(`/draw-payment/agents-with-pending-balance/`).then(res => res.data),
+        enabled: user?.user_type === "DEALER",
     });
 
-    // Mutation for DEALER to update dealer's balance
+    console.log("dealersData", dealersData);
+
+    // Mutation for ADMIN to update dealer's balance
     const dealerToAdminPaymentMutation = useMutation({
         mutationFn: async ({
             dealerId,
@@ -131,10 +112,10 @@ export default function PaymentTab() {
         },
         onSuccess: () => {
             refetchDealers();
+            setModalVisible(false);
             Alert.alert("Success", "Dealer balance updated successfully");
         },
         onError: (error: any) => {
-            // Try to show backend error message if available
             let msg = "Failed to update dealer balance";
             if (error?.response?.data?.date_received) {
                 msg = error.response.data.date_received.join("\n");
@@ -145,49 +126,75 @@ export default function PaymentTab() {
         }
     });
 
-    // Handler for updating input values
-    const handleInputChange = (id: number, value: string) => {
-        setInputAmounts((prev) => ({ ...prev, [id]: value }));
+    // Mutation for DEALER to update agent's balance
+    const agentToDealerPaymentMutation = useMutation({
+        mutationFn: async ({
+            agentId,
+            amount,
+            date_received,
+        }: {
+            agentId: number;
+            amount: number;
+            date_received: string;
+        }) => {
+            return api.post(`/draw-payment/agent-to-dealer/${agentId}/`, {
+                amount,
+                date_received,
+            });
+        },
+        onSuccess: () => {
+            refetchAgents();
+            setModalVisible(false);
+            Alert.alert("Success", "Agent balance updated successfully");
+        },
+        onError: (error: any) => {
+            let msg = "Failed to update agent balance";
+            if (error?.response?.data?.date_received) {
+                msg = error.response.data.date_received.join("\n");
+            } else if (error?.response?.data?.agent) {
+                msg = error.response.data.agent.join("\n");
+            }
+            Alert.alert("Error", msg);
+        }
+    });
+
+    // Open modal for a specific agent/dealer
+    const openUpdateModal = (item: AgentOrDealer) => {
+        setModalItem(item);
+        setModalAmount("");
+        setModalDate("");
+        setModalVisible(true);
     };
 
-    // Handler for date picker open
-    const handleOpenDatePicker = (id: number) => {
-        setDatePickerSelectedId(id);
-        setShowDatePicker((prev) => ({ ...prev, [id]: true }));
-    };
-
-    // Handler for date picker change
-    const handleDateChange = (event: any, selectedDate?: Date) => {
-        if (datePickerSelectedId === null) return;
-        setShowDatePicker((prev) => ({ ...prev, [datePickerSelectedId!]: Platform.OS === "ios" })); // keep open on iOS, close on Android
+    // Handler for modal date picker
+    const handleModalDateChange = (_event: any, selectedDate?: Date) => {
+        setShowModalDatePicker(Platform.OS === "ios");
         if (selectedDate) {
-            // Format as YYYY-MM-DD for server
-            const formatted = formatDateServer(selectedDate);
-            setInputDates((prev) => ({ ...prev, [datePickerSelectedId!]: formatted }));
+            setModalDate(formatDateServer(selectedDate));
         }
     };
 
-    // Handler for submitting payment
-    const handleSubmit = (id: number) => {
-        const amount = Number(inputAmounts[id]);
-        // Always send to server as yyyy-mm-dd
-        const date_received = inputDates[id] || formatDateServer(new Date()); // Default to today if not set
+    // Handler for submitting payment from modal
+    const handleModalSubmit = () => {
+        if (!modalItem) return;
+        const amount = Number(modalAmount);
+        const date_received = modalDate || formatDateServer(new Date());
 
-        // Validate date format YYYY-MM-DD
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date_received)) {
             Alert.alert("Invalid Date", "Please select a valid date in YYYY-MM-DD format.");
             return;
         }
-
         if (!amount || amount <= 0) {
             Alert.alert("Invalid Amount", "Please enter a valid amount.");
             return;
         }
 
+        console.log("modalItem", modalItem);
+
         if (user?.user_type === "ADMIN") {
-            agentToDealerPaymentMutation.mutate({ agentId: id, amount, date_received });
+            dealerToAdminPaymentMutation.mutate({ dealerId: modalItem.id, amount, date_received });
         } else if (user?.user_type === "DEALER") {
-            dealerToAdminPaymentMutation.mutate({ dealerId: id, amount, date_received });
+            agentToDealerPaymentMutation.mutate({ agentId: modalItem.id, amount, date_received });
         }
     };
 
@@ -211,81 +218,33 @@ export default function PaymentTab() {
                 Balance: <Text style={{ fontWeight: "bold" }}>₹ {item.balance_amount.toLocaleString()}</Text>
             </Text>
             <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
-                <TextInput
-                    placeholder="Amount"
-                    keyboardType="numeric"
-                    value={inputAmounts[item.id] || ""}
-                    onChangeText={(val) => handleInputChange(item.id, val)}
-                    style={{
-                        backgroundColor: "#fff",
-                        borderRadius: 8,
-                        borderWidth: 1,
-                        borderColor: "#cbd5e1",
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        marginRight: 8,
-                        flex: 1,
-                    }}
-                />
                 <TouchableOpacity
-                    onPress={() => handleOpenDatePicker(item.id)}
-                    style={{
-                        backgroundColor: "#fff",
-                        borderRadius: 8,
-                        borderWidth: 1,
-                        borderColor: "#cbd5e1",
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        marginRight: 8,
-                        flex: 1.2,
-                        justifyContent: "center",
+                    onPress={() => {
+                        console.log("item", item);
+
+                        openUpdateModal(item)
                     }}
-                    activeOpacity={0.85}
-                >
-                    <Text style={{ color: inputDates[item.id] ? "#0f172a" : "#64748b" }}>
-                        {inputDates[item.id]
-                            ? formatDateDisplay(inputDates[item.id])
-                            : "Select Date"}
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    onPress={() => handleSubmit(item.id)}
                     style={{
                         backgroundColor: "#2563eb",
                         paddingVertical: 8,
                         paddingHorizontal: 16,
                         borderRadius: 8,
+                        flex: 1,
+                        alignItems: "center",
                     }}
-                    disabled={
-                        (user?.user_type === "ADMIN" && agentToDealerPaymentMutation.isPending) ||
-                        (user?.user_type === "DEALER" && dealerToAdminPaymentMutation.isPending)
-                    }
                 >
                     <Text style={{ color: "#fff", fontWeight: "bold" }}>
-                        Update
+                        Update Balance
                     </Text>
                 </TouchableOpacity>
             </View>
-            {showDatePicker[item.id] && (
-                <DateTimePicker
-                    value={
-                        inputDates[item.id]
-                            ? new Date(inputDates[item.id])
-                            : new Date()
-                    }
-                    mode="date"
-                    display={Platform.OS === "ios" ? "spinner" : "default"}
-                    onChange={handleDateChange}
-                    maximumDate={new Date()}
-                />
-            )}
         </View>
     );
 
     // Loading state
     if (
-        (user?.user_type === "ADMIN" && isAgentsLoading) ||
-        (user?.user_type === "DEALER" && isDealersLoading)
+        (user?.user_type === "ADMIN" && isDealersLoading) ||
+        (user?.user_type === "DEALER" && isAgentsLoading)
     ) {
         return (
             <View className="flex-1 items-center justify-center bg-gray-900">
@@ -298,23 +257,23 @@ export default function PaymentTab() {
     // No data state
     const listData =
         user?.user_type === "ADMIN"
-            ? agentsData?.agents_with_pending_balance || []
+            ? dealersData?.dealers_with_pending_balance || []
             : user?.user_type === "DEALER"
-                ? dealersData?.dealers_with_pending_balance || []
+                ? agentsData?.agents_with_pending_balance || []
                 : [];
 
     return (
         <View className="flex-1 pt-8 pb-20">
             {/* <Text className="text-2xl font-bold text-center mb-4">
                 {user?.user_type === "ADMIN"
-                    ? "Agents' Pending Balances"
+                    ? "Dealers' Pending Balances"
                     : user?.user_type === "DEALER"
-                        ? "Dealers' Pending Balances"
+                        ? "Agents' Pending Balances"
                         : "Payment Page"}
             </Text> */}
             {listData.length === 0 ? (
                 <Text className="text-center text-gray-300 mt-10">
-                    No {user?.user_type === "ADMIN" ? "agents" : "dealers"} with pending balance.
+                    No {user?.user_type === "ADMIN" ? "dealers" : "agents"} with pending balance.
                 </Text>
             ) : (
                 <FlatList
@@ -324,6 +283,137 @@ export default function PaymentTab() {
                     contentContainerStyle={{ paddingBottom: 32 }}
                 />
             )}
+
+            {/* Modal for updating balance */}
+            <Modal
+                visible={modalVisible}
+                animationType="slide"
+                transparent
+                onRequestClose={() => setModalVisible(false)}
+            >
+                <View
+                    style={{
+                        flex: 1,
+                        backgroundColor: "rgba(0,0,0,0.3)",
+                        justifyContent: "center",
+                        alignItems: "center",
+                    }}
+                >
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === "ios" ? "padding" : undefined}
+                        style={{
+                            width: "90%",
+                            maxWidth: 400,
+                            backgroundColor: "#fff",
+                            borderRadius: 16,
+                            padding: 24,
+                            shadowColor: "#000",
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.2,
+                            shadowRadius: 8,
+                            elevation: 5,
+                        }}
+                    >
+                        <ScrollView
+                            contentContainerStyle={{ flexGrow: 1 }}
+                            keyboardShouldPersistTaps="handled"
+                        >
+                            <Text style={{ fontWeight: "bold", fontSize: 18, color: "#1e293b", marginBottom: 8, textAlign: "center" }}>
+                                {user?.user_type === "ADMIN" ? "Update Dealer Balance" : "Update Agent Balance"}
+                            </Text>
+                            <Text style={{ color: "#334155", marginBottom: 12, textAlign: "center" }}>
+                                {modalItem?.name}
+                            </Text>
+                            <Text style={{ color: "#64748b", marginBottom: 4 }}>
+                                Current Balance: <Text style={{ fontWeight: "bold" }}>₹ {modalItem?.balance_amount?.toLocaleString()}</Text>
+                            </Text>
+                            <TextInput
+                                placeholder="Amount"
+                                keyboardType="numeric"
+                                value={modalAmount}
+                                onChangeText={setModalAmount}
+                                style={{
+                                    backgroundColor: "#f3f4f6",
+                                    borderRadius: 8,
+                                    borderWidth: 1,
+                                    borderColor: "#cbd5e1",
+                                    paddingHorizontal: 10,
+                                    paddingVertical: 8,
+                                    marginTop: 12,
+                                    marginBottom: 12,
+                                    fontSize: 16,
+                                }}
+                            />
+                            <TouchableOpacity
+                                onPress={() => setShowModalDatePicker(true)}
+                                style={{
+                                    backgroundColor: "#f3f4f6",
+                                    borderRadius: 8,
+                                    borderWidth: 1,
+                                    borderColor: "#cbd5e1",
+                                    paddingHorizontal: 10,
+                                    paddingVertical: 10,
+                                    marginBottom: 12,
+                                    justifyContent: "center",
+                                }}
+                                activeOpacity={0.85}
+                            >
+                                <Text style={{ color: modalDate ? "#0f172a" : "#64748b", fontSize: 16 }}>
+                                    {modalDate
+                                        ? formatDateDisplay(modalDate)
+                                        : "Select Date"}
+                                </Text>
+                            </TouchableOpacity>
+                            {showModalDatePicker && (
+                                <DateTimePicker
+                                    value={
+                                        modalDate
+                                            ? new Date(modalDate)
+                                            : new Date()
+                                    }
+                                    mode="date"
+                                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                                    onChange={handleModalDateChange}
+                                    maximumDate={new Date()}
+                                />
+                            )}
+                            <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 16 }}>
+                                <Pressable
+                                    onPress={() => setModalVisible(false)}
+                                    style={{
+                                        backgroundColor: "#e5e7eb",
+                                        paddingVertical: 10,
+                                        paddingHorizontal: 24,
+                                        borderRadius: 8,
+                                    }}
+                                >
+                                    <Text style={{ color: "#334155", fontWeight: "bold" }}>Cancel</Text>
+                                </Pressable>
+                                <Pressable
+                                    onPress={handleModalSubmit}
+                                    style={{
+                                        backgroundColor: "#2563eb",
+                                        paddingVertical: 10,
+                                        paddingHorizontal: 24,
+                                        borderRadius: 8,
+                                    }}
+                                    disabled={
+                                        (user?.user_type === "ADMIN" && dealerToAdminPaymentMutation.isPending) ||
+                                        (user?.user_type === "DEALER" && agentToDealerPaymentMutation.isPending)
+                                    }
+                                >
+                                    <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                                        {((user?.user_type === "ADMIN" && dealerToAdminPaymentMutation.isPending) ||
+                                            (user?.user_type === "DEALER" && agentToDealerPaymentMutation.isPending))
+                                            ? "Updating..."
+                                            : "Update"}
+                                    </Text>
+                                </Pressable>
+                            </View>
+                        </ScrollView>
+                    </KeyboardAvoidingView>
+                </View>
+            </Modal>
         </View>
     );
 }
