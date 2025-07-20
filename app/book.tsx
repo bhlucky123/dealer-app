@@ -3,6 +3,7 @@ import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
 import { getThemeColors } from "@/utils/color";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { router } from "expo-router";
 import { Clipboard } from "lucide-react-native";
 import React, { useRef, useState } from "react";
 import * as RNClipboard from "react-native"; // For Clipboard.getString()
@@ -14,10 +15,13 @@ import {
   ScrollView,
   Text,
   TextInput,
+  ToastAndroid,
   TouchableOpacity,
   View,
 } from "react-native";
+import { ALERT_TYPE, Dialog } from "react-native-alert-notification";
 import RNPickerSelect from "react-native-picker-select";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type BookingDetail = {
   lsk: string;
@@ -122,17 +126,33 @@ const BookingScreen: React.FC = () => {
       clearInputs();
       setEditIndex(null);
     },
-    onError: (error) => {
+    onError: (error: any) => {
+      let errorMessage = "Failed to submit.";
+      // Try to extract a user-friendly error message
       if (error?.message) {
-        console.error("Backend Message:", error.message);
+        if (typeof error.message === "string") {
+          errorMessage = error.message;
+        } else if (typeof error.message === "object") {
+          // Check for common error formats
+          if (error.message.non_field_errors && Array.isArray(error.message.non_field_errors)) {
+            errorMessage = error.message.non_field_errors.join("\n");
+          } else if (error.message.detail) {
+            errorMessage = error.message.detail;
+          } else {
+            // Fallback: show stringified object
+            errorMessage = JSON.stringify(error.message);
+          }
+        }
       }
-      //  else if (data?.detail) {
-      //   console.error("Backend Detail:", data.detail);
-      // } else {
-      //   console.error("Unknown backend error format", data);
-      // }
       console.log("error - while submitting booking", error);
-      Alert.alert("Error", "Failed to submit.");
+      Dialog.show({
+        type: ALERT_TYPE.DANGER,
+        title: 'Error',
+        textBody: errorMessage,
+        button: 'Close',
+
+      });
+
     },
   });
 
@@ -640,13 +660,13 @@ const BookingScreen: React.FC = () => {
           const { getString } = require("@react-native-clipboard/clipboard");
           clipboardText = await getString();
         } catch (e) {
-          Alert.alert("Clipboard Error", "Could not read clipboard.");
+          ToastAndroid.show('Could not read clipboard.', ToastAndroid.SHORT);
           return;
         }
       }
 
       if (!clipboardText || !clipboardText.trim()) {
-        Alert.alert("Clipboard Empty", "No text found in clipboard.");
+        ToastAndroid.show('Clipboard is empty.', ToastAndroid.SHORT);
         return;
       }
 
@@ -764,14 +784,20 @@ const BookingScreen: React.FC = () => {
       }
 
       if (added === 0) {
-        Alert.alert("No valid bookings found in clipboard.");
+        ToastAndroid.show('No valid bookings found in clipboard.', ToastAndroid.SHORT);
       } else {
-        Alert.alert("Success", `Added ${added} booking${added > 1 ? "s" : ""} from clipboard.`);
+        ToastAndroid.show(`Added ${added} booking${added > 1 ? "s" : ""} from clipboard.`, ToastAndroid.SHORT);
       }
     } catch (err) {
       Alert.alert("Clipboard Error", "Could not read clipboard.");
     }
   };
+
+
+  const handleBackClick = () => {
+    setSelectedDraw(null)
+    router.push("/(tabs)");
+  }
 
   if (isError || error || !DrawSessionDetails?.session?.active) {
     return (
@@ -781,10 +807,7 @@ const BookingScreen: React.FC = () => {
             You're not allowed to book the number now. Try later
           </Text>
           <TouchableOpacity
-            onPress={() => {
-              setSelectedDraw(null)
-              router.push("/(tabs)");
-            }}
+            onPress={handleBackClick}
             className="mt-4 bg-red-600 px-6 py-2 rounded-lg min-w-[120px] active:opacity-85"
             activeOpacity={0.85}
           >
@@ -798,103 +821,76 @@ const BookingScreen: React.FC = () => {
   }
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1"
-      behavior="padding"
-      keyboardVerticalOffset={80}
-    >
-      <View className="p-4 bg-white flex-1 mb-10">
-        <View className="flex-row items-center mb-4 gap-2">
-          <TextInput
-            placeholder="Customer Name"
-            value={customerName}
-            onChangeText={setCustomerName}
-            className="flex-1 border border-gray-400 rounded px-3 py-2 bg-white text-base"
-            placeholderTextColor="#9ca3af"
-          />
-          <TouchableOpacity
-            onPress={handlePastBookings}
-            className="ml-2 p-2 bg-gray-100 rounded border border-gray-300 active:bg-gray-200"
-            accessibilityLabel="Paste from clipboard"
-          >
-            <Clipboard width={24} height={24} color="#374151" />
-          </TouchableOpacity>
-        </View>
-
-        <View className="flex-row items-center mb-4 gap-2">
-          {[1, 2, 3].map((num) => (
+    <SafeAreaView className="flex-1">
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior="padding"
+        keyboardVerticalOffset={80}
+      >
+        <View className="p-4 flex-1 mb-10">
+          <View className="flex-row items-center mb-4 gap-2">
+            <TextInput
+              placeholder="Customer Name"
+              value={customerName}
+              onChangeText={setCustomerName}
+              className="flex-1 border border-gray-400 rounded px-3 py-2 bg-white text-base"
+              placeholderTextColor="#9ca3af"
+            />
             <TouchableOpacity
-              key={num}
-              onPress={() => handleDrawSession(num.toString())}
-              className={`px-4 py-1 rounded-full border ${drawSession === num.toString() ? "bg-black" : "border-gray-400"
-                }`}
+              onPress={handlePastBookings}
+              className="ml-2 p-2 bg-gray-100 rounded border border-gray-300 active:bg-gray-200"
+              accessibilityLabel="Paste from clipboard"
             >
-              <Text
-                className={`${drawSession === num.toString() ? "text-white" : "text-black"
+              <Clipboard width={24} height={24} color="#374151" />
+            </TouchableOpacity>
+          </View>
+
+          <View className="flex-row items-center mb-4 gap-2">
+            {[1, 2, 3].map((num) => (
+              <TouchableOpacity
+                key={num}
+                onPress={() => handleDrawSession(num.toString())}
+                className={`px-4 py-1 rounded-full border ${drawSession === num.toString() ? "bg-black" : "border-gray-400"
                   }`}
               >
-                {num}
-              </Text>
-            </TouchableOpacity>
-          ))}
-          <View className="flex-1 ml-2">
-            <RNPickerSelect
-              onValueChange={setSelectedRange}
-              items={rangeOptions}
-              value={selectedRange}
-              style={{
-                viewContainer: {
-                  borderColor: "#9ca3af",
-                  borderWidth: 1,
-                  borderRadius: 6,
-                },
-              }}
-            />
+                <Text
+                  className={`${drawSession === num.toString() ? "text-white" : "text-black"
+                    }`}
+                >
+                  {num}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <View className="flex-1 ml-2">
+              <RNPickerSelect
+                onValueChange={setSelectedRange}
+                items={rangeOptions}
+                value={selectedRange}
+                style={{
+                  viewContainer: {
+                    borderColor: "#9ca3af",
+                    borderWidth: 1,
+                    borderRadius: 6,
+                  },
+                }}
+              />
+            </View>
           </View>
-        </View>
 
-        {/* Inputs for Book, Range, Set, Different */}
-        <View className="flex-row gap-2 mb-3">
-          {/* Start/Number input */}
-          <TextInput
-            ref={numInputRef}
-            value={numberInput}
-            onChangeText={(text) => {
-              const formatted = text.replace(/[^0-9]/g, "");
-              setNumberInput(formatted);
-
-              const requiredLength = parseInt(drawSession);
-              if (formatted.length >= requiredLength) {
-                if (selectedRange === "Range" || selectedRange === "Different") {
-                  endNumInputRef.current?.focus();
-                } else {
-                  countInputRef.current?.focus();
-                }
-              }
-            }}
-            maxLength={3}
-            keyboardType="numeric"
-            placeholder={
-              selectedRange === "Range" || selectedRange === "Different"
-                ? "Start"
-                : "Number"
-            }
-            className="flex-1 border border-gray-400 px-3 py-2 rounded"
-          />
-
-          {/* End input for Range and Different */}
-          {(selectedRange === "Range" || selectedRange === "Different") && (
+          {/* Inputs for Book, Range, Set, Different */}
+          <View className="flex-row gap-2 mb-3">
+            {/* Start/Number input */}
             <TextInput
-              ref={endNumInputRef}
-              value={endNumberInput}
+              ref={numInputRef}
+              value={numberInput}
               onChangeText={(text) => {
                 const formatted = text.replace(/[^0-9]/g, "");
-                setEndNumberInput(formatted);
+                setNumberInput(formatted);
 
                 const requiredLength = parseInt(drawSession);
                 if (formatted.length >= requiredLength) {
-                  if (selectedRange === "Different") {
-                    differenceInputRef.current?.focus();
+                  if (selectedRange === "Range" || selectedRange === "Different") {
+                    endNumInputRef.current?.focus();
                   } else {
                     countInputRef.current?.focus();
                   }
@@ -902,309 +898,338 @@ const BookingScreen: React.FC = () => {
               }}
               maxLength={3}
               keyboardType="numeric"
-              placeholder="End"
+              placeholder={
+                selectedRange === "Range" || selectedRange === "Different"
+                  ? "Start"
+                  : "Number"
+              }
               className="flex-1 border border-gray-400 px-3 py-2 rounded"
             />
-          )}
 
-          {/* Difference input for Different */}
-          {selectedRange === "Different" && (
+            {/* End input for Range and Different */}
+            {(selectedRange === "Range" || selectedRange === "Different") && (
+              <TextInput
+                ref={endNumInputRef}
+                value={endNumberInput}
+                onChangeText={(text) => {
+                  const formatted = text.replace(/[^0-9]/g, "");
+                  setEndNumberInput(formatted);
+
+                  const requiredLength = parseInt(drawSession);
+                  if (formatted.length >= requiredLength) {
+                    if (selectedRange === "Different") {
+                      differenceInputRef.current?.focus();
+                    } else {
+                      countInputRef.current?.focus();
+                    }
+                  }
+                }}
+                maxLength={3}
+                keyboardType="numeric"
+                placeholder="End"
+                className="flex-1 border border-gray-400 px-3 py-2 rounded"
+              />
+            )}
+
+            {/* Difference input for Different */}
+            {selectedRange === "Different" && (
+              <TextInput
+                ref={differenceInputRef}
+                value={differenceInput}
+                onChangeText={(text) => {
+                  const formatted = text.replace(/[^0-9]/g, "");
+                  setDifferenceInput(formatted);
+                  // Optionally, focus count after difference
+                  // countInputRef.current?.focus();
+                }}
+                maxLength={3}
+                keyboardType="numeric"
+                placeholder="Difference"
+                className="flex-1 border border-gray-400 px-3 py-2 rounded"
+              />
+            )}
+
+            {/* Count input */}
             <TextInput
-              ref={differenceInputRef}
-              value={differenceInput}
-              onChangeText={(text) => {
-                const formatted = text.replace(/[^0-9]/g, "");
-                setDifferenceInput(formatted);
-                // Optionally, focus count after difference
-                // countInputRef.current?.focus();
-              }}
-              maxLength={3}
+              ref={countInputRef}
+              value={countInput}
+              onChangeText={setCountInput}
               keyboardType="numeric"
-              placeholder="Difference"
+              placeholder="Count"
               className="flex-1 border border-gray-400 px-3 py-2 rounded"
             />
-          )}
 
-          {/* Count input */}
-          <TextInput
-            ref={countInputRef}
-            value={countInput}
-            onChangeText={setCountInput}
-            keyboardType="numeric"
-            placeholder="Count"
-            className="flex-1 border border-gray-400 px-3 py-2 rounded"
-          />
-
-          {/* B.Count input for 3-digit only */}
-          {drawSession === "3" && (
-            <TextInput
-              value={bCountInput}
-              onChangeText={setBCountInput}
-              keyboardType="numeric"
-              placeholder="B.Count"
-              className="flex-1 border border-gray-400 px-3 py-2 rounded"
-            />
-          )}
-        </View>
-
-        <View className="flex-row flex-wrap mb-3 gap-2">
-          {buttonsMap[drawSession]?.map((btn) => (
-            <TouchableOpacity
-              key={btn}
-              onPress={() => addBooking(btn)}
-              className="bg-green-700 py-2 rounded items-center"
-              style={{ flexGrow: 1, margin: 4 }}
-            >
-              <Text className="text-white font-semibold">{btn}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Table Header */}
-        <View className="border border-gray-400 rounded overflow-hidden flex-1">
-          <View className="flex-row bg-gray-200 border-gray-400 py-2 items-center">
-            <Text className="w-[12%] text-xs font-bold text-center">LSK</Text>
-            <Text className="w-[16%] text-xs font-bold text-center">
-              NUMBER
-            </Text>
-            <Text className="w-[12%] text-xs font-bold text-center">COUNT</Text>
-            <Text className="w-[20%] text-xs font-bold text-center">
-              AMOUNT
-            </Text>
-            <Text className="w-[20%] text-xs font-bold text-center">
-              D.AMOUNT
-            </Text>
-            <Text className="w-[12%] text-xs font-bold text-center">
-              C.AMOUNT
-            </Text>
-            <Text className="w-[8%] text-xs font-bold text-center"></Text>
+            {/* B.Count input for 3-digit only */}
+            {drawSession === "3" && (
+              <TextInput
+                value={bCountInput}
+                onChangeText={setBCountInput}
+                keyboardType="numeric"
+                placeholder="B.Count"
+                className="flex-1 border border-gray-400 px-3 py-2 rounded"
+              />
+            )}
           </View>
-          <ScrollView>
-            {bookingDetails.map((entry, index) => (
-              <View
-                key={index}
-                className="flex-row border-t border-gray-400 py-2 items-center"
+
+          <View className="flex-row flex-wrap mb-3 gap-2">
+            {buttonsMap[drawSession]?.map((btn) => (
+              <TouchableOpacity
+                key={btn}
+                onPress={() => addBooking(btn)}
+                className="bg-green-700 py-2 rounded items-center"
+                style={{ flexGrow: 1, margin: 4 }}
               >
-                <Text className="w-[12%] text-xs text-center">{entry.lsk}</Text>
-                <Text className="w-[16%] text-xs text-center">
-                  {entry.number}
-                </Text>
-                <Text className="w-[12%] text-xs text-center">
-                  {entry.count}
-                </Text>
-                <Text className="w-[20%] text-xs text-center">
-                  ₹ {entry.amount}
-                </Text>
-                <Text className="w-[20%] text-xs text-center">
-                  ₹ {entry.d_amount}
-                </Text>
-                <Text className="w-[12%] text-xs text-center">
-                  ₹ {entry.c_amount}
-                </Text>
-                <View className="w-[8%] flex-row justify-center items-center">
-                  <TouchableOpacity
-                    onPress={() => setEditIndex(index)}
-                    style={{ padding: 4 }}
-                  >
-                    <Text style={{ fontSize: 18 }}>⋮</Text>
-                  </TouchableOpacity>
-                  {/* 3-dot menu modal */}
-                  {editIndex === index && (
-                    <Modal
-                      transparent
-                      visible={editIndex === index}
-                      animationType="fade"
-                      onRequestClose={() => setEditIndex(null)}
+                <Text className="text-white font-semibold">{btn}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Table Header */}
+          <View className="border border-gray-400 rounded overflow-hidden flex-1">
+            <View className="flex-row bg-gray-200 border-gray-400 py-2 items-center">
+              <Text className="w-[12%] text-xs font-bold text-center">LSK</Text>
+              <Text className="w-[16%] text-xs font-bold text-center">
+                NUMBER
+              </Text>
+              <Text className="w-[12%] text-xs font-bold text-center">COUNT</Text>
+              <Text className="w-[20%] text-xs font-bold text-center">
+                AMOUNT
+              </Text>
+              <Text className="w-[20%] text-xs font-bold text-center">
+                D.AMOUNT
+              </Text>
+              <Text className="w-[12%] text-xs font-bold text-center">
+                C.AMOUNT
+              </Text>
+              <Text className="w-[8%] text-xs font-bold text-center"></Text>
+            </View>
+            <ScrollView>
+              {bookingDetails.map((entry, index) => (
+                <View
+                  key={index}
+                  className="flex-row border-t border-gray-400 py-2 items-center"
+                >
+                  <Text className="w-[12%] text-xs text-center">{entry.lsk}</Text>
+                  <Text className="w-[16%] text-xs text-center">
+                    {entry.number}
+                  </Text>
+                  <Text className="w-[12%] text-xs text-center">
+                    {entry.count}
+                  </Text>
+                  <Text className="w-[20%] text-xs text-center">
+                    ₹ {entry.amount}
+                  </Text>
+                  <Text className="w-[20%] text-xs text-center">
+                    ₹ {entry.d_amount}
+                  </Text>
+                  <Text className="w-[12%] text-xs text-center">
+                    ₹ {entry.c_amount}
+                  </Text>
+                  <View className="w-[8%] flex-row justify-center items-center">
+                    <TouchableOpacity
+                      onPress={() => setEditIndex(index)}
+                      style={{ padding: 4 }}
                     >
-                      <TouchableOpacity
-                        style={{
-                          flex: 1,
-                          backgroundColor: "rgba(0,0,0,0.2)",
-                          justifyContent: "center",
-                          alignItems: "center",
-                        }}
-                        activeOpacity={1}
-                        onPressOut={() => setEditIndex(null)}
+                      <Text style={{ fontSize: 18 }}>⋮</Text>
+                    </TouchableOpacity>
+                    {/* 3-dot menu modal */}
+                    {editIndex === index && (
+                      <Modal
+                        transparent
+                        visible={editIndex === index}
+                        animationType="fade"
+                        onRequestClose={() => setEditIndex(null)}
                       >
-                        <View
+                        <TouchableOpacity
                           style={{
-                            backgroundColor: "white",
-                            borderRadius: 8,
-                            paddingVertical: 8,
-                            paddingHorizontal: 20,
-                            minWidth: 120,
-                            elevation: 5,
-                            shadowColor: "#000",
-                            shadowOpacity: 0.1,
-                            shadowRadius: 10,
-                            shadowOffset: { width: 0, height: 2 },
+                            flex: 1,
+                            backgroundColor: "rgba(0,0,0,0.2)",
+                            justifyContent: "center",
+                            alignItems: "center",
                           }}
+                          activeOpacity={1}
+                          onPressOut={() => setEditIndex(null)}
                         >
-                          <TouchableOpacity
-                            onPress={() => {
-                              setEditIndex(null);
-                              handleEdit(index);
+                          <View
+                            style={{
+                              backgroundColor: "white",
+                              borderRadius: 8,
+                              paddingVertical: 8,
+                              paddingHorizontal: 20,
+                              minWidth: 120,
+                              elevation: 5,
+                              shadowColor: "#000",
+                              shadowOpacity: 0.1,
+                              shadowRadius: 10,
+                              shadowOffset: { width: 0, height: 2 },
                             }}
-                            style={{ paddingVertical: 10 }}
                           >
-                            <Text style={{ color: "blue", fontWeight: "bold" }}>
-                              Edit
-                            </Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            onPress={() => {
-                              setEditIndex(null);
-                              handleDelete(index);
+                            <TouchableOpacity
+                              onPress={() => {
+                                setEditIndex(null);
+                                handleEdit(index);
+                              }}
+                              style={{ paddingVertical: 10 }}
+                            >
+                              <Text style={{ color: "blue", fontWeight: "bold" }}>
+                                Edit
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => {
+                                setEditIndex(null);
+                                handleDelete(index);
+                              }}
+                              style={{ paddingVertical: 10 }}
+                            >
+                              <Text style={{ color: "red", fontWeight: "bold" }}>
+                                Delete
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        </TouchableOpacity>
+                      </Modal>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+
+        {/* Fixed footer for totals and submit */}
+        <View className="bg-gray-200 p-2 flex-row justify-between items-center">
+          <View>
+            <Text className="font-semibold text-xs">COUNT</Text>
+            <Text className="font-semibold text-xs text-center mt-1">
+              {totals.count}
+            </Text>
+          </View>
+          <View>
+            <Text className="font-semibold text-xs">D.AMOUNT</Text>
+            <Text className="font-semibold text-xs text-center mt-1">
+              ₹ {totals.d_amount}
+            </Text>
+          </View>
+          <View>
+            <Text className="font-semibold text-xs">C.AMOUNT</Text>
+            <Text className="font-semibold text-xs text-center mt-1">
+              ₹ {totals.c_amount}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={handleSubmit}
+            className="bg-green-800 rounded px-3 py-2"
+          >
+            <Text className="text-white text-center font-bold text-lg">
+              SUBMIT
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Modal for editing */}
+        <Modal visible={editModalVisible} transparent animationType="fade">
+          <View className="flex-1 justify-center items-center bg-black/50 px-4">
+            <View className="bg-white p-6 rounded-2xl w-full max-w-md shadow-lg">
+              <Text className="text-xl font-bold mb-4 text-center text-green-800">
+                Edit Booking
+              </Text>
+
+              <View className="mb-3">
+                <Text className="mb-1 font-semibold text-gray-700">Number</Text>
+                <TextInput
+                  placeholder="Number"
+                  keyboardType="numeric"
+                  value={editingEntry?.number?.toString() || ""}
+                  onChangeText={(text) =>
+                    setEditingEntry(
+                      (prev) =>
+                        prev && { ...prev, number: text.replace(/[^0-9]/g, "") }
+                    )
+                  }
+                  className="border border-gray-300 px-4 py-2 rounded-lg bg-gray-50 text-base"
+                  autoFocus
+                  returnKeyType="next"
+                />
+              </View>
+
+              <View className="mb-3">
+                <Text className="mb-1 font-semibold text-gray-700">Count</Text>
+                <TextInput
+                  placeholder="Count"
+                  keyboardType="numeric"
+                  value={editingEntry?.count?.toString() || ""}
+                  onChangeText={(text) =>
+                    setEditingEntry(
+                      (prev) => prev && { ...prev, count: parseInt(text) || 0 }
+                    )
+                  }
+                  className="border border-gray-300 px-4 py-2 rounded-lg bg-gray-50 text-base"
+                  returnKeyType="next"
+                />
+              </View>
+
+              <View className="mb-3">
+                <Text className="mb-1 font-semibold text-gray-700">Sub Type</Text>
+                <View className="flex-row gap-4 mt-2">
+                  {["SUPER", "BOX"].map((type) => (
+                    <TouchableOpacity
+                      key={type}
+                      className="flex-row items-center"
+                      onPress={() =>
+                        setEditingEntry(
+                          (prev) => prev && { ...prev, sub_type: type, lsk: type }
+                        )
+                      }
+                    >
+                      <View
+                        style={{
+                          height: 20,
+                          width: 20,
+                          borderRadius: 10,
+                          borderWidth: 2,
+                          borderColor: "#059669",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginRight: 8,
+                        }}
+                      >
+                        {editingEntry?.sub_type === type && (
+                          <View
+                            style={{
+                              height: 10,
+                              width: 10,
+                              borderRadius: 5,
+                              backgroundColor: "#059669",
                             }}
-                            style={{ paddingVertical: 10 }}
-                          >
-                            <Text style={{ color: "red", fontWeight: "bold" }}>
-                              Delete
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      </TouchableOpacity>
-                    </Modal>
-                  )}
+                          />
+                        )}
+                      </View>
+                      <Text className="text-base">{type}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               </View>
-            ))}
-          </ScrollView>
-        </View>
-      </View>
 
-      {/* Fixed footer for totals and submit */}
-      <View className="bg-gray-200 p-2 flex-row justify-between items-center">
-        <View>
-          <Text className="font-semibold text-xs">COUNT</Text>
-          <Text className="font-semibold text-xs text-center mt-1">
-            {totals.count}
-          </Text>
-        </View>
-        <View>
-          <Text className="font-semibold text-xs">D.AMOUNT</Text>
-          <Text className="font-semibold text-xs text-center mt-1">
-            ₹ {totals.d_amount}
-          </Text>
-        </View>
-        <View>
-          <Text className="font-semibold text-xs">C.AMOUNT</Text>
-          <Text className="font-semibold text-xs text-center mt-1">
-            ₹ {totals.c_amount}
-          </Text>
-        </View>
-        <TouchableOpacity
-          onPress={handleSubmit}
-          className="bg-green-800 rounded px-3 py-2"
-        >
-          <Text className="text-white text-center font-bold text-lg">
-            SUBMIT
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Modal for editing */}
-      <Modal visible={editModalVisible} transparent animationType="fade">
-        <View className="flex-1 justify-center items-center bg-black/50 px-4">
-          <View className="bg-white p-6 rounded-2xl w-full max-w-md shadow-lg">
-            <Text className="text-xl font-bold mb-4 text-center text-green-800">
-              Edit Booking
-            </Text>
-
-            <View className="mb-3">
-              <Text className="mb-1 font-semibold text-gray-700">Number</Text>
-              <TextInput
-                placeholder="Number"
-                keyboardType="numeric"
-                value={editingEntry?.number?.toString() || ""}
-                onChangeText={(text) =>
-                  setEditingEntry(
-                    (prev) =>
-                      prev && { ...prev, number: text.replace(/[^0-9]/g, "") }
-                  )
-                }
-                className="border border-gray-300 px-4 py-2 rounded-lg bg-gray-50 text-base"
-                autoFocus
-                returnKeyType="next"
-              />
-            </View>
-
-            <View className="mb-3">
-              <Text className="mb-1 font-semibold text-gray-700">Count</Text>
-              <TextInput
-                placeholder="Count"
-                keyboardType="numeric"
-                value={editingEntry?.count?.toString() || ""}
-                onChangeText={(text) =>
-                  setEditingEntry(
-                    (prev) => prev && { ...prev, count: parseInt(text) || 0 }
-                  )
-                }
-                className="border border-gray-300 px-4 py-2 rounded-lg bg-gray-50 text-base"
-                returnKeyType="next"
-              />
-            </View>
-
-            <View className="mb-3">
-              <Text className="mb-1 font-semibold text-gray-700">Sub Type</Text>
-              <View className="flex-row gap-4 mt-2">
-                {["SUPER", "BOX"].map((type) => (
-                  <TouchableOpacity
-                    key={type}
-                    className="flex-row items-center"
-                    onPress={() =>
-                      setEditingEntry(
-                        (prev) => prev && { ...prev, sub_type: type, lsk: type }
-                      )
-                    }
-                  >
-                    <View
-                      style={{
-                        height: 20,
-                        width: 20,
-                        borderRadius: 10,
-                        borderWidth: 2,
-                        borderColor: "#059669",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        marginRight: 8,
-                      }}
-                    >
-                      {editingEntry?.sub_type === type && (
-                        <View
-                          style={{
-                            height: 10,
-                            width: 10,
-                            borderRadius: 5,
-                            backgroundColor: "#059669",
-                          }}
-                        />
-                      )}
-                    </View>
-                    <Text className="text-base">{type}</Text>
-                  </TouchableOpacity>
-                ))}
+              <View className="flex-row justify-end mt-6 gap-3">
+                <TouchableOpacity
+                  onPress={() => setEditModalVisible(false)}
+                  className="px-5 py-2 rounded-lg bg-gray-100 border border-gray-300"
+                >
+                  <Text className="text-gray-700 font-semibold">Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={saveEdit}
+                  className="px-5 py-2 rounded-lg bg-green-700"
+                >
+                  <Text className="text-white font-semibold">Edit</Text>
+                </TouchableOpacity>
               </View>
             </View>
-
-            <View className="flex-row justify-end mt-6 gap-3">
-              <TouchableOpacity
-                onPress={() => setEditModalVisible(false)}
-                className="px-5 py-2 rounded-lg bg-gray-100 border border-gray-300"
-              >
-                <Text className="text-gray-700 font-semibold">Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={saveEdit}
-                className="px-5 py-2 rounded-lg bg-green-700"
-              >
-                <Text className="text-white font-semibold">Edit</Text>
-              </TouchableOpacity>
-            </View>
           </View>
-        </View>
-      </Modal>
-    </KeyboardAvoidingView>
+        </Modal>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 

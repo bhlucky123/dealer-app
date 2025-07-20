@@ -2,7 +2,7 @@ import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery } from "@tanstack/react-query";
-import { Calendar } from "lucide-react-native";
+import { Calendar, Check } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -17,8 +17,10 @@ import {
 const DailyReport = () => {
   const { selectedDraw } = useDrawStore();
 
-  const [fromDate, setFromDate] = useState<Date | null>(null);
-  const [toDate, setToDate] = useState<Date | null>(null);
+  // Set today as default for both fromDate and toDate
+  const today = new Date();
+  const [fromDate, setFromDate] = useState<Date>(today);
+  const [toDate, setToDate] = useState<Date>(today);
   const [showFromPicker, setShowFromPicker] = useState(false);
   const [showToPicker, setShowToPicker] = useState(false);
   const [allGames, setAllGames] = useState(false);
@@ -96,33 +98,64 @@ const DailyReport = () => {
       {/* Filter section */}
       <View className="px-4 pt-4 space-y-4">
         <View className="flex-row gap-3">
-          {[{ label: "FROM", date: fromDate, show: setShowFromPicker }, { label: "TO", date: toDate, show: setShowToPicker }].map(
-            ({ label, date, show }) => (
-              <TouchableOpacity
-                key={label}
-                onPress={() => show(true)}
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 flex-row justify-between items-center bg-white"
-                activeOpacity={0.7}
-                style={{ elevation: 0 }}
-              >
-                <Text className="text-sm text-gray-600">
-                  {date ? date.toLocaleDateString() : label}
-                </Text>
-                <Calendar size={16} color="#6B7280" />
-              </TouchableOpacity>
-            )
-          )}
+          <View className="flex-1">
+            <Text className="text-xs text-gray-500 mb-1">From Date</Text>
+            <TouchableOpacity
+              onPress={() => setShowFromPicker(true)}
+              className="border border-gray-300 rounded-lg px-3 py-2 flex-row justify-between items-center bg-white"
+              activeOpacity={0.7}
+              style={{ elevation: 0 }}
+            >
+              <Text className="text-sm text-gray-600">
+                {fromDate ? fromDate.toLocaleDateString() : "FROM"}
+              </Text>
+              <Calendar size={16} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+          <View className="flex-1">
+            <Text className="text-xs text-gray-500 mb-1">To Date</Text>
+            <TouchableOpacity
+              onPress={() => setShowToPicker(true)}
+              className="border border-gray-300 rounded-lg px-3 py-2 flex-row justify-between items-center bg-white"
+              activeOpacity={0.7}
+              style={{ elevation: 0 }}
+            >
+              <Text className="text-sm text-gray-600">
+                {toDate ? toDate.toLocaleDateString() : "TO"}
+              </Text>
+              <Calendar size={16} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <TouchableOpacity
-          onPress={() => setAllGames((prev) => !prev)}
           className="flex-row items-center gap-2 mt-2"
           activeOpacity={0.7}
+          onPress={() => setAllGames((prev) => !prev)}
         >
           <View
-            className={`w-4 h-4 rounded border ${allGames ? "bg-green-600 border-green-600" : "border-gray-400"} `}
-            style={{ elevation: 0 }}
-          />
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: 4,
+              borderWidth: 1,
+              borderColor: "#16a34a",
+              backgroundColor: allGames ? "#16a34a" : "#fff",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: 8,
+            }}
+          >
+            {allGames && (
+              <Check
+                size={12}
+                color="#fff"
+                style={{
+                  backgroundColor: "transparent",
+                }}
+              />
+            )}
+          </View>
           <Text className="text-sm text-gray-700">All Games</Text>
         </TouchableOpacity>
       </View>
@@ -205,7 +238,7 @@ const DailyReport = () => {
       {/* Date Pickers */}
       {showFromPicker && (
         <DateTimePicker
-          value={fromDate || new Date()}
+          value={fromDate || today}
           mode="date"
           display={Platform.OS === "android" ? "default" : "spinner"}
           onChange={(_e, d) => {
@@ -216,7 +249,7 @@ const DailyReport = () => {
       )}
       {showToPicker && (
         <DateTimePicker
-          value={toDate || new Date()}
+          value={toDate || today}
           mode="date"
           display={Platform.OS === "android" ? "default" : "spinner"}
           onChange={(_e, d) => {

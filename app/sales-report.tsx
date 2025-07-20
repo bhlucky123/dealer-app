@@ -3,6 +3,8 @@ import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { printToFileAsync } from 'expo-print';
+import { shareAsync } from "expo-sharing";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
@@ -17,17 +19,11 @@ import RNPickerSelect from "react-native-picker-select";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Agent } from "./(tabs)/agent";
 
-const dummyDetails = {
-    // ... (unchanged, omitted for brevity)
-};
-
 const getToday = () => {
     const now = new Date();
-    // Remove time part for consistency
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 };
 
-// Helper function to format date as dd/mm/yyyy
 const formatDateDDMMYYYY = (date?: Date | null) => {
     if (!date) return "";
     const d = new Date(date);
@@ -40,71 +36,47 @@ const formatDateDDMMYYYY = (date?: Date | null) => {
 const SalesReportScreen = () => {
     const { selectedDraw } = useDrawStore();
     const [search, setSearch] = useState("");
-    // Set default dates to today
     const [fromDate, setFromDate] = useState<Date | null>(getToday());
     const [toDate, setToDate] = useState<Date | null>(getToday());
     const [showFromPicker, setShowFromPicker] = useState(false);
     const [showToPicker, setShowToPicker] = useState(false);
-    const [fullView, setFullView] = useState(false);
-    const [selectedFilter, setSelectedFilter] = useState(""); // renamed from selectedAgent for generality
+    const [fullView, setFullView] = useState(true); // Set to true to always get detailed data for PDF
+    const [selectedFilter, setSelectedFilter] = useState("");
 
     const { user } = useAuthStore();
-
-    // --- Queries for agents and dealers ---
     const queryClient = useQueryClient();
     const cachedAgents = queryClient.getQueryData<Agent[]>(["agents"]);
     const cachedDealers = queryClient.getQueryData<Agent[]>(["dealers"]);
 
-    // AGENT list (for DEALER user)
-    const {
-        data: agents = [],
-        isLoading: isAgentLoading,
-        isError: isAgentError,
-        error: AgentError,
-        refetch: agentRefetch,
-        isFetching: isAgentFetching,
-    } = useQuery<Agent[]>({
+    const { data: agents = [] } = useQuery<Agent[]>({
         queryKey: ["agents"],
         queryFn: () => api.get("/agent/manage/").then((res) => res.data),
         enabled: user?.user_type === "DEALER" && !cachedAgents,
         initialData: user?.user_type === "DEALER" ? cachedAgents : undefined,
     });
 
-    // DEALER list (for ADMIN user)
-    const {
-        data: dealers = [],
-        isLoading: isDealerLoading,
-        isError: isDealerError,
-        error: DealerError,
-        refetch: dealerRefetch,
-        isFetching: isDealerFetching,
-    } = useQuery<Agent[]>({
+    const { data: dealers = [] } = useQuery<Agent[]>({
         queryKey: ["dealers"],
         queryFn: () => api.get("/administrator/dealer/").then((res) => res.data),
         enabled: user?.user_type === "ADMIN" && !cachedDealers,
         initialData: user?.user_type === "ADMIN" ? cachedDealers : undefined,
     });
 
-    // --- Build Query ---
     const buildQuery = () => {
         const params: Record<string, string> = {};
-
         if (search) params["search"] = search;
         if (fromDate) params["date_time__gte"] = fromDate.toISOString();
         if (toDate) params["date_time__lte"] = toDate.toISOString();
-        if (fullView) params["full_view"] = "true";
+        // Always request full_view to get booking_details for the PDF
+        params["full_view"] = "true";
         if (selectedDraw?.id) params["draw_session__draw__id"] = String(selectedDraw.id);
 
-        // Only add filter for ADMIN or DEALER
         if (user?.user_type === "ADMIN" && selectedFilter) {
             params["booked_dealer__id"] = selectedFilter;
         }
         if (user?.user_type === "DEALER" && selectedFilter) {
             params["booked_agent__id"] = selectedFilter;
         }
-        // AGENT: no filter
-
-        // console.log("params", params);
 
         return Object.keys(params)
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
@@ -120,11 +92,126 @@ const SalesReportScreen = () => {
         enabled: !!selectedDraw?.id,
     });
 
-    // Determine if we should show the total footer
     const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && data;
-    
 
-    // --- Render ---
+    const generatePdf = async () => {
+        if (!data || !data.result || data.result.length === 0) {
+            alert("No data available to generate PDF.");
+            return;
+        }
+
+        // Generate table rows from the data
+        const tableRows = data.result.flatMap(bill =>
+            bill.booking_details ? bill.booking_details.map(detail => `
+                <tr>
+                    <td>${bill.dealer?.username || 'N/A'}</td>
+                    <td>${bill.bill_number || ''}</td>
+                    <td>${detail.number}</td>
+                    <td>${detail.count}</td>
+                    <td>${detail.amount.toFixed(2)}</td>
+                </tr>
+            `).join('') : ''
+        ).join('');
+
+        const totalAmount = data.total_customer_amount ? data.total_customer_amount.toFixed(2) : "0.00";
+        const now = new Date();
+        const formattedDate = formatDateDDMMYYYY(now);
+        const formattedTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+
+        const html = `
+      <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; font-size: 10px; }
+            .header { 
+              text-align: center; 
+              margin-bottom: 15px; 
+              background: linear-gradient(90deg, #6D28D9 0%, #7C3AED 100%);
+              padding: 18px 0 10px 0;
+              border-radius: 8px 8px 0 0;
+              color: #fff;
+            }
+            .header h1 { 
+              font-size: 18px; 
+              margin: 0; 
+              color: #FFD700; /* Gold color for heading */
+              letter-spacing: 1px;
+              text-shadow: 1px 1px 2px #4B0082;
+            }
+            .header p { 
+              font-size: 12px; 
+              margin: 0; 
+              color: #E0E7FF;
+            }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin-top: 10px;
+              background: #F3F4F6;
+              border-radius: 0 0 8px 8px;
+              overflow: hidden;
+            }
+            th, td { 
+              border: 1px solid #A78BFA; 
+              padding: 5px; 
+              text-align: center; 
+            }
+            th { 
+              font-weight: bold; 
+              background: #C7D2FE;
+              color: #3730A3;
+            }
+            .footer { 
+              text-align: right; 
+              margin-top: 20px; 
+              font-size: 12px; 
+              font-weight: bold; 
+              color: #6D28D9;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>${selectedDraw?.name}</h1>
+            <p>${formattedDate} ${formattedTime}</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Agent</th>
+                <th>Bill Number</th>
+                <th>No</th>
+                <th>Count</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+          <div class="footer">
+            <p>Total Amount: ${totalAmount}</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+        try {
+            const file = await printToFileAsync({
+                html: html,
+                base64: false,
+                width: 595, // Standard A4 width in points
+                height: 842, // Standard A4 height in points
+            });
+
+            await shareAsync(file.uri, { dialogTitle: 'Share Sales Report' });
+        } catch (err) {
+            console.error("Failed to generate PDF:", err);
+            alert("An error occurred while creating the PDF.");
+        }
+    };
+
+
     return (
         <SafeAreaView className="flex-1 bg-white">
             <View className="flex-1 p-4">
@@ -139,7 +226,6 @@ const SalesReportScreen = () => {
                         placeholderTextColor="#9ca3af"
                     />
 
-                    {/* Date Filters with Labels */}
                     <View>
                         <View className="flex-row gap-3">
                             <View className="flex-1">
@@ -148,9 +234,7 @@ const SalesReportScreen = () => {
                                     onPress={() => setShowFromPicker(true)}
                                     className="border border-gray-300 rounded-lg px-4 py-3 active:bg-gray-50"
                                 >
-                                    <Text
-                                        className={fromDate ? "text-gray-900 font-medium" : "text-gray-500"}
-                                    >
+                                    <Text className={fromDate ? "text-gray-900 font-medium" : "text-gray-500"}>
                                         {fromDate ? formatDateDDMMYYYY(fromDate) : "Select Date"}
                                     </Text>
                                 </TouchableOpacity>
@@ -161,9 +245,7 @@ const SalesReportScreen = () => {
                                     onPress={() => setShowToPicker(true)}
                                     className="border border-gray-300 rounded-lg px-4 py-3 active:bg-gray-50"
                                 >
-                                    <Text
-                                        className={toDate ? "text-gray-900 font-medium" : "text-gray-500"}
-                                    >
+                                    <Text className={toDate ? "text-gray-900 font-medium" : "text-gray-500"}>
                                         {toDate ? formatDateDDMMYYYY(toDate) : "Select Date"}
                                     </Text>
                                 </TouchableOpacity>
@@ -171,81 +253,49 @@ const SalesReportScreen = () => {
                         </View>
                     </View>
 
-                    {/* Conditional filter: ADMIN = dealer picker, DEALER = agent picker, AGENT = none */}
                     {user?.user_type === "ADMIN" && (
                         <RNPickerSelect
                             onValueChange={setSelectedFilter}
-                            items={[
-                                ...dealers.map((dealer) => ({
-                                    label: dealer.username,
-                                    value: dealer.id,
-                                    key: dealer.id.toString(),
-                                })),
-                            ]}
+                            items={[...dealers.map((dealer) => ({ label: dealer.username, value: dealer.id, key: dealer.id.toString(), }))]}
                             value={selectedFilter}
                             style={{
-                                viewContainer: {
-                                    borderColor: "#9ca3af",
-                                    borderWidth: 1,
-                                    borderRadius: 6,
-                                },
-                                placeholder: {
-                                    color: "#374151"
-                                }
+                                viewContainer: { borderColor: "#9ca3af", borderWidth: 1, borderRadius: 6, },
+                                placeholder: { color: "#374151" }
                             }}
                             placeholder={{ label: "Select Dealer", value: null }}
-                            Icon={() =>
-                                selectedFilter !== null && selectedFilter !== "" ? (
-                                    <TouchableOpacity
-                                        onPress={() => setSelectedFilter("")}
-                                        style={{ position: "absolute", right: 10, top: 12, zIndex: 10 }}
-                                        className="bg-white w-10 h-10 flex items-center"
-                                    >
-                                        <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
-                                    </TouchableOpacity>
-                                ) : null
+                            Icon={() => selectedFilter ? (
+                                <TouchableOpacity onPress={() => setSelectedFilter("")} style={{ position: "absolute", right: 10, top: 12, zIndex: 10 }} className="bg-white w-10 h-10 flex items-center">
+                                    <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
+                                </TouchableOpacity>
+                            ) : null
                             }
                         />
                     )}
                     {user?.user_type === "DEALER" && (
                         <RNPickerSelect
                             onValueChange={setSelectedFilter}
-                            items={[
-                                ...agents.map((agent) => ({
-                                    label: agent.username,
-                                    value: agent.id,
-                                    key: agent.id.toString(),
-                                })),
-                            ]}
+                            items={[...agents.map((agent) => ({ label: agent.username, value: agent.id, key: agent.id.toString(), }))]}
                             value={selectedFilter}
                             style={{
-                                viewContainer: {
-                                    borderColor: "#9ca3af",
-                                    borderWidth: 1,
-                                    borderRadius: 6,
-                                },
-                                placeholder: {
-                                    color: "#374151"
-                                }
+                                viewContainer: { borderColor: "#9ca3af", borderWidth: 1, borderRadius: 6, },
+                                placeholder: { color: "#374151" }
                             }}
                             placeholder={{ label: "Select Agent", value: null }}
-                            Icon={() =>
-                                selectedFilter !== null && selectedFilter !== "" ? (
-                                    <TouchableOpacity
-                                        onPress={() => setSelectedFilter("")}
-                                        style={{ position: "absolute", right: 10, top: 12, zIndex: 10 }}
-                                        className="bg-white w-10 h-10 flex items-center"
-                                    >
-                                        <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
-                                    </TouchableOpacity>
-                                ) : null
+                            Icon={() => selectedFilter ? (
+                                <TouchableOpacity onPress={() => setSelectedFilter("")} style={{ position: "absolute", right: 10, top: 12, zIndex: 10 }} className="bg-white w-10 h-10 flex items-center">
+                                    <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
+                                </TouchableOpacity>
+                            ) : null
                             }
                         />
                     )}
-                    {/* AGENT: no filter picker */}
+
+                    <TouchableOpacity onPress={generatePdf} className="bg-violet-600 p-3 rounded-lg items-center">
+                        <Text className="text-white font-bold">Print Report</Text>
+                    </TouchableOpacity>
 
                     <View className="flex-row items-center justify-between px-1 pt-1">
-                        <Text className="text-sm text-gray-700">Full View</Text>
+                        <Text className="text-sm text-gray-700">Full View (On-screen)</Text>
                         <Switch
                             value={fullView}
                             onValueChange={setFullView}
@@ -277,99 +327,51 @@ const SalesReportScreen = () => {
                 ) : (
                     <>
                         {data?.result?.length ? (
-                            <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden">
+                            <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden mt-4">
                                 <FlatList
                                     data={data.result}
                                     keyExtractor={(item) => item.bill_number.toString()}
                                     ListHeaderComponent={() => (
                                         <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
-                                            <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">
-                                                Date
-                                            </Text>
-                                            <Text className="flex-[1.2] text-xs font-semibold text-center text-gray-600 uppercase">
-                                                Dealer
-                                            </Text>
-                                            <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">
-                                                Bill No.
-                                            </Text>
-                                            <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">
-                                                Cnt
-                                            </Text>
-                                            <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">
-                                                D. Amt
-                                            </Text>
-                                            <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">
-                                                C. Amt
-                                            </Text>
+                                            <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">Date</Text>
+                                            <Text className="flex-[1.2] text-xs font-semibold text-center text-gray-600 uppercase">Dealer</Text>
+                                            <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Bill No.</Text>
+                                            <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Cnt</Text>
+                                            <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">D. Amt</Text>
+                                            <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">C. Amt</Text>
                                         </View>
                                     )}
                                     renderItem={({ item, index }) => (
                                         <View className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                                            {/* ------------ main bill row ------------ */}
                                             <View className="flex-row px-4 py-3 items-center border-b border-gray-100">
                                                 <View className="flex-[1.1] flex-col justify-center">
-                                                    <Text className="text-[10px] text-gray-800 font-medium">
-                                                        {formatDateDDMMYYYY(new Date(item.date_time))}
-                                                    </Text>
+                                                    <Text className="text-[10px] text-gray-800 font-medium">{formatDateDDMMYYYY(new Date(item.date_time))}</Text>
                                                     <Text className="text-[9px] text-gray-500 mt-0.5">
-                                                        {new Date(item.date_time).toLocaleTimeString([], {
-                                                            hour: "2-digit",
-                                                            minute: "2-digit",
-                                                            hour12: false,
-                                                        })}
+                                                        {new Date(item.date_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false, })}
                                                     </Text>
                                                 </View>
-                                                <Text className="flex-[1.2] text-sm text-center text-gray-700">
-                                                    {item.dealer.username}
-                                                </Text>
-                                                <Text className="flex-1 text-sm text-center text-gray-700">
-                                                    {item.bill_number}
-                                                </Text>
-                                                <Text className="flex-1 text-sm text-center text-gray-700">
-                                                    {item.bill_count}
-                                                </Text>
-                                                <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">
-                                                    {item.dealer_amount.toFixed(2)}
-                                                </Text>
-                                                <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">
-                                                    {item.customer_amount.toFixed(2)}
-                                                </Text>
+                                                <Text className="flex-[1.2] text-sm text-center text-gray-700">{item.dealer.username}</Text>
+                                                <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_number}</Text>
+                                                <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_count}</Text>
+                                                <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">{item.dealer_amount.toFixed(2)}</Text>
+                                                <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">{item.customer_amount.toFixed(2)}</Text>
                                             </View>
 
-                                            {/* ------------ optional detail rows (Full View) ------------ */}
-                                            {fullView &&
-                                                item.booking_details?.map((d) => (
-                                                    <View
-                                                        key={d.id}
-                                                        className="flex-row px-4 py-2 bg-amber-50/20 border-b border-amber-100 last:border-b-0"
-                                                    >
-                                                        <Text className="flex-[1.1] text-[10px] text-gray-600">
-                                                            {d.sub_type}
-                                                        </Text>
-                                                        <Text className="flex-[1.2] text-[10px] text-center text-gray-600">
-                                                            {d.number}
-                                                        </Text>
-                                                        <Text className="flex-1 text-[10px] text-center text-gray-600">
-                                                            {d.count}
-                                                        </Text>
-                                                        <Text className="flex-1 text-[10px] text-center text-gray-600">
-                                                            {d.amount}
-                                                        </Text>
-                                                        <Text className="flex-1 text-[10px] text-right text-violet-600">
-                                                            {d.dealer_amount.toFixed(2)}
-                                                        </Text>
-                                                        <Text className="flex-1 text-[10px] text-right text-emerald-600">
-                                                            {d.agent_amount.toFixed(2)}
-                                                        </Text>
-                                                    </View>
-                                                ))}
+                                            {fullView && item.booking_details?.map((d) => (
+                                                <View key={d.id} className="flex-row px-4 py-2 bg-amber-50/20 border-b border-amber-100 last:border-b-0">
+                                                    <Text className="flex-[1.1] text-[10px] text-gray-600">{d.sub_type}</Text>
+                                                    <Text className="flex-[1.2] text-[10px] text-center text-gray-600">{d.number}</Text>
+                                                    <Text className="flex-1 text-[10px] text-center text-gray-600">{d.count}</Text>
+                                                    <Text className="flex-1 text-[10px] text-center text-gray-600">{d.amount}</Text>
+                                                    <Text className="flex-1 text-[10px] text-right text-violet-600">{d.dealer_amount.toFixed(2)}</Text>
+                                                    <Text className="flex-1 text-[10px] text-right text-emerald-600">{d.agent_amount.toFixed(2)}</Text>
+                                                </View>
+                                            ))}
                                         </View>
                                     )}
                                     ListEmptyComponent={
                                         <View className="flex-1 justify-center items-center py-16">
-                                            <Text className="text-gray-500 text-base">
-                                                No sales data for current filters.
-                                            </Text>
+                                            <Text className="text-gray-500 text-base">No sales data for current filters.</Text>
                                         </View>
                                     }
                                 />
@@ -382,27 +384,19 @@ const SalesReportScreen = () => {
                     </>
                 )}
 
-                {/* --- Total Footer (always at the bottom if applicable) --- */}
                 {shouldShowTotalFooter && (
                     <View className="border-t border-gray-200 py-3 bg-gray-100 px-4 mt-4 rounded-lg">
                         <View className="flex-row">
                             <Text className="flex-1 font-bold text-sm text-gray-800">TOTAL</Text>
                             <Text className="flex-1 text-sm"> </Text>
                             <Text className="flex-1 text-sm"> </Text>
-                            <Text className="flex-1 text-sm text-center font-semibold text-gray-700">
-                                {data?.total_bill_count || 0}
-                            </Text>
-                            <Text className="flex-1 text-sm text-right font-semibold text-violet-700">
-                                {data?.total_dealer_amount || 0}
-                            </Text>
-                            <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">
-                                {data?.total_customer_amount || 0}
-                            </Text>
+                            <Text className="flex-1 text-sm text-center font-semibold text-gray-700">{data?.total_bill_count || 0}</Text>
+                            <Text className="flex-1 text-sm text-right font-semibold text-violet-700">{data?.total_dealer_amount.toFixed(2) || 0}</Text>
+                            <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">{data?.total_customer_amount.toFixed(2) || 0}</Text>
                         </View>
                     </View>
                 )}
 
-                {/* --- Date Pickers --- */}
                 {showFromPicker && (
                     <DateTimePicker
                         mode="date"

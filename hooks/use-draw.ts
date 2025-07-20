@@ -55,7 +55,7 @@ const useDraw = () => {
       fifth_prize: string;
       complementary_prizes: string[];
     }) => {
-      const res = await api.post(`/draw-result/result/${draw_id}`, rest);
+      const res = await api.post(`/draw-result/result/${draw_id}/`, rest);
       return res?.data;
     },
   });

@@ -29,300 +29,64 @@ type WinnerReport = {
     agent: string;
 };
 
-
-const dummyDetails = {
-    "result": [
-        {
-            "bill_number": 1,
-            "draw": "bh lucky",
-            "date_time": "2025-07-12T09:09:21.287351Z",
-            "bill_count": 8,
-            "dealer_amount": 40.0,
-            "agent_amount": 80,
-            "customer_amount": 80,
-            "booked_by": {
-                "id": 2,
-                "username": "d1",
-                "user_type": "DEALER",
-                "commission": 5.0,
-                "single_digit_number_commission": 6.0,
-                "cap_amount": 1000000.0
-            },
-            "dealer": {
-                "id": 2,
-                "username": "d1",
-                "user_type": "DEALER",
-                "commission": 5.0,
-                "single_digit_number_commission": 6.0,
-                "cap_amount": 1000000.0
-            },
-            "agent": null,
-            "booking_details": [
-                {
-                    "id": 1,
-                    "dealer_amount": -30.0,
-                    "agent_amount": 10,
-                    "number": "123",
-                    "count": 8,
-                    "amount": 10,
-                    "type": "triple_digit",
-                    "sub_type": "SUPER",
-                    "is_main_box_number": false
-                }
-            ]
-        },
-
-        {
-            "bill_number": 2,
-            "draw": "mega star",
-            "date_time": "2025-07-12T10:17:00Z",
-            "bill_count": 5,
-            "dealer_amount": 25.0,
-            "agent_amount": 50,
-            "customer_amount": 50,
-            "booked_by": {
-                "id": 3,
-                "username": "dealer02",
-                "user_type": "DEALER",
-                "commission": 4.0,
-                "single_digit_number_commission": 5.5,
-                "cap_amount": 500000.0
-            },
-            "dealer": {
-                "id": 3,
-                "username": "dealer02",
-                "user_type": "DEALER",
-                "commission": 4.0,
-                "single_digit_number_commission": 5.5,
-                "cap_amount": 500000.0
-            },
-            "agent": null,
-            "booking_details": [
-                {
-                    "id": 9,
-                    "dealer_amount": -15.0,
-                    "agent_amount": 5,
-                    "number": "889",
-                    "count": 5,
-                    "amount": 5,
-                    "type": "triple_digit",
-                    "sub_type": "BOX",
-                    "is_main_box_number": true
-                }
-            ]
-        },
-
-        {
-            "bill_number": 3,
-            "draw": "morning gold",
-            "date_time": "2025-07-12T11:45:31Z",
-            "bill_count": 10,
-            "dealer_amount": 60.0,
-            "agent_amount": 120,
-            "customer_amount": 120,
-            "booked_by": {
-                "id": 4,
-                "username": "agent01",
-                "user_type": "AGENT",
-                "commission": 6.0,
-                "single_digit_number_commission": 7.0,
-                "cap_amount": 750000.0
-            },
-            "dealer": {
-                "id": 2,
-                "username": "d1",
-                "user_type": "DEALER",
-                "commission": 5.0,
-                "single_digit_number_commission": 6.0,
-                "cap_amount": 1000000.0
-            },
-            "agent": {
-                "id": 4,
-                "username": "agent01",
-                "user_type": "AGENT",
-                "commission": 6.0,
-                "single_digit_number_commission": 7.0,
-                "cap_amount": 750000.0
-            },
-            "booking_details": [
-                {
-                    "id": 15,
-                    "dealer_amount": -50.0,
-                    "agent_amount": 20,
-                    "number": "045",
-                    "count": 10,
-                    "amount": 12,
-                    "type": "triple_digit",
-                    "sub_type": "SUPER",
-                    "is_main_box_number": false
-                }
-            ]
-        },
-
-        {
-            "bill_number": 4,
-            "draw": "night rider",
-            "date_time": "2025-07-12T15:05:18Z",
-            "bill_count": 3,
-            "dealer_amount": 12.0,
-            "agent_amount": 30,
-            "customer_amount": 30,
-            "booked_by": {
-                "id": 5,
-                "username": "dealer03",
-                "user_type": "DEALER",
-                "commission": 4.5,
-                "single_digit_number_commission": 5.0,
-                "cap_amount": 800000.0
-            },
-            "dealer": {
-                "id": 5,
-                "username": "dealer03",
-                "user_type": "DEALER",
-                "commission": 4.5,
-                "single_digit_number_commission": 5.0,
-                "cap_amount": 800000.0
-            },
-            "agent": null,
-            "booking_details": [
-                {
-                    "id": 18,
-                    "dealer_amount": -9.0,
-                    "agent_amount": 3,
-                    "number": "777",
-                    "count": 3,
-                    "amount": 3,
-                    "type": "triple_digit",
-                    "sub_type": "BOX",
-                    "is_main_box_number": true
-                }
-            ]
-        },
-
-        {
-            "bill_number": 5,
-            "draw": "lucky evening",
-            "date_time": "2025-07-12T17:32:44Z",
-            "bill_count": 7,
-            "dealer_amount": 35.0,
-            "agent_amount": 70,
-            "customer_amount": 70,
-            "booked_by": {
-                "id": 6,
-                "username": "agent02",
-                "user_type": "AGENT",
-                "commission": 5.5,
-                "single_digit_number_commission": 6.5,
-                "cap_amount": 600000.0
-            },
-            "dealer": {
-                "id": 3,
-                "username": "dealer02",
-                "user_type": "DEALER",
-                "commission": 4.0,
-                "single_digit_number_commission": 5.5,
-                "cap_amount": 500000.0
-            },
-            "agent": {
-                "id": 6,
-                "username": "agent02",
-                "user_type": "AGENT",
-                "commission": 5.5,
-                "single_digit_number_commission": 6.5,
-                "cap_amount": 600000.0
-            },
-            "booking_details": [
-                {
-                    "id": 22,
-                    "dealer_amount": -24.5,
-                    "agent_amount": 7,
-                    "number": "931",
-                    "count": 7,
-                    "amount": 7,
-                    "type": "triple_digit",
-                    "sub_type": "SUPER",
-                    "is_main_box_number": false
-                }
-            ]
-        },
-
-        {
-            "bill_number": 6,
-            "draw": "midday jackpot",
-            "date_time": "2025-07-12T12:58:13Z",
-            "bill_count": 4,
-            "dealer_amount": 20.0,
-            "agent_amount": 40,
-            "customer_amount": 40,
-            "booked_by": {
-                "id": 7,
-                "username": "dealer04",
-                "user_type": "DEALER",
-                "commission": 4.0,
-                "single_digit_number_commission": 5.0,
-                "cap_amount": 550000.0
-            },
-            "dealer": {
-                "id": 7,
-                "username": "dealer04",
-                "user_type": "DEALER",
-                "commission": 4.0,
-                "single_digit_number_commission": 5.0,
-                "cap_amount": 550000.0
-            },
-            "agent": null,
-            "booking_details": [
-                {
-                    "id": 27,
-                    "dealer_amount": -16.0,
-                    "agent_amount": 4,
-                    "number": "864",
-                    "count": 4,
-                    "amount": 4,
-                    "type": "triple_digit",
-                    "sub_type": "BOX",
-                    "is_main_box_number": true
-                }
-            ]
-        }
-    ],
-    "total_bill_count": 8,
-    "total_dealer_amount": 40.0,
-    "total_agent_amount": 80,
-    "total_customer_amount": 80
-}
-
-
 const WinnersReportScreen = () => {
     const { selectedDraw } = useDrawStore();
     const [search, setSearch] = useState("");
     const [fromDate, setFromDate] = useState<Date | null>(null);
     const [toDate, setToDate] = useState<Date | null>(null);
     const [showFromPicker, setShowFromPicker] = useState(false);
-    const [showToPicker, setShowToPicker] = useState(false); // Corrected this state variable name
+    const [showToPicker, setShowToPicker] = useState(false);
     const [fullView, setFullView] = useState(false);
-    const [selectedAgent, setSelectedAgent] = useState("")
+    const [selectedAgent, setSelectedAgent] = useState("");
+    const [selectedDealer, setSelectedDealer] = useState("");
 
-    const { user } = useAuthStore()
+    const { user } = useAuthStore();
 
+    // QueryClient for caching
+    const queryClient = useQueryClient();
+    const cachedAgents = queryClient.getQueryData<Agent[]>(["agents"]);
+    const cachedDealers = queryClient.getQueryData<Agent[]>(["dealers"]);
+
+    // Fetch agents if user is DEALER
+    const {
+        data: agents = [],
+        isLoading: isAgentLoading,
+    } = useQuery<Agent[]>({
+        queryKey: ["agents"],
+        queryFn: () => api.get("/agent/manage/").then((res) => res.data),
+        enabled: user?.user_type === "DEALER" && !cachedAgents,
+        initialData: user?.user_type === "DEALER" ? cachedAgents : undefined,
+    });
+
+    // Fetch dealers if user is ADMIN
+    const {
+        data: dealers = [],
+        isLoading: isDealerLoading,
+    } = useQuery<Agent[]>({
+        queryKey: ["dealers"],
+        queryFn: () => api.get("/administrator/dealer/").then((res) => res.data),
+        enabled: user?.user_type === "ADMIN" && !cachedDealers,
+        initialData: user?.user_type === "ADMIN" ? cachedDealers : undefined,
+    });
+
+    // Build query params
     const buildQuery = () => {
-        // Use an index signature to allow dynamic keys
         const params: Record<string, string> = {};
         if (fromDate) params["date_time__gte"] = fromDate.toISOString();
         if (toDate) params["date_time__lte"] = toDate.toISOString();
         if (fullView) params["full_view"] = "true";
-        if (selectedAgent) params["booked_agent__id"] = selectedAgent;
-        // if (user?.user_type === "AGENT") params["booked_agent__id"] = user.id?.toString();
+        if (user?.user_type === "DEALER" && selectedAgent)
+            params["booked_agent__id"] = selectedAgent;
+        if (user?.user_type === "ADMIN" && selectedDealer)
+            params["booked_agent__id"] = selectedDealer;
         if (selectedDraw?.id) params["draw_session__draw__id"] = String(selectedDraw.id);
 
-        console.log("params", params);
+        // console.log("params", params);
 
-        // Convert params object to query string
         return Object.keys(params)
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
             .join("&");
     };
-
 
     const { data, isLoading, error } = useQuery<WinnerReport[]>({
         queryKey: ["/draw-result/winners/", buildQuery()],
@@ -333,25 +97,7 @@ const WinnersReportScreen = () => {
         enabled: !!selectedDraw?.id,
     });
 
-    const queryClient = useQueryClient();
-    const cachedAgents = queryClient.getQueryData<Agent[]>(["agents"]);
-
-    const {
-        data: agents = [],
-        isLoading: isAgentLoading,
-        isError,
-        error: AgentError,
-        refetch,
-        isFetching,
-    } = useQuery<Agent[]>({
-        queryKey: ["agents"],
-        queryFn: () => api.get("/agent/agent/").then((res) => res.data),
-        enabled: !cachedAgents, // Only fetch if not already cached
-        initialData: cachedAgents, // Use cached data if available
-    });
-
     // Determine if we should show the total footer
-    // It should show if data is successfully loaded (not loading, no error) and a draw is selected
     const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && data;
 
     return (
@@ -383,7 +129,7 @@ const WinnersReportScreen = () => {
                             </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            onPress={() => setShowToPicker(true)} // Corrected state setter name
+                            onPress={() => setShowToPicker(true)}
                             className="flex-1 border border-gray-300 rounded-lg px-4 py-3 active:bg-gray-50"
                         >
                             <Text className="text-gray-700">
@@ -397,54 +143,91 @@ const WinnersReportScreen = () => {
                         </TouchableOpacity>
                     </View>
 
-                    <RNPickerSelect
-                        onValueChange={setSelectedAgent}
-                        items={[
-                            ...agents.map((agent) => ({
-                                label: agent.username,
-                                value: agent.id,
-                                key: agent.id.toString(),
-                            })),
-                        ]}
-                        value={selectedAgent}
-                        style={{
-                            viewContainer: {
-                                borderColor: "#9ca3af",
-                                borderWidth: 1,
-                                borderRadius: 6,
-                            },
-                            placeholder: {
-                                color: "#374151"
+                    {/* Show agent/dealer filter only for DEALER or ADMIN */}
+                    {user?.user_type === "DEALER" && (
+                        <RNPickerSelect
+                            onValueChange={setSelectedAgent}
+                            items={[
+                                ...agents.map((agent) => ({
+                                    label: agent.username,
+                                    value: agent.id,
+                                    key: agent.id.toString(),
+                                })),
+                            ]}
+                            value={selectedAgent}
+                            style={{
+                                viewContainer: {
+                                    borderColor: "#9ca3af",
+                                    borderWidth: 1,
+                                    borderRadius: 6,
+                                },
+                                placeholder: {
+                                    color: "#374151"
+                                }
+                            }}
+                            placeholder={{ label: "Select Agent", value: null }}
+                            Icon={() =>
+                                selectedAgent !== null && selectedAgent !== "" ? (
+                                    <TouchableOpacity
+                                        onPress={() => setSelectedAgent("")}
+                                        style={{ position: "absolute", right: 10, top: 12, zIndex: 10 }}
+                                        className="bg-white w-10 h-10 flex items-center"
+                                    >
+                                        <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
+                                    </TouchableOpacity>
+                                ) : null
                             }
-                        }}
-                        placeholder={{ label: "Select Agent", value: null }}
-                        Icon={() =>
-                            selectedAgent !== null ? (
-                                <TouchableOpacity
-                                    onPress={() => setSelectedAgent("")}
-                                    style={{ position: "absolute", right: 10, top: 12, zIndex: 10 }}
-                                    className="bg-white w-10 h-10 flex items-center"
-                                >
-                                    <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
-                                </TouchableOpacity>
-                            ) : null
-                        }
-                    />
+                        />
+                    )}
+                    {user?.user_type === "ADMIN" && (
+                        <RNPickerSelect
+                            onValueChange={setSelectedDealer}
+                            items={[
+                                ...dealers.map((dealer) => ({
+                                    label: dealer.username,
+                                    value: dealer.id,
+                                    key: dealer.id.toString(),
+                                })),
+                            ]}
+                            value={selectedDealer}
+                            style={{
+                                viewContainer: {
+                                    borderColor: "#9ca3af",
+                                    borderWidth: 1,
+                                    borderRadius: 6,
+                                },
+                                placeholder: {
+                                    color: "#374151"
+                                }
+                            }}
+                            placeholder={{ label: "Select Dealer", value: null }}
+                            Icon={() =>
+                                selectedDealer !== null && selectedDealer !== "" ? (
+                                    <TouchableOpacity
+                                        onPress={() => setSelectedDealer("")}
+                                        style={{ position: "absolute", right: 10, top: 12, zIndex: 10 }}
+                                        className="bg-white w-10 h-10 flex items-center"
+                                    >
+                                        <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
+                                    </TouchableOpacity>
+                                ) : null
+                            }
+                        />
+                    )}
 
                     <View className="flex-row items-center justify-between px-1 pt-1">
                         <Text className="text-sm text-gray-700">Full View</Text>
                         <Switch
                             value={fullView}
                             onValueChange={setFullView}
-                            trackColor={{ false: "#e5e7eb", true: "#a78bfa" }} // Gray for off, Violet-400 for on
-                            thumbColor={fullView ? "#7c3aed" : "#f4f3f4"} // Violet-600 for on, White for off
+                            trackColor={{ false: "#e5e7eb", true: "#a78bfa" }}
+                            thumbColor={fullView ? "#7c3aed" : "#f4f3f4"}
                             ios_backgroundColor="#e5e7eb"
                         />
                     </View>
                 </View>
 
                 {/* --- Main Content Area --- */}
-                {/* Conditional rendering for status messages or the report table */}
                 {!selectedDraw?.id ? (
                     <View className="flex-1 justify-center items-center">
                         <Text className="text-base text-gray-500">
@@ -542,8 +325,6 @@ const WinnersReportScreen = () => {
                                             </Text>
                                         </View>
                                     }
-                                // Optional: Add a small footer if you want a visual break at the end of the list
-                                // ListFooterComponent={() => <View className="h-4 bg-gray-50"></View>}
                                 />
                             </View>
                         ) : (
@@ -563,13 +344,17 @@ const WinnersReportScreen = () => {
                             <Text className="flex-1 text-sm"> </Text>
                             <Text className="flex-1 text-sm"> </Text>
                             <Text className="flex-1 text-sm text-center font-semibold text-gray-700">
-                                {data?.total_bill_count || 0} {/* Ensure 0 if null/undefined */}
+                                {/* These fields are not available on WinnerReport[]; adjust as needed */}
+                                {/* {data?.total_bill_count || 0} */}
+                                0
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-violet-700">
-                                {data?.total_dealer_amount || 0}
+                                {/* {data?.total_dealer_amount || 0} */}
+                                0
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">
-                                {data?.total_customer_amount || 0}
+                                {/* {data?.total_customer_amount || 0} */}
+                                0
                             </Text>
                         </View>
                     </View>

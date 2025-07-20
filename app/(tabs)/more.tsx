@@ -1,7 +1,8 @@
+ import { useAuthStore } from "@/store/auth";
 import api from "@/utils/axios";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Switch, Text, TouchableOpacity, View } from "react-native";
 
 type PendingBalanceResponse = {
     balance_amount: number;
@@ -12,8 +13,19 @@ export default function MoreTab() {
     const [isActive, setIsActive] = useState(true);
     const [balanceError, setBalanceError] = useState<string | null>(null);
 
-    // Fetch balance
-    const { data, isLoading: isBalanceLoading, refetch, error } = useQuery<PendingBalanceResponse>({
+    const { user } = useAuthStore();
+
+    // Only enable the query if user_type is AGENT or DEALER
+    const shouldFetchBalance =
+        user?.user_type === "AGENT" || user?.user_type === "DEALER";
+
+    // Fetch balance (only if user_type is AGENT or DEALER)
+    const {
+        data,
+        isLoading: isBalanceLoading,
+        refetch,
+        error,
+    } = useQuery<PendingBalanceResponse>({
         queryKey: ["/draw-payment/get-my-pending-balance/"],
         queryFn: async () => {
             try {
@@ -31,7 +43,8 @@ export default function MoreTab() {
                 setBalanceError(msg);
                 throw new Error(msg);
             }
-        }
+        },
+        enabled: shouldFetchBalance,
     });
 
     // Mutations for activate/deactivate
@@ -68,50 +81,104 @@ export default function MoreTab() {
 
     return (
         /* wrapper */
-        <View className="flex-1 bg-gray-50 px-6 py-10">
+        <View
+            className="flex-1 px-4 py-8 bg-gradient-to-b from-gray-100 to-gray-200"
+            style={{
+                justifyContent: "center",
+                alignItems: "center",
+            }}
+        >
+            {/* Card */}
+            <View
+                className="w-full max-w-sm bg-white rounded-3xl shadow-lg border border-gray-200"
+                style={{
+                    paddingVertical: 28,
+                    paddingHorizontal: 20,
+                    alignItems: "center",
+                    elevation: 6,
+                }}
+            >
+                {/* Title */}
+                <Text className="text-2xl font-extrabold text-gray-900 mb-6 tracking-wide">
+                    More
+                </Text>
 
-            {/* card */}
-            <View className="w-full max-w-sm mx-auto bg-white rounded-2xl p-6 items-center shadow-md border border-gray-200">
-                {/* title */}
-                <Text className="text-xl font-bold text-gray-900 mb-4">More</Text>
-
-                {/* balance */}
-                <View className="items-center mb-8 w-full">
-                    <Text className="text-sm font-medium text-gray-500 mb-1 tracking-wide">
-                        Pending Balance
-                    </Text>
-
-                    {isBalanceLoading ? (
-                        <ActivityIndicator color="#6b7280" />
-                    ) : balanceError ? (
-                        <Text className="text-red-600 text-base font-semibold text-center">
-                            {balanceError}
+                {/* Balance */}
+                {shouldFetchBalance && (
+                    <View className="items-center mb-10 w-full">
+                        <Text className="text-base font-semibold text-gray-500 mb-2 tracking-wider uppercase">
+                            Pending Balance
                         </Text>
-                    ) : (
-                        <Text className="text-3xl font-extrabold text-gray-800">
-                            ₹ {data?.balance_amount?.toLocaleString()}
+                        <View
+                            className="w-full rounded-xl bg-gray-50 border border-gray-200 py-4 px-2 mb-1"
+                            style={{
+                                alignItems: "center",
+                                minHeight: 60,
+                                justifyContent: "center",
+                            }}
+                        >
+                            {isBalanceLoading ? (
+                                <ActivityIndicator color="#6b7280" size="small" />
+                            ) : balanceError ? (
+                                <View style={{ alignItems: "center" }}>
+                                    <Text className="text-red-600 text-base font-semibold text-center">
+                                        {balanceError}
+                                    </Text>
+                                    <TouchableOpacity
+                                        className="mt-3 bg-red-200 px-4 py-2 rounded-lg"
+                                        onPress={() => refetch()}
+                                        activeOpacity={0.85}
+                                    >
+                                        <Text className="text-red-800 font-semibold text-center">Retry</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : (
+                                <Text className="text-3xl font-extrabold text-gray-800 tracking-tight">
+                                    ₹ {data?.balance_amount?.toLocaleString()}
+                                </Text>
+                            )}
+                        </View>
+                    </View>
+                )}
+
+                {/* Toggle */}
+                {user?.user_type === "ADMIN" && (
+                    <View
+                        className="flex-row items-center mt-2"
+                        style={{
+                            backgroundColor: "#f3f4f6",
+                            borderRadius: 16,
+                            paddingVertical: 10,
+                            paddingHorizontal: 18,
+                        }}
+                    >
+                        <Text
+                            className={`text-base font-semibold mr-4 ${
+                                isActive ? "text-green-600" : "text-gray-500"
+                            }`}
+                            style={{
+                                letterSpacing: 1,
+                                minWidth: 70,
+                                textAlign: "right",
+                            }}
+                        >
+                            {isActive ? "Active" : "Inactive"}
                         </Text>
-                    )}
-                </View>
-
-                {/* toggle */}
-                <View className="flex-row items-center">
-                    <Text className="text-base font-medium text-gray-700 mr-3">
-                        {isActive ? "Active" : "Inactive"}
-                    </Text>
-
-                    <Switch
-                        value={isActive}
-                        onValueChange={handleToggle}
-                        disabled={activateMutation.isPending || deactivateMutation.isPending}
-                        thumbColor="#ffffff"
-                        trackColor={{ false: "#d1d5db", true: "#4ade80" }}
-                        ios_backgroundColor="#d1d5db"
-                        style={{ transform: [{ scaleX: 1.05 }, { scaleY: 1.05 }] }}
-                    />
-                </View>
+                        <Switch
+                            value={isActive}
+                            onValueChange={handleToggle}
+                            disabled={activateMutation.isPending || deactivateMutation.isPending}
+                            thumbColor={isActive ? "#4ade80" : "#ffffff"}
+                            trackColor={{ false: "#d1d5db", true: "#bbf7d0" }}
+                            ios_backgroundColor="#d1d5db"
+                            style={{
+                                transform: [{ scaleX: 1.15 }, { scaleY: 1.15 }],
+                                marginLeft: 6,
+                            }}
+                        />
+                    </View>
+                )}
             </View>
         </View>
-
     );
 }
