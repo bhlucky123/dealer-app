@@ -5,7 +5,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { printToFileAsync } from 'expo-print';
 import { shareAsync } from "expo-sharing";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -67,12 +67,13 @@ const SalesReportScreen = () => {
         initialData: user?.user_type === "ADMIN" ? cachedDealers : undefined,
     });
 
+    // Remove search from backend query
     const buildQuery = () => {
-        console.log("fromDate", fromDate?.toISOString());
-        console.log("toDate", toDate?.toISOString());
+        // console.log("fromDate", fromDate?.toISOString());
+        // console.log("toDate", toDate?.toISOString());
 
         const params: Record<string, string> = {};
-        if (search) params["search"] = search;
+        // if (search) params["search"] = search; // Remove search from backend
         if (fromDate) params["date_time__gte"] = fromDate.toISOString();
         if (toDate) params["date_time__lte"] = toDate.toISOString();
         // Always request full_view to get booking_details for the PDF
@@ -100,16 +101,52 @@ const SalesReportScreen = () => {
         enabled: !!selectedDraw?.id,
     });
 
+    // Frontend search filter
+    const filteredResult = useMemo(() => {
+        if (!data?.result) return [];
+        if (!search) return data.result;
+        // Only filter by bill_number (as per placeholder)
+        return data.result.filter(item =>
+            item.bill_number?.toString().toLowerCase().includes(search.toLowerCase())
+        );
+    }, [data, search]);
+
+    // Calculate totals for filtered data
+    const filteredTotals = useMemo(() => {
+        if (!filteredResult.length) {
+            return {
+                total_bill_count: 0,
+                total_dealer_amount: 0,
+                total_customer_amount: 0,
+            };
+        }
+        return filteredResult.reduce(
+            (acc, item) => {
+                acc.total_bill_count += item.bill_count || 0;
+                acc.total_dealer_amount += item.dealer_amount || 0;
+                acc.total_customer_amount += item.customer_amount || 0;
+                return acc;
+            },
+            {
+                total_bill_count: 0,
+                total_dealer_amount: 0,
+                total_customer_amount: 0,
+            }
+        );
+    }, [filteredResult]);
+
     const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && data;
 
     const generatePdf = async () => {
-        if (!data || !data.result || data.result.length === 0) {
+        // Use filteredResult for PDF if search is applied, else use all data
+        const pdfData = search ? filteredResult : (data?.result || []);
+        if (!pdfData || pdfData.length === 0) {
             alert("No data available to generate PDF.");
             return;
         }
 
         // Generate table rows from the data
-        const tableRows = data.result.flatMap(bill =>
+        const tableRows = pdfData.flatMap(bill =>
             bill.booking_details ? bill.booking_details.map(detail => `
                 <tr>
                     <td>${bill.dealer?.username || 'N/A'}</td>
@@ -121,7 +158,10 @@ const SalesReportScreen = () => {
             `).join('') : ''
         ).join('');
 
-        const totalAmount = data.total_customer_amount ? data.total_customer_amount.toFixed(2) : "0.00";
+        // Use filtered total if search is applied, else backend total
+        const totalAmount = search
+            ? filteredTotals.total_customer_amount.toFixed(0)
+            : (data?.total_customer_amount ? data.total_customer_amount.toFixed(2) : "0");
         const now = new Date();
         const formattedDate = formatDateDDMMYYYY(now);
         const formattedTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
@@ -334,10 +374,10 @@ const SalesReportScreen = () => {
                     </View>
                 ) : (
                     <>
-                        {data?.result?.length ? (
+                        {filteredResult?.length ? (
                             <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden mt-4">
                                 <FlatList
-                                    data={data.result}
+                                    data={filteredResult}
                                     keyExtractor={(item) => item.bill_number.toString()}
                                     ListHeaderComponent={() => (
                                         <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
@@ -365,16 +405,27 @@ const SalesReportScreen = () => {
                                                 <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{item.customer_amount.toFixed(0)}</Text>
                                             </View>
 
-                                            {fullView && item.booking_details?.map((d) => (
-                                                <View key={d.id} className="flex-row px-4 py-2 bg-amber-50/20 border-b border-amber-100 last:border-b-0">
-                                                    <Text className="flex-[1.1] text-[10px] text-gray-600">{d.sub_type}</Text>
-                                                    <Text className="flex-[1.2] text-[10px] text-center text-gray-600">{d.number}</Text>
-                                                    <Text className="flex-1 text-[10px] text-center text-gray-600">{d.count}</Text>
-                                                    <Text className="flex-1 text-[10px] text-center text-gray-600">₹{d.amount}</Text>
-                                                    <Text className="flex-1 text-[10px] text-right text-violet-600">₹{d.dealer_amount.toFixed(0)}</Text>
-                                                    <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{d.agent_amount.toFixed(0)}</Text>
-                                                </View>
-                                            ))}
+                                            {fullView && Array.isArray(item.booking_details) && item.booking_details.length > 0 && (
+                                                <FlatList
+                                                    data={item.booking_details}
+                                                    keyExtractor={(d) => d.id?.toString?.() ?? Math.random().toString()}
+                                                    renderItem={({ item: d }) => (
+                                                        <View className="flex-row px-4 py-2 bg-amber-50/20 border-b border-amber-100 last:border-b-0">
+                                                            <Text className="flex-[1.1] text-[10px] text-gray-600">{d.sub_type}</Text>
+                                                            <Text className="flex-[1.2] text-[10px] text-center text-gray-600">{d.number}</Text>
+                                                            <Text className="flex-1 text-[10px] text-center text-gray-600">{d.count}</Text>
+                                                            <Text className="flex-1 text-[10px] text-center text-gray-600">₹{d.amount}</Text>
+                                                            <Text className="flex-1 text-[10px] text-right text-violet-600">₹{d.dealer_amount.toFixed(0)}</Text>
+                                                            <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{d.agent_amount.toFixed(0)}</Text>
+                                                        </View>
+                                                    )}
+                                                    initialNumToRender={5}
+                                                    maxToRenderPerBatch={10}
+                                                    windowSize={5}
+                                                    removeClippedSubviews={true}
+                                                    scrollEnabled={false}
+                                                />
+                                            )}
                                         </View>
                                     )}
                                     ListEmptyComponent={
@@ -398,9 +449,19 @@ const SalesReportScreen = () => {
                             <Text className="flex-1 font-bold text-sm text-gray-800">TOTAL</Text>
                             <Text className="flex-1 text-sm"> </Text>
                             <Text className="flex-1 text-sm"> </Text>
-                            <Text className="flex-1 text-sm text-center font-semibold text-gray-700">{data?.total_bill_count || 0}</Text>
-                            <Text className="flex-1 text-sm text-right font-semibold text-violet-700">{data?.total_dealer_amount.toFixed(2) || 0}</Text>
-                            <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">{data?.total_customer_amount.toFixed(2) || 0}</Text>
+                            <Text className="flex-1 text-sm text-center font-semibold text-gray-700">
+                                {search ? filteredTotals.total_bill_count : (data?.total_bill_count || 0)}
+                            </Text>
+                            <Text className="flex-1 text-sm text-right font-semibold text-violet-700">
+                                {search
+                                    ? filteredTotals.total_dealer_amount.toFixed(2)
+                                    : (data?.total_dealer_amount?.toFixed(0) || 0)}
+                            </Text>
+                            <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">
+                                {search
+                                    ? filteredTotals.total_customer_amount.toFixed(2)
+                                    : (data?.total_customer_amount?.toFixed(0) || 0)}
+                            </Text>
                         </View>
                     </View>
                 )}
