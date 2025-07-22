@@ -160,7 +160,7 @@ const DrawResultForm = ({ onSubmit, initialData }: Props) => {
                                         placeholder="e.g. 123"
                                         value={typeof form[key] === "string" ? form[key] : ""}
                                         onChangeText={(text) => handleInput(key, text, idx)}
-                                        maxLength={10}
+                                        maxLength={3}
                                         returnKeyType={idx < mainPrizeRefs.length - 1 ? "next" : "done"}
                                         blurOnSubmit={idx === mainPrizeRefs.length - 1}
                                         onSubmitEditing={() => {
@@ -212,7 +212,7 @@ const DrawResultForm = ({ onSubmit, initialData }: Props) => {
                                                 placeholder={`Prize ${globalIdx + 1}`}
                                                 value={val}
                                                 onChangeText={(text) => handleComplementaryChange(globalIdx, text)}
-                                                maxLength={10}
+                                                maxLength={3}
                                                 returnKeyType={globalIdx < complementaryRefs.length - 1 ? "next" : "done"}
                                                 blurOnSubmit={globalIdx === complementaryRefs.length - 1}
                                                 onSubmitEditing={() => {

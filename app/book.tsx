@@ -9,15 +9,15 @@ import React, { useRef, useState } from "react";
 import * as RNClipboard from "react-native"; // For Clipboard.getString()
 import {
   Alert,
+  FlatList,
   KeyboardAvoidingView,
   Modal,
   Platform,
-  ScrollView,
   Text,
   TextInput,
   ToastAndroid,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { ALERT_TYPE, Dialog } from "react-native-alert-notification";
 import RNPickerSelect from "react-native-picker-select";
@@ -117,6 +117,9 @@ const BookingScreen: React.FC = () => {
     refetchOnMount: true,
   });
 
+  console.log("DrawSessionDetails", DrawSessionDetails, "selectedDraw?.id", selectedDraw?.id);
+
+
 
   const { mutate } = useMutation({
     mutationFn: async (data: any) => api.post("/draw-booking/create/", data),
@@ -172,6 +175,21 @@ const BookingScreen: React.FC = () => {
   };
 
   const addBooking = (subType: string, number?: string, count?: number, bCount?: number) => {
+
+    console.log("subType", subType, "count", count, 'bcount', bCount);
+
+
+    if (subType === "BOTH" && (count === 0 || bCount === 0)) {
+      return
+    }
+
+    if (subType === "BOX" && bCount === 0) {
+      return
+    }
+
+    if (subType === "SUPER" && bCount === 0) {
+      return
+    }
     // If number/count/bCount are provided, use them, else use state
     const digitsRequired = parseInt(drawSession);
     const bookingType = getBookingType();
@@ -1003,10 +1021,15 @@ const BookingScreen: React.FC = () => {
               </Text>
               <Text className="w-[8%] text-xs font-bold text-center"></Text>
             </View>
-            <ScrollView>
-              {bookingDetails.map((entry, index) => (
+            <FlatList
+              data={bookingDetails}
+              keyExtractor={(_, index) => index.toString()}
+              initialNumToRender={20}
+              maxToRenderPerBatch={20}
+              windowSize={10}
+              removeClippedSubviews={true}
+              renderItem={({ item: entry, index }) => (
                 <View
-                  key={index}
                   className="flex-row border-t border-gray-400 py-2 items-center"
                 >
                   <Text className="w-[12%] text-xs text-center">{entry.lsk}</Text>
@@ -1092,8 +1115,9 @@ const BookingScreen: React.FC = () => {
                     )}
                   </View>
                 </View>
-              ))}
-            </ScrollView>
+              )}
+              contentContainerStyle={{ flexGrow: 1 }}
+            />
           </View>
         </View>
 

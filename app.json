@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "dealer",
+    "name": "calculator",
     "slug": "dealer",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQhxKYKV3UjYv5LLme-c9IxgHs7bS5f8TcqrQ&s",
     "scheme": "dealer",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -13,8 +13,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#00000"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.anonymous.dealer"
@@ -29,10 +28,9 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#00000"
         }
       ]
     ],

@@ -1,8 +1,9 @@
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
+import { formatDateDDMMYYYY } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
@@ -11,294 +12,43 @@ import {
     View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Agent } from "./(tabs)/agent";
 
+const getToday = () => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+};
 
-
-const dummyDetails = {
-    "result": [
-        {
-            "bill_number": 1,
-            "draw": "bh lucky",
-            "date_time": "2025-07-12T09:09:21.287351Z",
-            "bill_count": 8,
-            "dealer_amount": 40.0,
-            "agent_amount": 80,
-            "customer_amount": 80,
-            "booked_by": {
-                "id": 2,
-                "username": "d1",
-                "user_type": "DEALER",
-                "commission": 5.0,
-                "single_digit_number_commission": 6.0,
-                "cap_amount": 1000000.0
-            },
-            "dealer": {
-                "id": 2,
-                "username": "d1",
-                "user_type": "DEALER",
-                "commission": 5.0,
-                "single_digit_number_commission": 6.0,
-                "cap_amount": 1000000.0
-            },
-            "agent": null,
-            "booking_details": [
-                {
-                    "id": 1,
-                    "dealer_amount": -30.0,
-                    "agent_amount": 10,
-                    "number": "123",
-                    "count": 8,
-                    "amount": 10,
-                    "type": "triple_digit",
-                    "sub_type": "SUPER",
-                    "is_main_box_number": false
-                }
-            ]
-        },
-
-        {
-            "bill_number": 2,
-            "draw": "mega star",
-            "date_time": "2025-07-12T10:17:00Z",
-            "bill_count": 5,
-            "dealer_amount": 25.0,
-            "agent_amount": 50,
-            "customer_amount": 50,
-            "booked_by": {
-                "id": 3,
-                "username": "dealer02",
-                "user_type": "DEALER",
-                "commission": 4.0,
-                "single_digit_number_commission": 5.5,
-                "cap_amount": 500000.0
-            },
-            "dealer": {
-                "id": 3,
-                "username": "dealer02",
-                "user_type": "DEALER",
-                "commission": 4.0,
-                "single_digit_number_commission": 5.5,
-                "cap_amount": 500000.0
-            },
-            "agent": null,
-            "booking_details": [
-                {
-                    "id": 9,
-                    "dealer_amount": -15.0,
-                    "agent_amount": 5,
-                    "number": "889",
-                    "count": 5,
-                    "amount": 5,
-                    "type": "triple_digit",
-                    "sub_type": "BOX",
-                    "is_main_box_number": true
-                }
-            ]
-        },
-
-        {
-            "bill_number": 3,
-            "draw": "morning gold",
-            "date_time": "2025-07-12T11:45:31Z",
-            "bill_count": 10,
-            "dealer_amount": 60.0,
-            "agent_amount": 120,
-            "customer_amount": 120,
-            "booked_by": {
-                "id": 4,
-                "username": "agent01",
-                "user_type": "AGENT",
-                "commission": 6.0,
-                "single_digit_number_commission": 7.0,
-                "cap_amount": 750000.0
-            },
-            "dealer": {
-                "id": 2,
-                "username": "d1",
-                "user_type": "DEALER",
-                "commission": 5.0,
-                "single_digit_number_commission": 6.0,
-                "cap_amount": 1000000.0
-            },
-            "agent": {
-                "id": 4,
-                "username": "agent01",
-                "user_type": "AGENT",
-                "commission": 6.0,
-                "single_digit_number_commission": 7.0,
-                "cap_amount": 750000.0
-            },
-            "booking_details": [
-                {
-                    "id": 15,
-                    "dealer_amount": -50.0,
-                    "agent_amount": 20,
-                    "number": "045",
-                    "count": 10,
-                    "amount": 12,
-                    "type": "triple_digit",
-                    "sub_type": "SUPER",
-                    "is_main_box_number": false
-                }
-            ]
-        },
-
-        {
-            "bill_number": 4,
-            "draw": "night rider",
-            "date_time": "2025-07-12T15:05:18Z",
-            "bill_count": 3,
-            "dealer_amount": 12.0,
-            "agent_amount": 30,
-            "customer_amount": 30,
-            "booked_by": {
-                "id": 5,
-                "username": "dealer03",
-                "user_type": "DEALER",
-                "commission": 4.5,
-                "single_digit_number_commission": 5.0,
-                "cap_amount": 800000.0
-            },
-            "dealer": {
-                "id": 5,
-                "username": "dealer03",
-                "user_type": "DEALER",
-                "commission": 4.5,
-                "single_digit_number_commission": 5.0,
-                "cap_amount": 800000.0
-            },
-            "agent": null,
-            "booking_details": [
-                {
-                    "id": 18,
-                    "dealer_amount": -9.0,
-                    "agent_amount": 3,
-                    "number": "777",
-                    "count": 3,
-                    "amount": 3,
-                    "type": "triple_digit",
-                    "sub_type": "BOX",
-                    "is_main_box_number": true
-                }
-            ]
-        },
-
-        {
-            "bill_number": 5,
-            "draw": "lucky evening",
-            "date_time": "2025-07-12T17:32:44Z",
-            "bill_count": 7,
-            "dealer_amount": 35.0,
-            "agent_amount": 70,
-            "customer_amount": 70,
-            "booked_by": {
-                "id": 6,
-                "username": "agent02",
-                "user_type": "AGENT",
-                "commission": 5.5,
-                "single_digit_number_commission": 6.5,
-                "cap_amount": 600000.0
-            },
-            "dealer": {
-                "id": 3,
-                "username": "dealer02",
-                "user_type": "DEALER",
-                "commission": 4.0,
-                "single_digit_number_commission": 5.5,
-                "cap_amount": 500000.0
-            },
-            "agent": {
-                "id": 6,
-                "username": "agent02",
-                "user_type": "AGENT",
-                "commission": 5.5,
-                "single_digit_number_commission": 6.5,
-                "cap_amount": 600000.0
-            },
-            "booking_details": [
-                {
-                    "id": 22,
-                    "dealer_amount": -24.5,
-                    "agent_amount": 7,
-                    "number": "931",
-                    "count": 7,
-                    "amount": 7,
-                    "type": "triple_digit",
-                    "sub_type": "SUPER",
-                    "is_main_box_number": false
-                }
-            ]
-        },
-
-        {
-            "bill_number": 6,
-            "draw": "midday jackpot",
-            "date_time": "2025-07-12T12:58:13Z",
-            "bill_count": 4,
-            "dealer_amount": 20.0,
-            "agent_amount": 40,
-            "customer_amount": 40,
-            "booked_by": {
-                "id": 7,
-                "username": "dealer04",
-                "user_type": "DEALER",
-                "commission": 4.0,
-                "single_digit_number_commission": 5.0,
-                "cap_amount": 550000.0
-            },
-            "dealer": {
-                "id": 7,
-                "username": "dealer04",
-                "user_type": "DEALER",
-                "commission": 4.0,
-                "single_digit_number_commission": 5.0,
-                "cap_amount": 550000.0
-            },
-            "agent": null,
-            "booking_details": [
-                {
-                    "id": 27,
-                    "dealer_amount": -16.0,
-                    "agent_amount": 4,
-                    "number": "864",
-                    "count": 4,
-                    "amount": 4,
-                    "type": "triple_digit",
-                    "sub_type": "BOX",
-                    "is_main_box_number": true
-                }
-            ]
-        }
-    ],
-    "total_bill_count": 8,
-    "total_dealer_amount": 40.0,
-    "total_agent_amount": 80,
-    "total_customer_amount": 80
-}
-
+const getTommorow = () => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+};
 
 const LastSaleReportScreen = () => {
     const { selectedDraw } = useDrawStore();
-    const [search, setSearch] = useState("");
-    const [fromDate, setFromDate] = useState<Date | null>(new Date());
-    const [toDate, setToDate] = useState<Date | null>(new Date());
+    const [fromDate, setFromDate] = useState<Date | null>(getToday());
+    const [toDate, setToDate] = useState<Date | null>(getTommorow());
     const [showFromPicker, setShowFromPicker] = useState(false);
     const [showToPicker, setShowToPicker] = useState(false); // Corrected this state variable name
     const [fullView, setFullView] = useState(false);
-    const [selectedAgent, setSelectedAgent] = useState("")
 
     const { user } = useAuthStore()
+
+
 
     const buildQuery = () => {
         // Use an index signature to allow dynamic keys
         const params: Record<string, string> = {};
 
-        if (search) params["search"] = search;
-        if (fromDate) params["date_time__gte"] = fromDate.toISOString();
-        if (toDate) params["date_time__lte"] = toDate.toISOString();
+        // Format date as yyyy-mm-dd
+        const formatDateYYYYMMDD = (date: Date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, "0");
+            const day = String(date.getDate()).padStart(2, "0");
+            return `${year}-${month}-${day}`;
+        };
+        // if (fromDate) params["date_time__gte"] = formatDateYYYYMMDD(fromDate);
+        // if (toDate) params["date_time__lte"] = formatDateYYYYMMDD(toDate);
         if (fullView) params["full_view"] = "true";
-        if (selectedAgent) params["booked_agent__id"] = selectedAgent;
         // if (user?.user_type === "AGENT") params["booked_agent__id"] = user.id?.toString();
         if (selectedDraw?.id) params["draw_session__draw__id"] = String(selectedDraw.id);
 
@@ -319,28 +69,8 @@ const LastSaleReportScreen = () => {
         enabled: !!selectedDraw?.id,
     });
 
-    // console.log("sales-report", data, "selectedDraw.id", selectedDraw?.id);
+    console.log("sales-report", data, "selectedDraw.id", selectedDraw?.id);
 
-
-    // const data = dummyDetails
-
-
-    const queryClient = useQueryClient();
-    const cachedAgents = queryClient.getQueryData<Agent[]>(["agents"]);
-
-    const {
-        data: agents = [],
-        isLoading: isAgentLoading,
-        isError,
-        error: AgentError,
-        refetch,
-        isFetching,
-    } = useQuery<Agent[]>({
-        queryKey: ["agents"],
-        queryFn: () => api.get("/agent/agent/").then((res) => res.data),
-        enabled: !cachedAgents, // Only fetch if not already cached
-        initialData: cachedAgents, // Use cached data if available
-    });
 
     // Determine if we should show the total footer
     // It should show if data is successfully loaded (not loading, no error) and a draw is selected
@@ -464,7 +194,7 @@ const LastSaleReportScreen = () => {
                                     ListHeaderComponent={() => (
                                         <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
                                             <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">
-                                                Date & Time
+                                                Date
                                             </Text>
                                             <Text className="flex-[1.2] text-xs font-semibold text-center text-gray-600 uppercase">
                                                 Dealer
@@ -489,7 +219,7 @@ const LastSaleReportScreen = () => {
                                             <View className="flex-row px-4 py-3 items-center border-b border-gray-100">
                                                 <View className="flex-[1.1] flex-col justify-center">
                                                     <Text className="text-[10px] text-gray-800 font-medium">
-                                                        {new Date(item.date_time).toLocaleDateString()}
+                                                        {formatDateDDMMYYYY(new Date(item.date_time))}
                                                     </Text>
                                                     <Text className="text-[9px] text-gray-500 mt-0.5">
                                                         {new Date(item.date_time).toLocaleTimeString([], {
@@ -509,10 +239,10 @@ const LastSaleReportScreen = () => {
                                                     {item.bill_count}
                                                 </Text>
                                                 <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">
-                                                    {item.dealer_amount.toFixed(2)} {/* Format to 2 decimal places */}
+                                                    ₹{item.dealer_amount.toFixed(0)} {/* Format to 2 decimal places */}
                                                 </Text>
                                                 <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">
-                                                    {item.customer_amount.toFixed(2)}{" "}
+                                                    ₹{item.customer_amount.toFixed(0)}{" "}
                                                     {/* Format to 2 decimal places */}
                                                 </Text>
                                             </View>
@@ -537,10 +267,10 @@ const LastSaleReportScreen = () => {
                                                             {d.amount}
                                                         </Text>
                                                         <Text className="flex-1 text-[10px] text-right text-violet-600">
-                                                            {d.dealer_amount.toFixed(2)}
+                                                            ₹{d.dealer_amount.toFixed(0)}
                                                         </Text>
                                                         <Text className="flex-1 text-[10px] text-right text-emerald-600">
-                                                            {d.agent_amount.toFixed(2)}
+                                                            ₹{d.agent_amount.toFixed(0)}
                                                         </Text>
                                                     </View>
                                                 ))}
