@@ -80,6 +80,7 @@ export default function PaymentTab() {
         queryFn: () => api.get(`/draw-payment/dealers-with-pending-balance/`).then(res => res.data),
         enabled: user?.user_type === "ADMIN",
     });
+    
 
     // Fetch agents with pending balance (for DEALER)
     const {
@@ -247,7 +248,7 @@ export default function PaymentTab() {
         (user?.user_type === "DEALER" && isAgentsLoading)
     ) {
         return (
-            <View className="flex-1 items-center justify-center bg-gray-900">
+            <View className="flex-1 items-center justify-center">
                 <ActivityIndicator size="large" color="#2563eb" />
                 <Text className="mt-2 text-base text-white">Loading balances…</Text>
             </View>

@@ -16,10 +16,16 @@ type Draw = {
 const useDraw = () => {
   const queryClient = useQueryClient();
 
+  // Always return a mutation object, never undefined
   const createDraw = useMutation({
     mutationFn: async (data: Draw) => {
-      const res = await api.post("/draw/", data);
-      return res?.data;
+      try {
+        const res = await api.post("/draw/", data);
+        return res?.data;
+      } catch (error: any) {
+        console.error("Error creating draw:", error);
+        throw error?.response?.data || error?.message || "Failed to create draw.";
+      }
     },
     onSuccess: (newDraw) => {
       queryClient.setQueryData<Draw[]>(["/draw/list/"], (oldDraws = []) => [
@@ -27,23 +33,34 @@ const useDraw = () => {
         newDraw,
       ]);
     },
+    onError: (error) => {
+      console.error("Mutation error in createDraw:", error);
+      // Optionally, handle error side effects here (e.g., show toast)
+    },
   });
 
   const updateDraw = useMutation({
     mutationFn: async (data: Draw) => {
-      const res = await api.put(`/draw/${data.id}/`, data);
-      return res?.data;
+      try {
+        const res = await api.put(`/draw/${data.id}/`, data);
+        return res?.data;
+      } catch (error: any) {
+        console.error("Error updating draw:", error);
+        throw error?.response?.data || error?.message || "Failed to update draw.";
+      }
     },
     onSuccess: (updatedDraw) => {
       queryClient.setQueryData<Draw[]>(["/draw/list/"], (oldDraws = []) =>
         oldDraws.map((d) => (d.id === updatedDraw.id ? updatedDraw : d))
       );
-
-
+    },
+    onError: (error) => {
+      console.error("Mutation error in updateDraw:", error);
+      // Optionally, handle error side effects here (e.g., show toast)
     },
   });
 
-
+  // Defensive: always return a mutation object, never undefined
   const createDrawResult = useMutation({
     mutationFn: async ({
       draw_session,
@@ -57,13 +74,57 @@ const useDraw = () => {
       fifth_prize: string;
       complementary_prizes: string[];
     }) => {
-      const res = await api.post(`/draw-result/result/${draw_session}/`, rest);
-      return res?.data;
+      try {
+        console.log("on create  ", rest);
+        const res = await api.post(`/draw-result/result/${draw_session}/`, rest);
+        return res?.data;
+      } catch (error: any) {
+        console.error("Error creating draw result:", error);
+        throw error?.response?.data || error?.message || "Failed to create draw result.";
+      }
+    },
+    onError: (error) => {
+      console.error("Mutation error in createDrawResult:", error);
+      // Optionally, handle error side effects here (e.g., show toast)
     },
   });
 
+  const updateDrawResult = useMutation({
+    mutationFn: async ({
+      id,
+      ...rest
+    }: {
+      id: number;
+      first_prize: string;
+      second_prize: string;
+      third_prize: string;
+      fourth_prize: string;
+      fifth_prize: string;
+      complementary_prizes: string[];
+    }) => {
+      try {
+        const res = await api.post(`/draw-result/result/${id}/`, rest);
+        console.log("res", res);
+        return res?.data;
+      } catch (error: any) {
+        console.error("Error updating draw result:", error);
+        // Optionally, you can throw a more descriptive error
+        throw error?.response?.data || error?.message || "Failed to update draw result.";
+      }
+    },
+    onError: (error) => {
+      // You can handle side effects here, e.g., show a toast or log
+      console.error("Mutation error in updateDrawResult:", error);
+    },
+  });
 
-  return { createDraw, updateDraw, createDrawResult };
+  // Always return all mutation objects, never undefined
+  return {
+    createDraw: createDraw,
+    updateDraw: updateDraw,
+    createDrawResult: createDrawResult,
+    updateDrawResult: updateDrawResult,
+  };
 };
 
 export default useDraw;

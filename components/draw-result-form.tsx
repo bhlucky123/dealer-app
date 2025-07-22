@@ -31,7 +31,16 @@ const DrawResultForm = ({ onSubmit, initialData }: Props) => {
         third_prize: initialData?.third_prize || '',
         fourth_prize: initialData?.fourth_prize || '',
         fifth_prize: initialData?.fifth_prize || '',
-        complementary_prizes: initialData?.complementary_prizes || Array(30).fill(''),
+        complementary_prizes: (() => {
+            let prizes = initialData?.complementary_prizes ?? [];
+            if (!Array.isArray(prizes)) prizes = [];
+            if (prizes.length < 30) {
+                return [...prizes, ...Array(30 - prizes.length).fill('')];
+            } else if (prizes.length > 30) {
+                return prizes.slice(0, 30);
+            }
+            return prizes;
+        })(),
     });
 
     // Refs for main prize inputs
