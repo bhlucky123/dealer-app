@@ -1,10 +1,11 @@
 import DrawResultForm from "@/components/draw-result-form";
 import useDraw from "@/hooks/use-draw";
+import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, AlertTriangle, Calendar, Plus, Share2, X } from "lucide-react-native";
+import { AlertCircle, AlertTriangle, Calendar, Plus, X } from "lucide-react-native";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
@@ -42,40 +43,56 @@ const ResultPage: React.FC = () => {
     const [mode, setMode] = useState<"view" | "edit">("view");
     const [formData, setFormData] = useState<Partial<DrawResult> | null>(null);
     const [showDatePicker, setShowDatePicker] = useState(false);
-    const [filterDate, setFilterDate] = useState<Date | null>(null);
+    const [filterDate, setFilterDate] = useState<Date>(new Date());
 
     console.log("selectedDraw", selectedDraw);
 
+    const {user} = useAuthStore()
 
-    const { data, isLoading, error, refetch } = useQuery<DrawResult | null>({
-        queryKey: ["/draw-result/result/", selectedDraw?.id, filterDate?.toDateString()],
+
+    // Helper to format date as yyyy-mm-dd
+    function formatDateServer(date: Date | null): string | null {
+        if (!date) return null;
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, "0");
+        const dd = String(date.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+    }
+
+    const filterDateString = formatDateServer(filterDate);
+
+    console.log("filterDateString", filterDateString);
+
+
+    const { data: rawData, isLoading, error, refetch } = useQuery<DrawResult[] | null>({
+        queryKey: ["/draw-result/result/", selectedDraw?.id, filterDateString],
         queryFn: async () => {
-            const res = await api.get(`/draw-result/result/${selectedDraw?.id}/`);
+            const res = await api.get(
+                `/draw-result/result/?draw_session__draw__id=${selectedDraw?.id}&draw_session__session_date=${filterDateString ?? ""}`
+            );
             return res.data;
         },
         enabled: !!selectedDraw?.id,
     });
 
-    console.log("error", error);
+    const data = rawData?.[0]
+
+    console.log("result", data, "filterDateString", filterDateString);
 
 
     /* ------------------- helpers ------------------- */
     const handleFormSubmit = async (resultData: any) => {
+        console.log("on sbmit", resultData);
+
         await createDrawResult.mutateAsync({
             ...resultData,
-            draw_session: selectedDraw!.id,
+            draw_session: selectedDraw?.id,
         });
+        console.log("sucess");
+
         setMode("view");
         setFormData(null);
         refetch();
-    };
-
-    const shareResult = async () => {
-        if (!data) return;
-        const msg = `Draw Result (\n${data.draw})\n1st: ${data.first_prize}\n2nd: ${data.second_prize}\n3rd: ${data.third_prize}\n4th: ${data.fourth_prize}\n5th: ${data.fifth_prize}`;
-        try {
-            await Share2.share({ message: msg });
-        } catch { }
     };
 
     /* ------------------- states ------------------- */
@@ -104,11 +121,13 @@ const ResultPage: React.FC = () => {
         );
     }
 
+    console.log("data", data);
+
     /* ------------------- View mode ------------------- */
     // Always show the date filter and plus button, even if error or loading
     let errorMessage: string = "";
     let isNoResultYet = false;
-    if (error) {
+    if (error || !data) {
         errorMessage =
             (error as any)?.message?.detail ||
             (error as any)?.message ||
@@ -120,6 +139,7 @@ const ResultPage: React.FC = () => {
             isNoResultYet = true;
         }
     }
+    
 
     return (
         <ScrollView className="flex-1">
@@ -145,7 +165,8 @@ const ResultPage: React.FC = () => {
                 </View>
 
                 {/* FAB to edit / add */}
-                <TouchableOpacity
+                {
+                    user?.user_type === "ADMIN" && <TouchableOpacity
                     onPress={() => {
                         setFormData(data || null);
                         setMode("edit");
@@ -162,6 +183,7 @@ const ResultPage: React.FC = () => {
                 >
                     <Plus size={26} color="#fff" />
                 </TouchableOpacity>
+                }
             </View>
 
             {/* Loading state */}

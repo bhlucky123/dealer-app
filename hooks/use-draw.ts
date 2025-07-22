@@ -38,16 +38,18 @@ const useDraw = () => {
       queryClient.setQueryData<Draw[]>(["/draw/list/"], (oldDraws = []) =>
         oldDraws.map((d) => (d.id === updatedDraw.id ? updatedDraw : d))
       );
+
+
     },
   });
 
 
   const createDrawResult = useMutation({
     mutationFn: async ({
-      draw_id,
+      draw_session,
       ...rest
     }: {
-      draw_id: number;
+      draw_session: number;
       first_prize: string;
       second_prize: string;
       third_prize: string;
@@ -55,7 +57,7 @@ const useDraw = () => {
       fifth_prize: string;
       complementary_prizes: string[];
     }) => {
-      const res = await api.post(`/draw-result/result/${draw_id}/`, rest);
+      const res = await api.post(`/draw-result/result/${draw_session}/`, rest);
       return res?.data;
     },
   });

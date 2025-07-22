@@ -14,13 +14,23 @@ import {
   View,
 } from "react-native";
 
+const getToday = () => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+};
+
+const getTommorow = () => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+};
+
 const DailyReport = () => {
   const { selectedDraw } = useDrawStore();
 
   // Set today as default for both fromDate and toDate
   const today = new Date();
-  const [fromDate, setFromDate] = useState<Date>(today);
-  const [toDate, setToDate] = useState<Date>(today);
+  const [fromDate, setFromDate] = useState<Date>(getToday());
+  const [toDate, setToDate] = useState<Date>(getTommorow());
   const [showFromPicker, setShowFromPicker] = useState(false);
   const [showToPicker, setShowToPicker] = useState(false);
   const [allGames, setAllGames] = useState(false);
@@ -28,11 +38,14 @@ const DailyReport = () => {
 
   const buildQuery = () => {
     const params: Record<string, any> = {};
-    if (fromDate) params.date_time__gte = fromDate.toISOString().split("T")[0];
-    if (toDate) params.date_time__lte = toDate.toISOString().split("T")[0];
+    if (fromDate) params.date_time__gte = fromDate.toISOString();
+    if (toDate) params.date_time__lte = toDate.toISOString();
     if (selectedDraw?.id && !allGames) params.draw_session__draw__id = selectedDraw.id;
+    console.log("params", params);
     return params;
   };
+
+
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["/draw-booking/daily-report", buildQuery()],
@@ -42,6 +55,9 @@ const DailyReport = () => {
     },
     enabled: !!selectedDraw?.id,
   });
+
+  console.log("data", data);
+
 
   const renderTableHeader = (cols: string[]) => (
     <View className="flex-row bg-gray-100 border-b border-gray-200 py-2">
@@ -62,8 +78,8 @@ const DailyReport = () => {
         {isTotal ? "Total" : item.agent?.username || item.dealer?.username || "-"}
       </Text>
       <Text className="flex-1 text-xs text-center text-gray-800">{item.draw}</Text>
-      <Text className="flex-1 text-xs text-center text-gray-800">{item.total_amount}</Text>
-      <Text className="flex-1 text-xs text-center text-gray-800">{item.total_win || 0}</Text>
+      <Text className="flex-1 text-xs text-center text-gray-800">₹{item.total_amount}</Text>
+      {/* <Text className="flex-1 text-xs text-center text-gray-800">{item.total_win || 0}</Text> */}
     </View>
   );
 
@@ -79,8 +95,8 @@ const DailyReport = () => {
         {item.agent?.username || item.dealer?.username || "-"}
       </Text>
       <Text className="flex-1 text-xs text-center text-gray-800">{item.draw}</Text>
-      <Text className="flex-1 text-xs text-center text-gray-800">{item.total_amount}</Text>
-      <Text className="flex-1 text-xs text-center text-gray-800">{item.total_win || 0}</Text>
+      <Text className="flex-1 text-xs text-center text-gray-800">₹{item.total_amount}</Text>
+      {/* <Text className="flex-1 text-xs text-center text-gray-800">{item.total_win || 0}</Text> */}
     </View>
   );
 
@@ -200,7 +216,7 @@ const DailyReport = () => {
           {/* Summary Table */}
           <View className="border border-gray-200 rounded-lg overflow-hidden bg-white" style={{ elevation: 0 }}>
             <Text className="bg-gray-100 px-3 py-2 font-bold text-sm border-b border-gray-200">SUMMARY</Text>
-            {renderTableHeader(["SUBDEALER", "GAME", "SALE", "WIN"])}
+            {renderTableHeader(["SUBDEALER", "GAME", "SALE"])}
             {data?.summary?.map((item: any) => renderSummaryRow(item))}
             {data?.summary &&
               renderSummaryRow(
@@ -218,7 +234,7 @@ const DailyReport = () => {
           {/* Detailed Table */}
           <View className="border border-gray-200 rounded-lg mt-6 overflow-hidden bg-white" style={{ elevation: 0 }}>
             <Text className="bg-gray-100 px-3 py-2 font-bold text-sm border-b border-gray-200">DETAILED</Text>
-            {renderTableHeader(["DATE", "SUBDEALER", "GAME", "SALE", "WIN"])}
+            {renderTableHeader(["DATE", "SUBDEALER", "GAME", "SALE"])}
             {data?.report?.map((item: any) => renderDetailRow(item))}
             {data?.report &&
               renderDetailRow(

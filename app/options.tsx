@@ -65,6 +65,20 @@ const OptionsPage = () => {
           <Text className="text-center text-base text-black">{item.label}</Text>
         </TouchableOpacity>
       ))}
+
+      {
+        user?.user_type === "ADMIN" && (
+          <TouchableOpacity
+            className="bg-gray-100 rounded-lg py-4 px-4 mb-3"
+            activeOpacity={0.7}
+            onPress={() => {
+              router.push("/limit-count");
+            }}
+          >
+            <Text className="text-center text-base text-black">Limit Count</Text>
+          </TouchableOpacity>
+        )
+      }
     </View>
   );
 };

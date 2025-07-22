@@ -24,6 +24,11 @@ const getToday = () => {
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 };
 
+const getTommorow = () => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+};
+
 const formatDateDDMMYYYY = (date?: Date | null) => {
     if (!date) return "";
     const d = new Date(date);
@@ -37,10 +42,10 @@ const SalesReportScreen = () => {
     const { selectedDraw } = useDrawStore();
     const [search, setSearch] = useState("");
     const [fromDate, setFromDate] = useState<Date | null>(getToday());
-    const [toDate, setToDate] = useState<Date | null>(getToday());
+    const [toDate, setToDate] = useState<Date | null>(getTommorow());
     const [showFromPicker, setShowFromPicker] = useState(false);
     const [showToPicker, setShowToPicker] = useState(false);
-    const [fullView, setFullView] = useState(true); // Set to true to always get detailed data for PDF
+    const [fullView, setFullView] = useState(false);
     const [selectedFilter, setSelectedFilter] = useState("");
 
     const { user } = useAuthStore();
@@ -63,6 +68,9 @@ const SalesReportScreen = () => {
     });
 
     const buildQuery = () => {
+        console.log("fromDate", fromDate?.toISOString());
+        console.log("toDate", toDate?.toISOString());
+
         const params: Record<string, string> = {};
         if (search) params["search"] = search;
         if (fromDate) params["date_time__gte"] = fromDate.toISOString();
@@ -295,7 +303,7 @@ const SalesReportScreen = () => {
                     </TouchableOpacity>
 
                     <View className="flex-row items-center justify-between px-1 pt-1">
-                        <Text className="text-sm text-gray-700">Full View (On-screen)</Text>
+                        <Text className="text-sm text-gray-700">Full View</Text>
                         <Switch
                             value={fullView}
                             onValueChange={setFullView}
@@ -353,8 +361,8 @@ const SalesReportScreen = () => {
                                                 <Text className="flex-[1.2] text-sm text-center text-gray-700">{item.dealer.username}</Text>
                                                 <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_number}</Text>
                                                 <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_count}</Text>
-                                                <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">{item.dealer_amount.toFixed(2)}</Text>
-                                                <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">{item.customer_amount.toFixed(2)}</Text>
+                                                <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{item.dealer_amount.toFixed(0)}</Text>
+                                                <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{item.customer_amount.toFixed(0)}</Text>
                                             </View>
 
                                             {fullView && item.booking_details?.map((d) => (
@@ -362,9 +370,9 @@ const SalesReportScreen = () => {
                                                     <Text className="flex-[1.1] text-[10px] text-gray-600">{d.sub_type}</Text>
                                                     <Text className="flex-[1.2] text-[10px] text-center text-gray-600">{d.number}</Text>
                                                     <Text className="flex-1 text-[10px] text-center text-gray-600">{d.count}</Text>
-                                                    <Text className="flex-1 text-[10px] text-center text-gray-600">{d.amount}</Text>
-                                                    <Text className="flex-1 text-[10px] text-right text-violet-600">{d.dealer_amount.toFixed(2)}</Text>
-                                                    <Text className="flex-1 text-[10px] text-right text-emerald-600">{d.agent_amount.toFixed(2)}</Text>
+                                                    <Text className="flex-1 text-[10px] text-center text-gray-600">₹{d.amount}</Text>
+                                                    <Text className="flex-1 text-[10px] text-right text-violet-600">₹{d.dealer_amount.toFixed(0)}</Text>
+                                                    <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{d.agent_amount.toFixed(0)}</Text>
                                                 </View>
                                             ))}
                                         </View>

@@ -1,6 +1,7 @@
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
+import { getToday, getTommorow } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useState } from "react";
@@ -17,6 +18,7 @@ import RNPickerSelect from "react-native-picker-select";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Agent } from "./(tabs)/agent";
 
+// Update WinnerReport type to allow dealer/agent to be string or object (for type safety)
 type WinnerReport = {
     customer_name: string;
     bill_number: number;
@@ -25,15 +27,15 @@ type WinnerReport = {
     count: string;
     lsk: string;
     draw: string;
-    dealer: string;
-    agent: string;
+    dealer: string | { id: number; username: string; user_type: string; commission: number; single_digit_number_commission: number; cap_amount: number };
+    agent: string | { id: number; username: string; user_type: string; commission: number; single_digit_number_commission: number; cap_amount: number } | null;
 };
 
 const WinnersReportScreen = () => {
     const { selectedDraw } = useDrawStore();
     const [search, setSearch] = useState("");
-    const [fromDate, setFromDate] = useState<Date | null>(null);
-    const [toDate, setToDate] = useState<Date | null>(null);
+    const [fromDate, setFromDate] = useState<Date>(getToday());
+    const [toDate, setToDate] = useState<Date>(getTommorow());
     const [showFromPicker, setShowFromPicker] = useState(false);
     const [showToPicker, setShowToPicker] = useState(false);
     const [fullView, setFullView] = useState(false);
@@ -81,8 +83,6 @@ const WinnersReportScreen = () => {
             params["booked_agent__id"] = selectedDealer;
         if (selectedDraw?.id) params["draw_session__draw__id"] = String(selectedDraw.id);
 
-        // console.log("params", params);
-
         return Object.keys(params)
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
             .join("&");
@@ -99,6 +99,14 @@ const WinnersReportScreen = () => {
 
     // Determine if we should show the total footer
     const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && data;
+
+    // Helper to safely get username from dealer/agent (string or object)
+    const getUsername = (userField: any) => {
+        if (!userField) return "";
+        if (typeof userField === "string") return userField;
+        if (typeof userField === "object" && userField.username) return userField.username;
+        return "";
+    };
 
     return (
         <SafeAreaView className="flex-1 bg-white">
@@ -299,7 +307,7 @@ const WinnersReportScreen = () => {
                                                 </View>
                                                 <View className="flex-1">
                                                     <Text className="text-sm text-center text-gray-700">
-                                                        {item.dealer}
+                                                        {getUsername(item.dealer)}
                                                     </Text>
                                                     <Text className="text-sm text-center text-gray-700">
                                                         Bill ID
