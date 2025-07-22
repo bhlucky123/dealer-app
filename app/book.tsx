@@ -67,7 +67,6 @@ const RangeOptions = [
 const BookingScreen: React.FC = () => {
   const [customerName, setCustomerName] = useState<string>("");
   const [drawSession, setDrawSession] = useState<string>("3");
-  // Add "Different" to the union type for selectedRange
   const [selectedRange, setSelectedRange] = useState<"Book" | "Set" | "Range" | "Different">(
     "Book"
   );
@@ -75,7 +74,6 @@ const BookingScreen: React.FC = () => {
   const [endNumberInput, setEndNumberInput] = useState<string>("");
   const [countInput, setCountInput] = useState<string>("");
   const [bCountInput, setBCountInput] = useState<string>("");
-  // New state for difference input
   const [differenceInput, setDifferenceInput] = useState<string>("");
   const [bookingDetails, setBookingDetails] = useState<BookingDetail[]>([]);
   const [rangeOptions, setRangeOptions] = useState(RangeOptions);
@@ -93,7 +91,6 @@ const BookingScreen: React.FC = () => {
   const countInputRef = useRef<TextInput>(null);
   const numInputRef = useRef<TextInput>(null);
   const endNumInputRef = useRef<TextInput>(null);
-  // New ref for difference input
   const differenceInputRef = useRef<TextInput>(null);
 
   const buttonsMap: Record<string, string[]> = {
@@ -119,8 +116,6 @@ const BookingScreen: React.FC = () => {
 
   console.log("DrawSessionDetails", DrawSessionDetails, "selectedDraw?.id", selectedDraw?.id);
 
-
-
   const { mutate } = useMutation({
     mutationFn: async (data: any) => api.post("/draw-booking/create/", data),
     onSuccess: () => {
@@ -131,18 +126,15 @@ const BookingScreen: React.FC = () => {
     },
     onError: (error: any) => {
       let errorMessage = "Failed to submit.";
-      // Try to extract a user-friendly error message
       if (error?.message) {
         if (typeof error.message === "string") {
           errorMessage = error.message;
         } else if (typeof error.message === "object") {
-          // Check for common error formats
           if (error.message.non_field_errors && Array.isArray(error.message.non_field_errors)) {
             errorMessage = error.message.non_field_errors.join("\n");
           } else if (error.message.detail) {
             errorMessage = error.message.detail;
           } else {
-            // Fallback: show stringified object
             errorMessage = JSON.stringify(error.message);
           }
         }
@@ -153,9 +145,7 @@ const BookingScreen: React.FC = () => {
         title: 'Error',
         textBody: errorMessage,
         button: 'Close',
-
       });
-
     },
   });
 
@@ -174,22 +164,13 @@ const BookingScreen: React.FC = () => {
     }
   };
 
-  const addBooking = (subType: string, number?: string, count?: number, bCount?: number) => {
-
-    console.log("subType", subType, "count", count, 'bcount', bCount);
-
-
-    if (subType === "BOTH" && (count === 0 || bCount === 0)) {
-      return
-    }
-
-    if (subType === "BOX" && bCount === 0) {
-      return
-    }
-
-    if (subType === "SUPER" && bCount === 0) {
-      return
-    }
+  // --- REWRITE addBooking ---
+  const addBooking = (
+    subType: string,
+    number?: string,
+    count?: number,
+    bCount?: number
+  ) => {
     // If number/count/bCount are provided, use them, else use state
     const digitsRequired = parseInt(drawSession);
     const bookingType = getBookingType();
@@ -204,7 +185,12 @@ const BookingScreen: React.FC = () => {
       : (user?.commission ?? 0);
 
     // Helper to create entries with custom lsk
-    const createEntry = (number: string, count: number, lsk: string, subTypeOverride?: string) => {
+    const createEntry = (
+      number: string,
+      count: number,
+      lsk: string,
+      subTypeOverride?: string
+    ) => {
       const amt = count * (price || 0);
       return {
         lsk,
@@ -218,45 +204,48 @@ const BookingScreen: React.FC = () => {
       };
     };
 
+    // --- ENFORCE count and bCount > 0 ---
     // If called from handlePastBookings, number/count/bCount are provided
     if (number && typeof count === "number") {
+      // Don't add if count or bCount is not > 0
+      if (subType === "BOTH" && (count <= 0 || (bCount ?? count) <= 0)) return;
+      if (subType === "BOX" && (bCount ?? count) <= 0) return;
+      if (subType === "SUPER" && count <= 0) return;
+      if (count <= 0) return;
+
       // For triple digit, if subType is BOTH, add both SUPER and BOX
       if (subType === "BOTH") {
         setBookingDetails((prev) => [
           ...prev,
-          createEntry(number.padStart(digitsRequired, "0"), count, "SUPER"),
-          createEntry(number.padStart(digitsRequired, "0"), bCount ?? count, "BOX"),
+          createEntry(number, count, "SUPER"),
+          createEntry(number, bCount ?? count, "BOX"),
         ]);
       } else if (isDouble && subType === "ALL") {
-        // For double digit and subType 'ALL', add AB, BC, AC
         const lskArr = ["AB", "BC", "AC"];
         setBookingDetails((prev) => [
           ...prev,
-          ...lskArr.map(lsk =>
-            createEntry(number.padStart(digitsRequired, "0"), count, lsk, "ALL")
+          ...lskArr.map((lsk) =>
+            createEntry(number, count, lsk, "ALL")
           ),
         ]);
       } else if (isSingle && subType === "ALL") {
-        // For single digit and subType 'ALL', add A, B, C
         const lskArr = ["A", "B", "C"];
         setBookingDetails((prev) => [
           ...prev,
-          ...lskArr.map(lsk =>
-            createEntry(number.padStart(digitsRequired, "0"), count, lsk, "ALL")
+          ...lskArr.map((lsk) =>
+            createEntry(number, count, lsk, "ALL")
           ),
         ]);
       } else {
         setBookingDetails((prev) => [
           ...prev,
-          createEntry(number.padStart(digitsRequired, "0"), count, subType),
+          createEntry(number, count, subType),
         ]);
       }
       return;
     }
 
     // --- BEGIN original addBooking code ---
-    console.log("on add booking", DrawSessionDetails);
-
     const numberLen = numberInput.length;
     const endLen = endNumberInput.length;
 
@@ -275,6 +264,17 @@ const BookingScreen: React.FC = () => {
 
     const countVal = parseNum(countInput);
     const bCountVal = parseNum(bCountInput);
+
+    // ENFORCE count and bCount > 0
+    if (countVal <= 0) {
+      Alert.alert("Invalid input", "Count must be greater than 0.");
+      return;
+    }
+    if ((subType === "BOTH" || subType === "BOX") && bCountVal <= 0) {
+      Alert.alert("Invalid input", "B.Count must be greater than 0.");
+      return;
+    }
+
     if (isSingle && countVal < 5) {
       Alert.alert(
         "Invalid input",
@@ -314,21 +314,19 @@ const BookingScreen: React.FC = () => {
       for (let i = start; i <= end; i++) {
         const paddedNum = i.toString().padStart(digitsRequired, "0");
         if (subType === "BOTH") {
-          newEntries.push(createEntry(paddedNum, countVal, "SUPER"));
-          newEntries.push(createEntry(paddedNum, bCountVal, "BOX"));
+          if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, "SUPER"));
+          if (bCountVal > 0) newEntries.push(createEntry(paddedNum, bCountVal, "BOX"));
         } else if (isDouble && subType === "ALL") {
-          // For double digit and subType 'ALL', add AB, BC, AC
-          ["AB", "BC", "AC"].forEach(lsk => {
-            newEntries.push(createEntry(paddedNum, countVal, lsk, "ALL"));
+          ["AB", "BC", "AC"].forEach((lsk) => {
+            if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, "ALL"));
           });
         } else if (isSingle && subType === "ALL") {
-          // For single digit and subType 'ALL', add A, B, C
-          ["A", "B", "C"].forEach(lsk => {
-            newEntries.push(createEntry(paddedNum, countVal, lsk, "ALL"));
+          ["A", "B", "C"].forEach((lsk) => {
+            if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, "ALL"));
           });
         } else {
           const actualCount = subType === "BOX" ? bCountVal : countVal;
-          newEntries.push(createEntry(paddedNum, actualCount, subType));
+          if (actualCount > 0) newEntries.push(createEntry(paddedNum, actualCount, subType));
         }
       }
 
@@ -341,7 +339,6 @@ const BookingScreen: React.FC = () => {
 
     // ---------- Different Booking ----------
     if (selectedRange === "Different") {
-      // Only for 3-digit numbers
       if (drawSession !== "3") {
         Alert.alert(
           "Invalid",
@@ -379,7 +376,6 @@ const BookingScreen: React.FC = () => {
         Alert.alert("Invalid Difference", "Difference must be greater than 0.");
         return;
       }
-      // If difference is greater than the range, no booking
       if (end - start < diff) {
         Alert.alert(
           "No bookings",
@@ -393,22 +389,19 @@ const BookingScreen: React.FC = () => {
       let addedAny = false;
       while (i <= end) {
         if (i > end) break;
-        // Only add if in range
         if (i >= start && i <= end) {
           const paddedNum = i.toString().padStart(3, "0");
           if (subType === "BOTH") {
-            newEntries.push(createEntry(paddedNum, countVal, "SUPER"));
-            newEntries.push(createEntry(paddedNum, bCountVal, "BOX"));
+            if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, "SUPER"));
+            if (bCountVal > 0) newEntries.push(createEntry(paddedNum, bCountVal, "BOX"));
           } else {
-            // Only allow SUPER/BOX for 3-digit
             const actualCount = subType === "BOX" ? bCountVal : countVal;
-            newEntries.push(createEntry(paddedNum, actualCount, subType));
+            if (actualCount > 0) newEntries.push(createEntry(paddedNum, actualCount, subType));
           }
           addedAny = true;
         }
         i += diff;
       }
-      // If the start == end and diff > 0, only one booking
       if (!addedAny) {
         Alert.alert(
           "No bookings",
@@ -459,23 +452,21 @@ const BookingScreen: React.FC = () => {
       const newEntries: BookingDetail[] = [];
 
       for (let perm of permutations) {
-        const number = perm; // Keep as string with leading zeros
+        const number = perm;
         if (subType === "BOTH") {
-          newEntries.push(createEntry(number, countVal, "SUPER"));
-          newEntries.push(createEntry(number, bCountVal, "BOX"));
+          if (countVal > 0) newEntries.push(createEntry(number, countVal, "SUPER"));
+          if (bCountVal > 0) newEntries.push(createEntry(number, bCountVal, "BOX"));
         } else if (isDouble && subType === "ALL") {
-          // For double digit and subType 'ALL', add AB, BC, AC
-          ["AB", "BC", "AC"].forEach(lsk => {
-            newEntries.push(createEntry(number, countVal, lsk, "ALL"));
+          ["AB", "BC", "AC"].forEach((lsk) => {
+            if (countVal > 0) newEntries.push(createEntry(number, countVal, lsk, "ALL"));
           });
         } else if (isSingle && subType === "ALL") {
-          // For single digit and subType 'ALL', add A, B, C
-          ["A", "B", "C"].forEach(lsk => {
-            newEntries.push(createEntry(number, countVal, lsk, "ALL"));
+          ["A", "B", "C"].forEach((lsk) => {
+            if (countVal > 0) newEntries.push(createEntry(number, countVal, lsk, "ALL"));
           });
         } else {
           const actualCount = subType === "BOX" ? bCountVal : countVal;
-          newEntries.push(createEntry(number, actualCount, subType));
+          if (actualCount > 0) newEntries.push(createEntry(number, actualCount, subType));
         }
       }
 
@@ -490,7 +481,10 @@ const BookingScreen: React.FC = () => {
         Alert.alert("Missing fields", "Enter Count and B.Count.");
         return;
       }
-
+      if (countVal <= 0 || bCountVal <= 0) {
+        Alert.alert("Invalid input", "Count and B.Count must be greater than 0.");
+        return;
+      }
       const padded = numberInput.padStart(digitsRequired, "0");
       const entries = [
         createEntry(padded, countVal, "SUPER"),
@@ -507,7 +501,10 @@ const BookingScreen: React.FC = () => {
         Alert.alert("Missing fields", "Enter B.Count.");
         return;
       }
-
+      if (bCountVal <= 0) {
+        Alert.alert("Invalid input", "B.Count must be greater than 0.");
+        return;
+      }
       const padded = numberInput.padStart(digitsRequired, "0");
       const entry = createEntry(padded, bCountVal, "BOX");
       setBookingDetails((prev) => [...prev, entry]);
@@ -519,34 +516,34 @@ const BookingScreen: React.FC = () => {
     if (subType === "ALL") {
       const padded = numberInput.padStart(digitsRequired, "0");
       if (isDouble) {
-        // For double digit and subType 'ALL', add AB, BC, AC
         const lskArr = ["AB", "BC", "AC"];
         setBookingDetails((prev) => [
           ...prev,
-          ...lskArr.map(lsk =>
-            createEntry(padded, countVal, lsk, "ALL")
-          ),
+          ...lskArr.map((lsk) =>
+            countVal > 0 ? createEntry(padded, countVal, lsk, "ALL") : null
+          ).filter(Boolean) as BookingDetail[],
         ]);
         clearInputs();
         return;
       } else if (isSingle) {
-        // For single digit and subType 'ALL', add A, B, C
         const lskArr = ["A", "B", "C"];
         setBookingDetails((prev) => [
           ...prev,
-          ...lskArr.map(lsk =>
-            createEntry(padded, countVal, lsk, "ALL")
-          ),
+          ...lskArr.map((lsk) =>
+            countVal > 0 ? createEntry(padded, countVal, lsk, "ALL") : null
+          ).filter(Boolean) as BookingDetail[],
         ]);
         clearInputs();
         return;
       }
-      // If not single or double, fallback to default
     }
 
-    // Default (e.g. SUPER only)
     if (!countInput) {
       Alert.alert("Missing fields", "Enter Count.");
+      return;
+    }
+    if (countVal <= 0) {
+      Alert.alert("Invalid input", "Count must be greater than 0.");
       return;
     }
 
@@ -558,8 +555,6 @@ const BookingScreen: React.FC = () => {
   };
 
   const handleSubmit = () => {
-    console.log("on sum=bmit", DrawSessionDetails?.session?.active_session_id);
-
     if (DrawSessionDetails?.session?.active_session_id) {
       const data = {
         customer_name: customerName,
@@ -574,8 +569,6 @@ const BookingScreen: React.FC = () => {
           })
         ),
       };
-
-      console.log("data", data);
       mutate(data);
     }
   };
@@ -589,6 +582,11 @@ const BookingScreen: React.FC = () => {
 
   const saveEdit = () => {
     if (editingEntry && editIndex !== null) {
+      // ENFORCE count > 0
+      if (!editingEntry.count || editingEntry.count <= 0) {
+        Alert.alert("Invalid input", "Count must be greater than 0.");
+        return;
+      }
       const updated = [...bookingDetails];
 
       const bookingType = editingEntry.type;
@@ -660,20 +658,17 @@ const BookingScreen: React.FC = () => {
     setDrawSession(num.toString());
   };
 
-  // --- IMPLEMENTED handlePastBookings ---
+  // --- REWRITE handlePastBookings ---
   const handlePastBookings = async () => {
     try {
-      // Use Clipboard API to get string
       let clipboardText: string = "";
       if (Platform.OS === "web") {
-        // Web Clipboard API
         clipboardText = await navigator.clipboard.readText();
       } else if (RNClipboard?.Clipboard && RNClipboard.Clipboard.getString) {
         clipboardText = await RNClipboard.Clipboard.getString();
       } else if ((global as any).Clipboard && (global as any).Clipboard.getString) {
         clipboardText = await (global as any).Clipboard.getString();
       } else {
-        // fallback for react-native-clipboard/clipboard
         try {
           const { getString } = require("@react-native-clipboard/clipboard");
           clipboardText = await getString();
@@ -688,7 +683,6 @@ const BookingScreen: React.FC = () => {
         return;
       }
 
-      // Split by newlines, commas, or semicolons
       const lines = clipboardText
         .split(/[\n,;]+/)
         .map((l) => l.trim())
@@ -696,7 +690,6 @@ const BookingScreen: React.FC = () => {
 
       // Helper: parse a single line into {number, count, subType}
       function parseLine(line: string) {
-        // Remove extra spaces, normalize
         let l = line.replace(/\s+/g, " ").trim();
 
         // Try to extract subType (box/set/ab/ac/bc/a/b/c/all/super/both)
@@ -776,7 +769,6 @@ const BookingScreen: React.FC = () => {
         return { number, count, subType: "SUPER" };
       }
 
-      // For each line, parse and add booking
       let added = 0;
       for (let line of lines) {
         const parsed = parseLine(line);
@@ -793,10 +785,12 @@ const BookingScreen: React.FC = () => {
 
         // For triple digit, if subType is BOTH, add both
         if (session === "3" && parsed.subType === "BOTH") {
-          addBooking("BOTH", parsed.number, parsed.count, parsed.count);
+          // Only add if count and bCount > 0
+          if (parsed.count > 0) addBooking("BOTH", parsed.number, parsed.count, parsed.count);
           added += 2;
         } else {
-          addBooking(parsed.subType, parsed.number, parsed.count, parsed.count);
+          // Only add if count > 0
+          if (parsed.count > 0) addBooking(parsed.subType, parsed.number, parsed.count, parsed.count);
           added += 1;
         }
       }
@@ -810,7 +804,6 @@ const BookingScreen: React.FC = () => {
       Alert.alert("Clipboard Error", "Could not read clipboard.");
     }
   };
-
 
   const handleBackClick = () => {
     setSelectedDraw(null)
@@ -957,8 +950,6 @@ const BookingScreen: React.FC = () => {
                 onChangeText={(text) => {
                   const formatted = text.replace(/[^0-9]/g, "");
                   setDifferenceInput(formatted);
-                  // Optionally, focus count after difference
-                  // countInputRef.current?.focus();
                 }}
                 maxLength={3}
                 keyboardType="numeric"
@@ -1055,7 +1046,6 @@ const BookingScreen: React.FC = () => {
                     >
                       <Text style={{ fontSize: 18 }}>⋮</Text>
                     </TouchableOpacity>
-                    {/* 3-dot menu modal */}
                     {editIndex === index && (
                       <Modal
                         transparent

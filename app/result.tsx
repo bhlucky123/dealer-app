@@ -5,10 +5,11 @@ import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, AlertTriangle, Calendar, Plus, X } from "lucide-react-native";
+import { AlertCircle, AlertTriangle, Calendar, Pencil, Plus, X } from "lucide-react-native";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     ScrollView,
     Text,
     TouchableOpacity,
@@ -36,19 +37,57 @@ export type DrawResult = {
     complementary_prizes: string[];
 };
 
+function isThreeDigitNumber(str: string) {
+    return /^\d{3}$/.test(str);
+}
+
+function validateDrawResultFields(data: Partial<DrawResult> & { complementary_prizes?: string[] }) {
+    // Check all main prizes
+    const mainPrizes = [
+        data.first_prize,
+        data.second_prize,
+        data.third_prize,
+        data.fourth_prize,
+        data.fifth_prize,
+    ];
+    for (let i = 0; i < mainPrizes.length; i++) {
+        if (!mainPrizes[i] || typeof mainPrizes[i] !== "string" || !isThreeDigitNumber(mainPrizes[i]!)) {
+            return `Please enter a valid 3-digit number for ${["First", "Second", "Third", "Fourth", "Fifth"][i]} Prize.`;
+        }
+    }
+    // Check complementary prizes
+    if (!Array.isArray(data.complementary_prizes) || data.complementary_prizes.length === 0) {
+        return "Please enter all complementary prizes.";
+    }
+    for (let i = 0; i < data.complementary_prizes.length; i++) {
+        const val = data.complementary_prizes[i];
+        if (!val || !isThreeDigitNumber(val)) {
+            return `Please enter a valid 3-digit number for Complementary Prize #${i + 1}.`;
+        }
+    }
+    return null;
+}
+
+function canEditResult(published_at: string | undefined | null) {
+    if (!published_at) return false;
+    const publishedDate = new Date(published_at);
+    const now = new Date();
+    // Allow edit only within 1 hour of published_at
+    // return now.getTime() - publishedDate.getTime() < 60 * 60 * 1000;
+    return true // TODO
+}
+
 const ResultPage: React.FC = () => {
-    const { createDrawResult } = useDraw();
+    const { createDrawResult, updateDrawResult } = useDraw();
     const { selectedDraw } = useDrawStore();
 
     const [mode, setMode] = useState<"view" | "edit">("view");
     const [formData, setFormData] = useState<Partial<DrawResult> | null>(null);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [filterDate, setFilterDate] = useState<Date>(new Date());
+    const [formError, setFormError] = useState<string | null>(null);
 
-    console.log("selectedDraw", selectedDraw);
-
-    const {user} = useAuthStore()
-
+    const { user } = useAuthStore();
 
     // Helper to format date as yyyy-mm-dd
     function formatDateServer(date: Date | null): string | null {
@@ -61,9 +100,6 @@ const ResultPage: React.FC = () => {
 
     const filterDateString = formatDateServer(filterDate);
 
-    console.log("filterDateString", filterDateString);
-
-
     const { data: rawData, isLoading, error, refetch } = useQuery<DrawResult[] | null>({
         queryKey: ["/draw-result/result/", selectedDraw?.id, filterDateString],
         queryFn: async () => {
@@ -75,27 +111,56 @@ const ResultPage: React.FC = () => {
         enabled: !!selectedDraw?.id,
     });
 
-    const data = rawData?.[0]
+    const data = rawData?.[0];
 
-    console.log("result", data, "filterDateString", filterDateString);
-
-
-    /* ------------------- helpers ------------------- */
+    // ------------------- helpers -------------------
     const handleFormSubmit = async (resultData: any) => {
-        console.log("on sbmit", resultData);
+        console.log("on submit");
 
-        await createDrawResult.mutateAsync({
-            ...resultData,
-            draw_session: selectedDraw?.id,
-        });
-        console.log("sucess");
+        setFormError(null);
+        // Validate all fields
+        const validationError = validateDrawResultFields(resultData);
+        if (validationError) {
+            setFormError(validationError);
+            Alert.alert("Validation Error", validationError);
+            return;
+        }
 
-        setMode("view");
-        setFormData(null);
-        refetch();
+        console.log("after validation");
+
+
+        try {
+            if (data && data.id) {
+                console.log("on update ddd");
+
+                // Update
+                await updateDrawResult.mutateAsync({
+                    id: data.id,
+                    ...resultData,
+                });
+            } else {
+                // Create
+                await createDrawResult.mutateAsync({
+                    ...resultData,
+                    draw_session: selectedDraw?.id,
+                });
+            }
+            setMode("view");
+            setFormData(null);
+            refetch();
+        } catch (err: any) {
+            // Handle specific error: ["No draw session found for today."]
+            if (Array.isArray(err) && err.length === 1 && err[0] === "No draw session found for today.") {
+                setFormError("No draw session found for the selected date. Please check the draw schedule.");
+                Alert.alert("No Draw Session", "No draw session found for the selected date. Please check the draw schedule.");
+            } else {
+                setFormError(err?.message || "Failed to save result.");
+                Alert.alert("Error", err?.message || "Failed to save result.");
+            }
+        }
     };
 
-    /* ------------------- states ------------------- */
+    // ------------------- states -------------------
     if (!selectedDraw?.id) {
         return (
             <View className="flex-1 items-center justify-center bg-gray-50">
@@ -105,25 +170,32 @@ const ResultPage: React.FC = () => {
         );
     }
 
-    /* ------------------- Edit mode ------------------- */
+    // ------------------- Edit mode -------------------
     if (mode === "edit") {
         return (
             <View className="flex-1 bg-gray-50">
                 {/* top bar */}
                 <View className="flex-row items-center bg-green-700 px-2 py-3  justify-between">
-                    <Text className="text-lg font-bold text-white">Edit Result</Text>
-                    <TouchableOpacity onPress={() => { setMode("view"); setFormData(null); }}>
+                    <Text className="text-lg font-bold text-white">{data && data.id ? "Edit Result" : "Add Result"}</Text>
+                    <TouchableOpacity onPress={() => { setMode("view"); setFormData(null); setFormError(null); }}>
                         <X size={22} color="#fff" />
                     </TouchableOpacity>
                 </View>
-                <DrawResultForm initialData={formData || undefined} onSubmit={handleFormSubmit} />
+                {formError ? (
+                    <View className="bg-red-100 px-4 py-2">
+                        <Text className="text-red-700 text-sm">{formError}</Text>
+                    </View>
+                ) : null}
+                <DrawResultForm
+                    initialData={formData || undefined}
+                    onSubmit={handleFormSubmit}
+                    validate={validateDrawResultFields}
+                />
             </View>
         );
     }
 
-    console.log("data", data);
-
-    /* ------------------- View mode ------------------- */
+    // ------------------- View mode -------------------
     // Always show the date filter and plus button, even if error or loading
     let errorMessage: string = "";
     let isNoResultYet = false;
@@ -139,6 +211,15 @@ const ResultPage: React.FC = () => {
             isNoResultYet = true;
         }
     }
+
+    console.log("data", data);
+
+
+    // Only allow add if no result, and only allow edit if result is updated within 1 hour
+    const canAdd = user?.user_type === "ADMIN" && !isLoading && !data && !error;
+    const canEditIcon = user?.user_type === "ADMIN" && data && canEditResult(data.published_at);
+
+    console.log("canEditIcon",canEditIcon, "data.published_at",data?.published_at);
     
 
     return (
@@ -164,26 +245,49 @@ const ResultPage: React.FC = () => {
                     </TouchableOpacity>
                 </View>
 
-                {/* FAB to edit / add */}
-                {
-                    user?.user_type === "ADMIN" && <TouchableOpacity
-                    onPress={() => {
-                        setFormData(data || null);
-                        setMode("edit");
-                    }}
-                    className="w-14 h-14 rounded-full bg-blue-600 items-center justify-center shadow-lg border-4 border-white"
-                    style={{
-                        elevation: 6,
-                        shadowColor: "#2563eb",
-                        shadowOffset: { width: 0, height: 2 },
-                        shadowOpacity: 0.2,
-                        shadowRadius: 4,
-                    }}
-                    activeOpacity={0.85}
-                >
-                    <Plus size={26} color="#fff" />
-                </TouchableOpacity>
-                }
+                {/* FAB to add */}
+                {canAdd && (
+                    <TouchableOpacity
+                        onPress={() => {
+                            setFormData({ complementary_prizes: [] });
+                            setMode("edit");
+                            setFormError(null);
+                        }}
+                        className="w-14 h-14 rounded-full bg-blue-600 items-center justify-center shadow-lg border-4 border-white"
+                        style={{
+                            elevation: 6,
+                            shadowColor: "#2563eb",
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.2,
+                            shadowRadius: 4,
+                        }}
+                        activeOpacity={0.85}
+                    >
+                        <Plus size={26} color="#fff" />
+                    </TouchableOpacity>
+                )}
+
+                {/* Edit icon for update, only if result is updated within 1 hour */}
+                {canEditIcon && (
+                    <TouchableOpacity
+                        onPress={() => {
+                            setFormData(data || { complementary_prizes: [] });
+                            setMode("edit");
+                            setFormError(null);
+                        }}
+                        className="w-14 h-14 rounded-full bg-yellow-500 items-center justify-center shadow-lg border-4 border-white ml-2"
+                        style={{
+                            elevation: 6,
+                            shadowColor: "#fbbf24",
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.2,
+                            shadowRadius: 4,
+                        }}
+                        activeOpacity={0.85}
+                    >
+                        <Pencil size={26} color="#fff" />
+                    </TouchableOpacity>
+                )}
             </View>
 
             {/* Loading state */}

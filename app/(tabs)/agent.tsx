@@ -19,6 +19,23 @@ import {
   View,
 } from "react-native";
 
+// Helper to flatten error object to field: message
+function parseApiErrors(errorObj: any): Record<string, string> {
+  if (!errorObj || typeof errorObj !== "object") return {};
+  const result: Record<string, string> = {};
+  for (const key in errorObj) {
+    if (Array.isArray(errorObj[key])) {
+      result[key] = errorObj[key].join(" ");
+    } else if (typeof errorObj[key] === "string") {
+      result[key] = errorObj[key];
+    } else if (typeof errorObj[key] === "object") {
+      // Nested error
+      result[key] = JSON.stringify(errorObj[key]);
+    }
+  }
+  return result;
+}
+
 // Agent type
 export type Agent = {
   id: number;
@@ -47,7 +64,7 @@ const AgentForm = ({
   defaultValues = {},
   onCancel,
 }: {
-  onSubmit: (data: any) => void;
+  onSubmit: (data: any, setApiErrors: (errs: Record<string, string>) => void, setGeneralError: (msg: string) => void) => void;
   defaultValues?: Partial<Agent>;
   onCancel: () => void;
 }) => {
@@ -62,15 +79,21 @@ const AgentForm = ({
     single_digit_number_commission:
       defaultValues.single_digit_number_commission?.toString() || "",
     cap_amount: defaultValues.cap_amount?.toString() || "",
-    assigned_dealer: user?.id?.toString() || "",
+    assigned_dealer: (
+      typeof defaultValues.assigned_dealer === "number"
+        ? defaultValues.assigned_dealer.toString()
+        : user?.id?.toString() || ""
+    ),
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [generalError, setGeneralError] = useState<string>("");
 
   const handleChange = (key: string, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     setErrors((prev) => ({ ...prev, [key]: "" }));
+    setGeneralError("");
   };
 
   const validate = () => {
@@ -90,8 +113,8 @@ const AgentForm = ({
       newErrors.commission = "Commission cannot be negative";
     if (Number(form.cap_amount) < 0) newErrors.cap_amount = "Cap cannot be negative";
 
-
     setErrors(newErrors);
+    setGeneralError("");
     return Object.keys(newErrors).length === 0;
   };
 
@@ -107,7 +130,8 @@ const AgentForm = ({
       assigned_dealer: Number(form.assigned_dealer),
     };
 
-    onSubmit(preparedData);
+    // Pass setErrors and setGeneralError to onSubmit for error handling
+    onSubmit(preparedData, setErrors, setGeneralError);
   };
 
   const inputFields = [
@@ -154,6 +178,11 @@ const AgentForm = ({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 50 }}
         >
+          {generalError ? (
+            <View className="mb-4">
+              <Text className="text-red-600 text-base font-semibold text-center">{generalError}</Text>
+            </View>
+          ) : null}
           {inputFields.map(({ key, label, keyboardType, secureTextEntry, optional, icon }) => {
             const isFocused = focusedField === key;
             const hasError = !!errors[key];
@@ -304,7 +333,7 @@ const AgentCard = ({
 
           <View className="flex-row gap-2">
             {
-              user?.user_type === "DEALER" || user?.user_type === "ADMIN" && <TouchableOpacity
+              (user?.user_type === "DEALER" || user?.user_type === "ADMIN") && <TouchableOpacity
                 onPress={onEdit}
                 className="px-3 py-1.5 bg-gray-100 rounded-md"
                 activeOpacity={0.8}
@@ -313,7 +342,7 @@ const AgentCard = ({
               </TouchableOpacity>
             }
             {
-              user?.user_type === "DEALER" || user?.user_type === "ADMIN" &&
+              (user?.user_type === "DEALER" || user?.user_type === "ADMIN") &&
               <TouchableOpacity
                 onPress={onDelete}
                 className="px-3 py-1.5 bg-red-100 rounded-md"
@@ -390,6 +419,7 @@ export default function AgentTab() {
   const [editData, setEditData] = useState<Agent | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [listError, setListError] = useState<string>("");
   const { user } = useAuthStore()
 
   const {
@@ -401,7 +431,43 @@ export default function AgentTab() {
     isFetching,
   } = useQuery<Agent[]>({
     queryKey: ["agents"],
-    queryFn: () => api.get("/agent/manage/").then((res) => res.data),
+    queryFn: async () => {
+      try {
+        const res = await api.get("/agent/manage/");
+        return res.data;
+      } catch (err: any) {
+        // Try to extract error message
+        let msg = "An unexpected error occurred. Please try again.";
+        if (err?.response?.data) {
+          if (typeof err.response.data === "string") {
+            msg = err.response.data;
+          } else if (typeof err.response.data === "object") {
+            // Try to join all error messages
+            const parsed = parseApiErrors(err.response.data);
+            msg = Object.values(parsed).join(" ") || msg;
+          }
+        } else if (err?.message) {
+          msg = err.message;
+        }
+        setListError(msg);
+        throw err;
+      }
+    },
+    onError: (err: any) => {
+      // Already handled in queryFn, but just in case
+      let msg = "An unexpected error occurred. Please try again.";
+      if (err?.response?.data) {
+        if (typeof err.response.data === "string") {
+          msg = err.response.data;
+        } else if (typeof err.response.data === "object") {
+          const parsed = parseApiErrors(err.response.data);
+          msg = Object.values(parsed).join(" ") || msg;
+        }
+      } else if (err?.message) {
+        msg = err.message;
+      }
+      setListError(msg);
+    }
   });
 
   const { createAgent, editAgent, deleteAgent } = useAgent();
@@ -411,7 +477,8 @@ export default function AgentTab() {
     agent.username.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleCreate = (data: any) => {
+  // Enhanced handleCreate and handleEdit to handle API errors
+  const handleCreate = (data: any, setApiErrors: (errs: Record<string, string>) => void, setGeneralError: (msg: string) => void) => {
     createAgent(data, {
       onSuccess: (newAgent: any) => {
         queryClient.setQueryData<any[]>(["agents"], (old) => [
@@ -420,20 +487,87 @@ export default function AgentTab() {
         ]);
         setShowForm(false);
       },
+      onError: (err: any) => {
+        // Try to extract field errors and general error
+        if (err?.response?.data) {
+          const apiErrors = parseApiErrors(err.response.data);
+          setApiErrors(apiErrors);
+          // If there are non-field errors, show as general error
+          if (err.response.data.non_field_errors) {
+            setGeneralError(
+              Array.isArray(err.response.data.non_field_errors)
+                ? err.response.data.non_field_errors.join(" ")
+                : String(err.response.data.non_field_errors)
+            );
+          }
+        } else if (err?.message) {
+          setGeneralError(err.message);
+        } else {
+          setGeneralError("An unexpected error occurred. Please try again.");
+        }
+      }
     });
   };
 
-  const handleEdit = (data: any) => {
+  const handleEdit = (data: any, setApiErrors: (errs: Record<string, string>) => void, setGeneralError: (msg: string) => void) => {
+    // Fix: If assigned_dealer is an object, extract its id
+    let assigned_dealer = data.assigned_dealer;
+    if (assigned_dealer && typeof assigned_dealer === "object" && "id" in assigned_dealer) {
+      assigned_dealer = assigned_dealer.id;
+    }
+    // Ensure assigned_dealer is a number
+    assigned_dealer = Number(assigned_dealer);
+
     editAgent(
-      { ...data, id: editData?.id },
+      { ...data, id: editData?.id, assigned_dealer },
       {
         onSuccess: (updatedAgent) => {
+          // Fix: If updatedAgent.assigned_dealer is an object, extract its id
+          let fixedAgent = { ...updatedAgent };
+          if (
+            fixedAgent.assigned_dealer &&
+            typeof fixedAgent.assigned_dealer === "object" &&
+            "id" in fixedAgent.assigned_dealer
+          ) {
+            fixedAgent.assigned_dealer = fixedAgent.assigned_dealer.id;
+          }
           queryClient.setQueryData<any[]>(["agents"], (old) =>
-            old?.map((a) => (a.id === updatedAgent.id ? updatedAgent : a)) || []
+            old?.map((a) => (a.id === fixedAgent.id ? fixedAgent : a)) || []
           );
           setEditData(null);
           setShowForm(false);
         },
+        onError: (err: any) => {
+          // Handle error response for agent edit
+          // The error may be in err.response.data, or in err.message, or elsewhere
+          // Example: err = { message: { username: [...] }, status: 400 }
+          let errorData = err?.response?.data ?? err?.message ?? err;
+          // If errorData is an object with a "message" key, use that as the error object
+          if (errorData && typeof errorData === "object" && "message" in errorData) {
+            errorData = errorData.message;
+          }
+
+          if (errorData && typeof errorData === "object") {
+            const apiErrors = parseApiErrors(errorData);
+            setApiErrors(apiErrors);
+            // Handle non_field_errors or general error messages
+            if (errorData.non_field_errors) {
+              setGeneralError(
+                Array.isArray(errorData.non_field_errors)
+                  ? errorData.non_field_errors.join(" ")
+                  : String(errorData.non_field_errors)
+              );
+            } else if (typeof errorData.detail === "string") {
+              setGeneralError(errorData.detail);
+            } else if (typeof errorData === "string") {
+              setGeneralError(errorData);
+            }
+          } else if (typeof errorData === "string") {
+            setGeneralError(errorData);
+          } else {
+            setGeneralError("An unexpected error occurred. Please try again.");
+          }
+        }
       }
     );
   };
@@ -455,6 +589,20 @@ export default function AgentTab() {
                     old?.filter((a) => a.id !== parseInt(id)) || []
                   );
                 },
+                onError: (err: any) => {
+                  let msg = "Failed to delete agent.";
+                  if (err?.response?.data) {
+                    if (typeof err.response.data === "string") {
+                      msg = err.response.data;
+                    } else if (typeof err.response.data === "object") {
+                      const parsed = parseApiErrors(err.response.data);
+                      msg = Object.values(parsed).join(" ") || msg;
+                    }
+                  } else if (err?.message) {
+                    msg = err.message;
+                  }
+                  Alert.alert("Error", msg);
+                }
               }
             );
           },
@@ -467,6 +615,7 @@ export default function AgentTab() {
   // Pull to refresh handler
   const onRefresh = async () => {
     setRefreshing(true);
+    setListError("");
     try {
       await refetch();
     } finally {
@@ -566,19 +715,23 @@ export default function AgentTab() {
           <ActivityIndicator size="large" color="#3B82F6" />
           <Text className="text-gray-500 mt-4 font-medium">Loading agents...</Text>
         </View>
-      ) : isError ? (
+      ) : isError || !!listError ? (
         <View className="flex-1 justify-center items-center px-8">
           <Text className="text-6xl mb-4">⚠️</Text>
           <Text className="text-xl font-bold text-gray-800 mb-2">
             Failed to load agents
           </Text>
-          <Text className="text-gray-500 text-center mb-8">
-            {error && typeof error === "object" && "message" in error
-              ? (error as any).message
-              : "An unexpected error occurred. Please try again."}
+          <Text className="text-red-600 text-center mb-8">
+            {listError ||
+              (error && typeof error === "object" && "message" in error
+                ? (error as any).message
+                : "An unexpected error occurred. Please try again.")}
           </Text>
           <TouchableOpacity
-            onPress={() => refetch()}
+            onPress={() => {
+              setListError("");
+              refetch();
+            }}
             className="bg-blue-600 px-8 py-4 rounded-xl active:scale-95"
             activeOpacity={0.9}
           >
@@ -624,9 +777,22 @@ export default function AgentTab() {
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             <AgentCard
-              item={item}
+              item={{
+                ...item,
+                assigned_dealer:
+                  typeof item.assigned_dealer === "object" && item.assigned_dealer !== null && "id" in item.assigned_dealer
+                    ? item.assigned_dealer.id
+                    : item.assigned_dealer,
+              }}
               onEdit={() => {
-                setEditData(item);
+                // Fix: If assigned_dealer is an object, extract its id for the form
+                setEditData({
+                  ...item,
+                  assigned_dealer:
+                    typeof item.assigned_dealer === "object" && item.assigned_dealer !== null && "id" in item.assigned_dealer
+                      ? item.assigned_dealer.id
+                      : item.assigned_dealer,
+                });
                 setShowForm(true);
               }}
               onDelete={() => handleDelete(item.id.toString())}

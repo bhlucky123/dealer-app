@@ -29,7 +29,24 @@ type WinnerReport = {
     draw: string;
     dealer: string | { id: number; username: string; user_type: string; commission: number; single_digit_number_commission: number; cap_amount: number };
     agent: string | { id: number; username: string; user_type: string; commission: number; single_digit_number_commission: number; cap_amount: number } | null;
+    date_time?: string; // Add this if your API returns a date field
 };
+
+// Helper function to format date as dd/mm/yyyy
+function formatDateToDDMMYYYY(date: Date | string | undefined | null): string {
+    if (!date) return "";
+    let d: Date;
+    if (typeof date === "string") {
+        d = new Date(date);
+    } else {
+        d = date;
+    }
+    if (isNaN(d.getTime())) return "";
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+}
 
 const WinnersReportScreen = () => {
     const { selectedDraw } = useDrawStore();
@@ -132,7 +149,7 @@ const WinnersReportScreen = () => {
                                 <Text
                                     className={fromDate ? "text-gray-900 font-medium" : "text-gray-500"}
                                 >
-                                    {fromDate?.toLocaleDateString() || "Select Date"}
+                                    {formatDateToDDMMYYYY(fromDate) || "Select Date"}
                                 </Text>
                             </Text>
                         </TouchableOpacity>
@@ -145,7 +162,7 @@ const WinnersReportScreen = () => {
                                 <Text
                                     className={toDate ? "text-gray-900 font-medium" : "text-gray-500"}
                                 >
-                                    {toDate?.toLocaleDateString() || "Select Date"}
+                                    {formatDateToDDMMYYYY(toDate) || "Select Date"}
                                 </Text>
                             </Text>
                         </TouchableOpacity>
@@ -288,7 +305,8 @@ const WinnersReportScreen = () => {
                                             <View className="flex-row px-4 py-3 items-center border-b border-gray-100">
                                                 <View className="flex-[1.1] flex-col justify-center">
                                                     <Text className="text-[10px] text-gray-800 font-medium">
-                                                        {/* {new Date(item.).toLocaleDateString()} */}
+                                                        {/* Show date in dd/mm/yyyy format */}
+                                                        {item.date_time ? formatDateToDDMMYYYY(item.date_time) : ""}
                                                     </Text>
                                                 </View>
                                                 <Text className="flex-[1.2] text-sm text-center text-gray-700">
