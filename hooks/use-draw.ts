@@ -103,7 +103,7 @@ const useDraw = () => {
       complementary_prizes: string[];
     }) => {
       try {
-        const res = await api.post(`/draw-result/result/${id}/`, rest);
+        const res = await api.patch(`/draw-result/result/${id}/`, rest);
         console.log("res", res);
         return res?.data;
       } catch (error: any) {
