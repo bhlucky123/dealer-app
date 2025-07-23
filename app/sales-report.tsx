@@ -46,6 +46,7 @@ const SalesReportScreen = () => {
     const [showFromPicker, setShowFromPicker] = useState(false);
     const [showToPicker, setShowToPicker] = useState(false);
     const [fullView, setFullView] = useState(false);
+    const [allGame, setAllGame] = useState(false);
     const [selectedFilter, setSelectedFilter] = useState("");
 
     const { user } = useAuthStore();
@@ -78,7 +79,7 @@ const SalesReportScreen = () => {
         if (toDate) params["date_time__lte"] = toDate.toISOString();
         // Always request full_view to get booking_details for the PDF
         params["full_view"] = "true";
-        if (selectedDraw?.id) params["draw_session__draw__id"] = String(selectedDraw.id);
+        if (selectedDraw?.id && !allGame) params["draw_session__draw__id"] = String(selectedDraw.id);
 
         if (user?.user_type === "ADMIN" && selectedFilter) {
             params["booked_dealer__id"] = selectedFilter;
@@ -342,15 +343,29 @@ const SalesReportScreen = () => {
                         <Text className="text-white font-bold">Print Report</Text>
                     </TouchableOpacity>
 
-                    <View className="flex-row items-center justify-between px-1 pt-1">
-                        <Text className="text-sm text-gray-700">Full View</Text>
-                        <Switch
-                            value={fullView}
-                            onValueChange={setFullView}
-                            trackColor={{ false: "#e5e7eb", true: "#a78bfa" }}
-                            thumbColor={fullView ? "#7c3aed" : "#f4f3f4"}
-                            ios_backgroundColor="#e5e7eb"
-                        />
+                    <View className="flex-row justify-between items-center   px-2">
+                        <View className="flex-row items-center rounded-lg ">
+                            <Text className="text-sm text-gray-700 font-medium mr-2">Full View</Text>
+                            <Switch
+                                value={fullView}
+                                onValueChange={setFullView}
+                                trackColor={{ false: "#e5e7eb", true: "#a78bfa" }}
+                                thumbColor={fullView ? "#7c3aed" : "#f4f3f4"}
+                                ios_backgroundColor="#e5e7eb"
+                                style={{ transform: [{ scaleX: 0.9 }, { scaleY: 0.9 }] }}
+                            />
+                        </View>
+                        <View className="flex-row items-center ">
+                            <Text className="text-sm text-gray-700 font-medium mr-2">All Game</Text>
+                            <Switch
+                                value={allGame}
+                                onValueChange={setAllGame}
+                                trackColor={{ false: "#e5e7eb", true: "#a78bfa" }}
+                                thumbColor={allGame ? "#7c3aed" : "#f4f3f4"}
+                                ios_backgroundColor="#e5e7eb"
+                                style={{ transform: [{ scaleX: 0.9 }, { scaleY: 0.9 }] }}
+                            />
+                        </View>
                     </View>
                 </View>
 
@@ -374,72 +389,66 @@ const SalesReportScreen = () => {
                     </View>
                 ) : (
                     <>
-                        {filteredResult?.length ? (
-                            <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden mt-4">
-                                <FlatList
-                                    data={filteredResult}
-                                    keyExtractor={(item) => item.bill_number.toString()}
-                                    ListHeaderComponent={() => (
-                                        <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
-                                            <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">Date</Text>
-                                            <Text className="flex-[1.2] text-xs font-semibold text-center text-gray-600 uppercase">Dealer</Text>
-                                            <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Bill No.</Text>
-                                            <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Cnt</Text>
-                                            <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">D. Amt</Text>
-                                            <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">C. Amt</Text>
-                                        </View>
-                                    )}
-                                    renderItem={({ item, index }) => (
-                                        <View className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                                            <View className="flex-row px-4 py-3 items-center border-b border-gray-100">
-                                                <View className="flex-[1.1] flex-col justify-center">
-                                                    <Text className="text-[10px] text-gray-800 font-medium">{formatDateDDMMYYYY(new Date(item.date_time))}</Text>
-                                                    <Text className="text-[9px] text-gray-500 mt-0.5">
-                                                        {new Date(item.date_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false, })}
-                                                    </Text>
-                                                </View>
-                                                <Text className="flex-[1.2] text-sm text-center text-gray-700">{item.dealer.username}</Text>
-                                                <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_number}</Text>
-                                                <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_count}</Text>
-                                                <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{item.dealer_amount.toFixed(0)}</Text>
-                                                <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{item.customer_amount.toFixed(0)}</Text>
+                        <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden mt-4">
+                            <FlatList
+                                data={filteredResult || []}
+                                keyExtractor={(item) => item.bill_number.toString()}
+                                ListHeaderComponent={() => (
+                                    <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
+                                        <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">Date</Text>
+                                        <Text className="flex-[1.2] text-xs font-semibold text-center text-gray-600 uppercase">Dealer</Text>
+                                        <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Bill No.</Text>
+                                        <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Cnt</Text>
+                                        <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">D. Amt</Text>
+                                        <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">C. Amt</Text>
+                                    </View>
+                                )}
+                                renderItem={({ item, index }) => (
+                                    <View className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                                        <View className="flex-row px-4 py-3 items-center border-b border-gray-100">
+                                            <View className="flex-[1.1] flex-col justify-center">
+                                                <Text className="text-[10px] text-gray-800 font-medium">{formatDateDDMMYYYY(new Date(item.date_time))}</Text>
+                                                <Text className="text-[9px] text-gray-500 mt-0.5">
+                                                    {new Date(item.date_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false, })}
+                                                </Text>
                                             </View>
+                                            <Text className="flex-[1.2] text-sm text-center text-gray-700">{item.dealer.username}</Text>
+                                            <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_number}</Text>
+                                            <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_count}</Text>
+                                            <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{item.dealer_amount.toFixed(0)}</Text>
+                                            <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{item.customer_amount.toFixed(0)}</Text>
+                                        </View>
 
-                                            {fullView && Array.isArray(item.booking_details) && item.booking_details.length > 0 && (
-                                                <FlatList
-                                                    data={item.booking_details}
-                                                    keyExtractor={(d) => d.id?.toString?.() ?? Math.random().toString()}
-                                                    renderItem={({ item: d }) => (
-                                                        <View className="flex-row px-4 py-2 bg-amber-50/20 border-b border-amber-100 last:border-b-0">
-                                                            <Text className="flex-[1.1] text-[10px] text-gray-600">{d.sub_type}</Text>
-                                                            <Text className="flex-[1.2] text-[10px] text-center text-gray-600">{d.number}</Text>
-                                                            <Text className="flex-1 text-[10px] text-center text-gray-600">{d.count}</Text>
-                                                            <Text className="flex-1 text-[10px] text-center text-gray-600">₹{d.amount}</Text>
-                                                            <Text className="flex-1 text-[10px] text-right text-violet-600">₹{d.dealer_amount.toFixed(0)}</Text>
-                                                            <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{d.agent_amount.toFixed(0)}</Text>
-                                                        </View>
-                                                    )}
-                                                    initialNumToRender={5}
-                                                    maxToRenderPerBatch={10}
-                                                    windowSize={5}
-                                                    removeClippedSubviews={true}
-                                                    scrollEnabled={false}
-                                                />
-                                            )}
-                                        </View>
-                                    )}
-                                    ListEmptyComponent={
-                                        <View className="flex-1 justify-center items-center py-16">
-                                            <Text className="text-gray-500 text-base">No sales data for current filters.</Text>
-                                        </View>
-                                    }
-                                />
-                            </View>
-                        ) : (
-                            <View className="flex-1 justify-center items-center">
-                                <Text className="text-gray-500">No sales data available.</Text>
-                            </View>
-                        )}
+                                        {fullView && Array.isArray(item.booking_details) && item.booking_details.length > 0 && (
+                                            <FlatList
+                                                data={item?.booking_details || []}
+                                                keyExtractor={(d) => d.id?.toString?.() ?? Math.random().toString()}
+                                                renderItem={({ item: d }) => (
+                                                    <View className="flex-row px-4 py-2 bg-amber-50/20 border-b border-amber-100 last:border-b-0">
+                                                        <Text className="flex-[1.1] text-[10px] text-gray-600">{d.sub_type}</Text>
+                                                        <Text className="flex-[1.2] text-[10px] text-center text-gray-600">{d.number}</Text>
+                                                        <Text className="flex-1 text-[10px] text-center text-gray-600">{d.count}</Text>
+                                                        <Text className="flex-1 text-[10px] text-center text-gray-600">₹{d.amount}</Text>
+                                                        <Text className="flex-1 text-[10px] text-right text-violet-600">₹{d.dealer_amount.toFixed(0)}</Text>
+                                                        <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{d.agent_amount.toFixed(0)}</Text>
+                                                    </View>
+                                                )}
+                                                initialNumToRender={5}
+                                                maxToRenderPerBatch={10}
+                                                windowSize={5}
+                                                removeClippedSubviews={true}
+                                                scrollEnabled={false}
+                                            />
+                                        )}
+                                    </View>
+                                )}
+                                ListEmptyComponent={
+                                    <View className="flex-1 justify-center items-center py-16">
+                                        <Text className="text-gray-500 text-base">No sales data for current filters.</Text>
+                                    </View>
+                                }
+                            />
+                        </View>
                     </>
                 )}
 
@@ -453,12 +462,12 @@ const SalesReportScreen = () => {
                                 {search ? filteredTotals.total_bill_count : (data?.total_bill_count || 0)}
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-violet-700">
-                                {search
+                                ₹{search
                                     ? filteredTotals.total_dealer_amount.toFixed(2)
                                     : (data?.total_dealer_amount?.toFixed(0) || 0)}
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">
-                                {search
+                                ₹{search
                                     ? filteredTotals.total_customer_amount.toFixed(2)
                                     : (data?.total_customer_amount?.toFixed(0) || 0)}
                             </Text>

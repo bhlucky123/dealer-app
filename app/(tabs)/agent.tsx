@@ -771,7 +771,7 @@ export default function AgentTab() {
         </View>
       ) : (
         <FlatList
-          data={filteredAgents}
+          data={filteredAgents || []}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={{ paddingTop: 16, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}

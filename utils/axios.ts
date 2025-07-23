@@ -1,5 +1,6 @@
 import { useAuthStore } from "@/store/auth";
 import axios from "axios";
+import { router } from "expo-router";
 import { config } from "./config";
 
 const api = axios.create({
@@ -33,6 +34,13 @@ api.interceptors.response.use(
       const { status, data } = error.response;
       console.log("❌ Axios Error:", status, data);
 
+      if (status === 401) {
+        console.log("navigating", status);
+
+        router.push("/login")
+        return
+      }
+
       // Example: extracting common message formats
       // if (data?.message) {
       //   console.error("Backend Message:", data.message);
@@ -41,7 +49,7 @@ api.interceptors.response.use(
       // } else {
       //   console.error("Unknown backend error format", data);
       // }
-      return Promise.reject({status: status || 500, message: data || "something went wrong"});
+      return Promise.reject({ status: status || 500, message: data || "something went wrong" });
 
     } else {
       console.error("❌ Network or config error", error);

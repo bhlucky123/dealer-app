@@ -23,7 +23,7 @@ const useDraw = () => {
         const res = await api.post("/draw/", data);
         return res?.data;
       } catch (error: any) {
-        console.error("Error creating draw:", error);
+        console.log("Error creating draw:", error);
         throw error?.response?.data || error?.message || "Failed to create draw.";
       }
     },
@@ -34,7 +34,7 @@ const useDraw = () => {
       ]);
     },
     onError: (error) => {
-      console.error("Mutation error in createDraw:", error);
+      console.log("Mutation error in createDraw:", error);
       // Optionally, handle error side effects here (e.g., show toast)
     },
   });
@@ -45,7 +45,7 @@ const useDraw = () => {
         const res = await api.put(`/draw/${data.id}/`, data);
         return res?.data;
       } catch (error: any) {
-        console.error("Error updating draw:", error);
+        console.log("Error updating draw:", error);
         throw error?.response?.data || error?.message || "Failed to update draw.";
       }
     },
@@ -55,7 +55,7 @@ const useDraw = () => {
       );
     },
     onError: (error) => {
-      console.error("Mutation error in updateDraw:", error);
+      console.log("Mutation error in updateDraw:", error);
       // Optionally, handle error side effects here (e.g., show toast)
     },
   });
@@ -79,12 +79,12 @@ const useDraw = () => {
         const res = await api.post(`/draw-result/result/${draw_session}/`, rest);
         return res?.data;
       } catch (error: any) {
-        console.error("Error creating draw result:", error);
-        throw error?.response?.data || error?.message || "Failed to create draw result.";
+        console.log("Error creating draw result:", error);
+        throw error?.message?.detail || error?.message || "Failed to create draw result.";
       }
     },
     onError: (error) => {
-      console.error("Mutation error in createDrawResult:", error);
+      console.log("Mutation error in createDrawResult:", error);
       // Optionally, handle error side effects here (e.g., show toast)
     },
   });
@@ -107,16 +107,17 @@ const useDraw = () => {
         console.log("res", res);
         return res?.data;
       } catch (error: any) {
-        console.error("Error updating draw result:", error);
+        console.log("Error updating draw result:", error);
         // Optionally, you can throw a more descriptive error
-        throw error?.response?.data || error?.message || "Failed to update draw result.";
+        throw error?.message?.detail || error?.message || "Failed to update draw result.";
       }
     },
     onError: (error) => {
       // You can handle side effects here, e.g., show a toast or log
-      console.error("Mutation error in updateDrawResult:", error);
+      // console.log("Mutation error in updateDrawResult:", error);
     },
   });
+
 
   // Always return all mutation objects, never undefined
   return {

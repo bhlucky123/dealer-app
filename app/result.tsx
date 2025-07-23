@@ -3,6 +3,7 @@ import useDraw from "@/hooks/use-draw";
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
+import { formatDateDDMMYYYY } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, AlertTriangle, Calendar, Pencil, Plus, X } from "lucide-react-native";
@@ -73,8 +74,7 @@ function canEditResult(published_at: string | undefined | null) {
     const publishedDate = new Date(published_at);
     const now = new Date();
     // Allow edit only within 1 hour of published_at
-    // return now.getTime() - publishedDate.getTime() < 60 * 60 * 1000;
-    return true // TODO
+    return now.getTime() - publishedDate.getTime() < 60 * 60 * 1000;
 }
 
 const ResultPage: React.FC = () => {
@@ -135,7 +135,7 @@ const ResultPage: React.FC = () => {
 
                 // Update
                 await updateDrawResult.mutateAsync({
-                    id: data.id,
+                    id: selectedDraw?.id,
                     ...resultData,
                 });
             } else {
@@ -149,14 +149,20 @@ const ResultPage: React.FC = () => {
             setFormData(null);
             refetch();
         } catch (err: any) {
+            console.log("err", err);
+
             // Handle specific error: ["No draw session found for today."]
             if (Array.isArray(err) && err.length === 1 && err[0] === "No draw session found for today.") {
                 setFormError("No draw session found for the selected date. Please check the draw schedule.");
                 Alert.alert("No Draw Session", "No draw session found for the selected date. Please check the draw schedule.");
             } else {
-                setFormError(err?.message || "Failed to save result.");
-                Alert.alert("Error", err?.message || "Failed to save result.");
+                setFormError(err || "Failed to save result.");
+                Alert.alert("Error", err || "Failed to save result.");
             }
+
+            setTimeout(() => {
+                setFormError("");
+            }, 3000);
         }
     };
 
@@ -216,11 +222,11 @@ const ResultPage: React.FC = () => {
 
 
     // Only allow add if no result, and only allow edit if result is updated within 1 hour
-    const canAdd = user?.user_type === "ADMIN" && !isLoading && !data && !error;
+    const canAdd = user?.user_type === "ADMIN" && !data;
     const canEditIcon = user?.user_type === "ADMIN" && data && canEditResult(data.published_at);
 
-    console.log("canEditIcon",canEditIcon, "data.published_at",data?.published_at);
-    
+    console.log("canEditIcon", canEditIcon, "data.published_at", data?.published_at);
+
 
     return (
         <ScrollView className="flex-1">
@@ -237,7 +243,7 @@ const ResultPage: React.FC = () => {
                         activeOpacity={0.85}
                     >
                         <Text className="text-base text-gray-800 font-medium">
-                            {filterDate ? filterDate.toLocaleDateString() : new Date().toLocaleDateString()}
+                            {formatDateDDMMYYYY(filterDate || new Date())}
                         </Text>
                         <View className="ml-2">
                             <Calendar size={20} color="#2563eb" />
