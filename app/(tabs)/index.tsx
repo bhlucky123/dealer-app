@@ -351,60 +351,7 @@ const DrawForm = ({ initialData, onClose }: { initialData?: any; onClose: () => 
               {isEdit ? "Update" : "Create"} Draw
             </Text>
           </TouchableOpacity>
-          {/* Delete Button for Edit Mode */}
-          {isEdit && (
-            <TouchableOpacity
-              onPress={async () => {
-                Alert.alert(
-                  "Delete Draw",
-                  "This will delete all the data related to this draw. Are you sure you want to continue?",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                      text: "Delete",
-                      style: "destructive",
-                      onPress: async () => {
-                        try {
-                          await api.delete(`/draw/${initialData.id}/`);
-                          // Invalidate or update the draw list
-                          await queryClient.invalidateQueries({ queryKey: ["/draw/list/"] });
-                          onClose();
-                        } catch (err) {
-                          Alert.alert("Error", "Failed to delete draw. Please try again.");
-                        }
-                      },
-                    },
-                  ]
-                );
-              }}
-              activeOpacity={0.85}
-              style={{
-                borderRadius: 16,
-                backgroundColor: "#ef4444", // red-500
-                shadowColor: "#ef4444",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.18,
-                shadowRadius: 8,
-                elevation: 6,
-                paddingVertical: 12,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text
-                style={{
-                  color: "#fff",
-                  fontWeight: "bold",
-                  fontSize: 14,
-                  letterSpacing: 1,
-                  textAlign: "center",
-                  textTransform: "uppercase",
-                }}
-              >
-                Delete Draw
-              </Text>
-            </TouchableOpacity>
-          )}
+          
         </View>
 
         {showDatePicker && (
@@ -537,8 +484,8 @@ export default function HomeScreen() {
       )}
 
       <FlatList
-        data={draws}
-        keyExtractor={(item) => item.id.toString()}
+        data={draws || []}
+        keyExtractor={(item) => item?.id?.toString()}
         renderItem={({ item }) => {
           const textColor = getContrastYIQ(item.color_theme || "#8B5CF6");
           return (

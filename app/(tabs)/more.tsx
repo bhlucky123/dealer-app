@@ -27,6 +27,10 @@ type BankDetailsResponse = {
     agent_bank_details?: BankDetails;
 };
 
+type myBalanceResponse = {
+    balance_amount?: number
+}
+
 export default function MoreTab() {
     const [isActive, setIsActive] = useState(true);
 
@@ -78,6 +82,24 @@ export default function MoreTab() {
         }
     });
 
+    const {
+        data: myBalance,
+        isLoading: ismyBalanceLoading,
+        refetch: refetchMyBalance,
+    } = useQuery<myBalanceResponse>({
+        queryKey: ["/draw-payment/get-my-pending-balance/"],
+        enabled: (user?.user_type === "AGENT" || user?.user_type === "DEALER"),
+        queryFn: async () => {
+            try {
+                const res = await api.get("/draw-payment/get-my-pending-balance/");
+                return res.data as myBalanceResponse;
+            } catch (err) {
+                return { balance_amount: 0 };
+            }
+        },
+        refetchOnMount: true
+    });
+
     // Helper to get the correct details for editing/updating
     function getBankDetailsForEdit(type: "admin" | "dealer" | "agent") {
         if (!bankDetailsData) return null;
@@ -96,6 +118,8 @@ export default function MoreTab() {
             type: "admin" | "dealer" | "agent";
             bank_details: string;
         }) => {
+            console.log("on mutation",user);
+            
             if (!user?.id) throw new Error("No user id");
             const details = getBankDetailsForEdit(type);
             let url = "/draw-payment/bank-details/";
@@ -114,6 +138,9 @@ export default function MoreTab() {
             if (type === "admin") payload.user_type = "ADMIN";
             if (type === "dealer") payload.user_type = "DEALER";
             if (type === "agent") payload.user_type = "AGENT";
+
+            console.log("url", url, "payload", payload, "method", method);
+
             if (method === "patch") {
                 return api.patch(url, payload);
             } else {
@@ -154,6 +181,8 @@ export default function MoreTab() {
             canAdd: boolean
         ) {
             const isEditing = editingBankDetails === type;
+            const noBankDetails = !details?.bank_details;
+
             return (
                 <View className="w-full mb-8" key={type}>
                     <Text className="text-base font-semibold text-gray-500 mb-2 tracking-wider uppercase">
@@ -176,7 +205,7 @@ export default function MoreTab() {
                                         : <Text className="text-gray-400">No bank details added.</Text>
                                     }
                                 </Text>
-                                {isEditing && (canEdit || (canAdd && !details?.bank_details)) ? (
+                                {isEditing && (canEdit || (canAdd && noBankDetails)) ? (
                                     <>
                                         <TextInput
                                             placeholder="Enter bank details"
@@ -228,7 +257,7 @@ export default function MoreTab() {
                                         </View>
                                     </>
                                 ) : (
-                                    (canEdit || (canAdd && !details?.bank_details)) && (
+                                    (canEdit || (canAdd && noBankDetails)) && (
                                         <TouchableOpacity
                                             className="mt-2 bg-blue-100 px-4 py-2 rounded-lg"
                                             onPress={() => {
@@ -260,7 +289,7 @@ export default function MoreTab() {
                 "admin",
                 bankDetailsData?.admin_bank_details,
                 true, // canEdit
-                false // canAdd (irrelevant for admin, always can edit)
+                true // canAdd (allow add if not present)
             );
         } else if (user.user_type === "DEALER") {
             // Dealer can only edit and view dealer bank details, and view admin bank details
@@ -278,7 +307,7 @@ export default function MoreTab() {
                         "dealer",
                         bankDetailsData?.dealer_bank_details,
                         true, // canEdit
-                        false // canAdd (dealer can always edit their own)
+                        true // canAdd (allow add if not present)
                     )}
                 </>
             );
@@ -306,6 +335,35 @@ export default function MoreTab() {
         return null;
     }
 
+    // Render balance for agent and dealer
+    function renderMyBalanceSection() {
+        if (user?.user_type === "AGENT" || user?.user_type === "DEALER") {
+            return (
+                <View className="w-full mb-8" key="my-balance">
+                    <Text className="text-base font-semibold text-gray-500 mb-2 tracking-wider uppercase">
+                        My Balance
+                    </Text>
+                    <View
+                        className="w-full rounded-xl bg-gray-50 border border-gray-200 py-4 px-3 mb-1"
+                        style={{
+                            minHeight: 60,
+                            justifyContent: "center",
+                        }}
+                    >
+                        {ismyBalanceLoading ? (
+                            <ActivityIndicator color="#6b7280" size="small" />
+                        ) : (
+                            <Text className="text-gray-800 text-2xl font-bold">
+                                ₹ {myBalance?.balance_amount?.toLocaleString("en-IN") ?? "0"}
+                            </Text>
+                        )}
+                    </View>
+                </View>
+            );
+        }
+        return null;
+    }
+
     return (
         <ScrollView
             className="flex-1 px-4 py-8 bg-gradient-to-b from-gray-100 to-gray-200"
@@ -325,6 +383,8 @@ export default function MoreTab() {
                     elevation: 6,
                 }}
             >
+                {/* My Balance Section for Agent/Dealer */}
+                {renderMyBalanceSection()}
 
                 {/* Bank Details Section */}
                 {renderBankDetailsSection()}

@@ -46,8 +46,8 @@ const LastSaleReportScreen = () => {
             const day = String(date.getDate()).padStart(2, "0");
             return `${year}-${month}-${day}`;
         };
-        // if (fromDate) params["date_time__gte"] = formatDateYYYYMMDD(fromDate);
-        // if (toDate) params["date_time__lte"] = formatDateYYYYMMDD(toDate);
+        if (fromDate) params["date_time__gte"] = formatDateYYYYMMDD(fromDate);
+        if (toDate) params["date_time__lte"] = formatDateYYYYMMDD(toDate);
         if (fullView) params["full_view"] = "true";
         // if (user?.user_type === "AGENT") params["booked_agent__id"] = user.id?.toString();
         if (selectedDraw?.id) params["draw_session__draw__id"] = String(selectedDraw.id);
@@ -79,91 +79,6 @@ const LastSaleReportScreen = () => {
     return (
         <SafeAreaView className="flex-1 bg-white">
             <View className="flex-1 p-4">
-                {/* Filters */}
-                {/* <View className="gap-3">
-                    <TextInput
-                        placeholder="Search by Bill No."
-                        value={search}
-                        keyboardType="numeric"
-                        onChangeText={setSearch}
-                        className="border border-gray-300 rounded-lg px-4 py-3 text-base focus:border-violet-500"
-                        placeholderTextColor="#9ca3af"
-                    />
-
-                    <View className="flex-row gap-3">
-                        <TouchableOpacity
-                            onPress={() => setShowFromPicker(true)}
-                            className="flex-1 border border-gray-300 rounded-lg px-4 py-3 active:bg-gray-50"
-                        >
-                            <Text className="text-gray-700">
-                                From:{" "}
-                                <Text
-                                    className={fromDate ? "text-gray-900 font-medium" : "text-gray-500"}
-                                >
-                                    {fromDate?.toLocaleDateString() || "Select Date"}
-                                </Text>
-                            </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={() => setShowToPicker(true)} // Corrected state setter name
-                            className="flex-1 border border-gray-300 rounded-lg px-4 py-3 active:bg-gray-50"
-                        >
-                            <Text className="text-gray-700">
-                                To:{" "}
-                                <Text
-                                    className={toDate ? "text-gray-900 font-medium" : "text-gray-500"}
-                                >
-                                    {toDate?.toLocaleDateString() || "Select Date"}
-                                </Text>
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <RNPickerSelect
-                        onValueChange={setSelectedAgent}
-                        items={[
-                            ...agents.map((agent) => ({
-                                label: agent.username,
-                                value: agent.id,
-                                key: agent.id.toString(),
-                            })),
-                        ]}
-                        value={selectedAgent}
-                        style={{
-                            viewContainer: {
-                                borderColor: "#9ca3af",
-                                borderWidth: 1,
-                                borderRadius: 6,
-                            },
-                            placeholder: {
-                                color: "#374151"
-                            }
-                        }}
-                        placeholder={{ label: "Select Agent", value: null }}
-                        Icon={() =>
-                            selectedAgent !== null ? (
-                                <TouchableOpacity
-                                    onPress={() => setSelectedAgent("")}
-                                    style={{ position: "absolute", right: 10, top: 12, zIndex: 10 }}
-                                    className="bg-white w-10 h-10 flex items-center"
-                                >
-                                    <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
-                                </TouchableOpacity>
-                            ) : null
-                        }
-                    />
-
-                    <View className="flex-row items-center justify-between px-1 pt-1">
-                        <Text className="text-sm text-gray-700">Full View</Text>
-                        <Switch
-                            value={fullView}
-                            onValueChange={setFullView}
-                            trackColor={{ false: "#e5e7eb", true: "#a78bfa" }} // Gray for off, Violet-400 for on
-                            thumbColor={fullView ? "#7c3aed" : "#f4f3f4"} // Violet-600 for on, White for off
-                            ios_backgroundColor="#e5e7eb"
-                        />
-                    </View>
-                </View> */}
 
                 {/* --- Main Content Area --- */}
                 {/* Conditional rendering for status messages or the report table */}
@@ -186,11 +101,11 @@ const LastSaleReportScreen = () => {
                     </View>
                 ) : (
                     <>
-                        {data?.result?.length ? (
+                        {/* {data?.result?.length ? ( */}
                             <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden">
                                 <FlatList
-                                    data={data.result}
-                                    keyExtractor={(item) => item.bill_number.toString()}
+                                    data={data?.result || []}
+                                    keyExtractor={(item, index) => item?.bill_number?.toString() || index?.toString() }
                                     ListHeaderComponent={() => (
                                         <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
                                             <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">
@@ -287,11 +202,11 @@ const LastSaleReportScreen = () => {
                                 // ListFooterComponent={() => <View className="h-4 bg-gray-50"></View>}
                                 />
                             </View>
-                        ) : (
+                        {/* ) : (
                             <View className="flex-1 justify-center items-center">
                                 <Text className="text-gray-500">No sales data available.</Text>
                             </View>
-                        )}
+                        )} */}
 
                     </>
                 )}

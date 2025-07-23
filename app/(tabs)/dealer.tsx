@@ -450,7 +450,7 @@ export default function DealerManagement() {
                 </View>
             ) : (
                 <FlatList
-                    data={filteredDealers}
+                    data={filteredDealers || []}
                     keyExtractor={(item) => item.id.toString()}
                     contentContainerStyle={{ paddingBottom: 100, paddingTop: 16 }}
                     renderItem={({ item }) => (

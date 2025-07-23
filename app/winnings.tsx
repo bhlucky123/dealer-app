@@ -29,7 +29,7 @@ type WinnerReport = {
     draw: string;
     dealer: string | { id: number; username: string; user_type: string; commission: number; single_digit_number_commission: number; cap_amount: number };
     agent: string | { id: number; username: string; user_type: string; commission: number; single_digit_number_commission: number; cap_amount: number } | null;
-    date_time?: string; // Add this if your API returns a date field
+    booking_datetime?: string; // Add this if your API returns a date field
 };
 
 // Helper function to format date as dd/mm/yyyy
@@ -105,7 +105,7 @@ const WinnersReportScreen = () => {
             .join("&");
     };
 
-    const { data, isLoading, error } = useQuery<WinnerReport[]>({
+    const { data = [], isLoading, error } = useQuery<WinnerReport[]>({
         queryKey: ["/draw-result/winners/", buildQuery()],
         queryFn: async () => {
             const res = await api.get(`/draw-result/winners/?${buildQuery()}`);
@@ -113,6 +113,9 @@ const WinnersReportScreen = () => {
         },
         enabled: !!selectedDraw?.id,
     });
+
+    console.log("winners", data);
+
 
     // Determine if we should show the total footer
     const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && data;
@@ -271,95 +274,94 @@ const WinnersReportScreen = () => {
                         </Text>
                     </View>
                 ) : (
-                    <>
-                        {data?.length ? (
-                            <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden">
-                                <FlatList
-                                    data={data}
-                                    keyExtractor={(item) => item.bill_number.toString()}
-                                    ListHeaderComponent={() => (
-                                        <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
-                                            <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">
-                                                Date
+                    <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden">
+                        <FlatList
+                            data={data || []}
+                            keyExtractor={(item, index) => item?.bill_number?.toString() || index?.toString()}
+                            ListHeaderComponent={() => (
+                                <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
+                                    <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">Date</Text>
+                                    <Text className="flex-[1.2] text-xs font-semibold text-center text-gray-600 uppercase">Game</Text>
+                                    <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Number</Text>
+                                    <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Dealer</Text>
+                                    <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">Prize</Text>
+                                    <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">Amount</Text>
+                                </View>
+                            )}
+                            renderItem={({ item, index }) => (
+                                <View
+                                    className={[
+                                        "px-4 py-2 border-b border-gray-100",
+                                        index % 2 === 0 ? "bg-white" : "bg-gray-50"
+                                    ].join(" ")}
+                                    style={{
+                                        marginBottom: 6,
+                                        borderRadius: 10,
+                                        marginHorizontal: 6,
+                                        shadowColor: "#000",
+                                        shadowOpacity: 0.03,
+                                        shadowRadius: 2,
+                                        elevation: 1,
+                                    }}
+                                >
+                                    {/* Top Row: Date, Game, Dealer */}
+                                    <View className="flex-row items-center mb-1">
+                                        <View className="flex-[1.1]">
+                                            <Text className="text-xs text-gray-700 font-semibold">
+                                                {item.booking_datetime ? formatDateToDDMMYYYY(item.booking_datetime) : ""}
                                             </Text>
-                                            <Text className="flex-[1.2] text-xs font-semibold text-center text-gray-600 uppercase">
-                                                Game
-                                            </Text>
-                                            <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">
-                                                Number
-                                            </Text>
-                                            <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">
-                                                Dealer
-                                            </Text>
-                                            <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">
-                                                Price
-                                            </Text>
-                                            <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">
-                                                Amount
-                                            </Text>
-                                        </View>
-                                    )}
-                                    renderItem={({ item, index }) => (
-                                        <View className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                                            {/* ------------ main bill row ------------ */}
-                                            <View className="flex-row px-4 py-3 items-center border-b border-gray-100">
-                                                <View className="flex-[1.1] flex-col justify-center">
-                                                    <Text className="text-[10px] text-gray-800 font-medium">
-                                                        {/* Show date in dd/mm/yyyy format */}
-                                                        {item.date_time ? formatDateToDDMMYYYY(item.date_time) : ""}
-                                                    </Text>
-                                                </View>
-                                                <Text className="flex-[1.2] text-sm text-center text-gray-700">
-                                                    {item.draw}
-                                                </Text>
-                                                <View className="flex-1">
-                                                    <Text className=" text-sm text-center text-gray-700">
-                                                        {item.win_number}
-                                                    </Text>
-                                                    <Text className=" text-sm text-center text-gray-700">
-                                                        LSK {item.lsk}
-                                                    </Text>
-                                                    <Text className=" text-sm text-center text-gray-700">
-                                                        Count {item.count}
-                                                    </Text>
-                                                </View>
-                                                <View className="flex-1">
-                                                    <Text className="text-sm text-center text-gray-700">
-                                                        {getUsername(item.dealer)}
-                                                    </Text>
-                                                    <Text className="text-sm text-center text-gray-700">
-                                                        Bill ID
-                                                    </Text>
-                                                    <Text className="text-sm text-center text-gray-700">
-                                                        {item.bill_number}
-                                                    </Text>
-                                                </View>
-                                                <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">
-                                                    {item.prize.toFixed(2)}
-                                                </Text>
-                                                <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">
-                                                    {item.prize.toFixed(2)}{" "}
-                                                    {/* Format to 2 decimal places */}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    )}
-                                    ListEmptyComponent={
-                                        <View className="flex-1 justify-center items-center py-16">
-                                            <Text className="text-gray-500 text-base">
-                                                No Winner's data for current filters.
+                                            <Text className="text-[10px] text-gray-400">
+                                                Bill #{item.bill_number}
                                             </Text>
                                         </View>
-                                    }
-                                />
-                            </View>
-                        ) : (
-                            <View className="flex-1 justify-center items-center">
-                                <Text className="text-gray-500">No Winner's data available.</Text>
-                            </View>
-                        )}
-
-                    </>
+                                        <Text className="flex-[1.2] text-xs text-center text-violet-700 font-semibold">
+                                            {item.draw}
+                                        </Text>
+                                        <View className="flex-1 items-center">
+                                            <Text className="text-xs text-center text-gray-700 font-semibold">
+                                                {getUsername(item.dealer)}
+                                            </Text>
+                                            {item.agent && (
+                                                <Text className="text-[10px] text-center text-gray-400">
+                                                    Agent: {getUsername(item.agent)}
+                                                </Text>
+                                            )}
+                                        </View>
+                                    </View>
+                                    <View className="h-[1px] bg-gray-200 my-1" />
+                                    {/* Bottom Row: Number, LSK, Count, Prize, Amount */}
+                                    <View className="flex-row items-center">
+                                        <View className="flex-1 items-center">
+                                            <Text className="text-base text-center text-emerald-700 font-bold tracking-widest">
+                                                {item.win_number}
+                                            </Text>
+                                            <Text className="text-xs text-center text-gray-500">
+                                                {item.lsk}
+                                            </Text>
+                                            <Text className="text-[11px] text-center text-gray-400">
+                                                Count: <Text className="font-semibold">{item.count}</Text>
+                                            </Text>
+                                        </View>
+                                        <View className="flex-1 items-end">
+                                            <Text className="text-sm text-right text-violet-700 font-bold">
+                                                ₹{item.prize.toLocaleString()}
+                                            </Text>
+                                            <Text className="text-xs text-right text-emerald-700 font-semibold">
+                                                Amount: ₹{item.prize.toLocaleString()}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            )}
+                            ListEmptyComponent={
+                                <View className="flex-1 justify-center items-center py-16">
+                                    <Text className="text-gray-500 text-base">
+                                        No Winner's data available.
+                                    </Text>
+                                </View>
+                            }
+                        />
+                    </View>
                 )}
 
                 {/* --- Total Footer (always at the bottom if applicable) --- */}

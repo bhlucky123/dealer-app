@@ -1013,7 +1013,7 @@ const BookingScreen: React.FC = () => {
               <Text className="w-[8%] text-xs font-bold text-center"></Text>
             </View>
             <FlatList
-              data={bookingDetails}
+              data={bookingDetails || []}
               keyExtractor={(_, index) => index.toString()}
               initialNumToRender={20}
               maxToRenderPerBatch={20}

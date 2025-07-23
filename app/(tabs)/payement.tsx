@@ -80,7 +80,10 @@ export default function PaymentTab() {
         queryFn: () => api.get(`/draw-payment/dealers-with-pending-balance/`).then(res => res.data),
         enabled: user?.user_type === "ADMIN",
     });
-    
+
+    console.log("dealersData", dealersData);
+
+
 
     // Fetch agents with pending balance (for DEALER)
     const {
@@ -91,9 +94,10 @@ export default function PaymentTab() {
         queryKey: ["/draw-payment/agents-with-pending-balance"],
         queryFn: () => api.get(`/draw-payment/agents-with-pending-balance/`).then(res => res.data),
         enabled: user?.user_type === "DEALER",
+
     });
 
-    console.log("dealersData", dealersData);
+    console.log("agentsData", agentsData);
 
     // Mutation for ADMIN to update dealer's balance
     const dealerToAdminPaymentMutation = useMutation({
@@ -278,8 +282,8 @@ export default function PaymentTab() {
                 </Text>
             ) : (
                 <FlatList
-                    data={listData}
-                    keyExtractor={(item, index) => item.id.toString() + index}
+                    data={listData || []}
+                    keyExtractor={(item, index) => item?.id?.toString() + index}
                     renderItem={renderItem}
                     contentContainerStyle={{ paddingBottom: 32 }}
                 />

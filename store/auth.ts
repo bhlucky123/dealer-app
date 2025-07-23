@@ -21,6 +21,9 @@ interface AuthState {
   setUser: (user: User | null) => void;
 }
 
+// Flag to control use of hardcoded data
+export const USE_HARDCODED_AUTH = false; // Set to false to disable hardcoded data
+
 const AdminToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU1MzQwMzgyLCJpYXQiOjE3NTI3NDgzODIsImp0aSI6IjcyZTVlMjM3ZmNkODQ2NzdhNzllMTlmZmNiMzk2Zjk0IiwidXNlcl9pZCI6MSwidXNlcl90eXBlIjoiQURNSU4ifQ.fEkJv75g8jrH5MBZNHE698nijW1NVK5v78-prexPMOM";
 const DealerToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU1NTk2MjE3LCJpYXQiOjE3NTMwMDQyMTcsImp0aSI6IjcyYTM1ZmIzNjk0MDQzYTliYzZhZjBmYzM4MzIwODI2IiwidXNlcl9pZCI6MiwidXNlcl90eXBlIjoiREVBTEVSIn0.uIXiozc7E2V7K-FwBbE29b1f8_RgvkHoroRnce96Nls";
 const AgentToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU1NzA5MzQzLCJpYXQiOjE3NTMxMTczNDMsImp0aSI6IjJhMjdhYWE2YzlmODQ2NjQ4ZDI3ZmM2YjAxZGY4OWI2IiwidXNlcl9pZCI6MywidXNlcl90eXBlIjoiQUdFTlQifQ.pyrnzOupIxjZT7gUHX8CyC11cpdRH1PzlUexmv2mZAI";
@@ -66,8 +69,9 @@ function getDefaultAuth() {
   }
 }
 
-export const useAuthStore = create<AuthState>((set) => {
-  const { user, token } = getDefaultAuth();
+export const useAuthStore = create<AuthState>((set) =>  {
+  // If using hardcoded data, initialize with dummy user/token, else null
+  const { user, token } = USE_HARDCODED_AUTH ? getDefaultAuth() : { user: null, token: null };
 
   return {
     user,
@@ -78,6 +82,7 @@ export const useAuthStore = create<AuthState>((set) => {
     login: async (username, password) => {
       set({ loading: true, error: null });
       try {
+
         // Determine login endpoint and user-type header based on config.userType
         let loginUrl = "";
         let userTypeHeader = config.userType;
@@ -108,18 +113,55 @@ export const useAuthStore = create<AuthState>((set) => {
         );
 
         if (!response.ok) {
-          const text = await response.text();
+          let errorMsg = `Login failed: ${response.status}`;
+          try {
+            const text = await response.text();
+            let parsed;
+            try {
+              parsed = JSON.parse(text);
+            } catch {
+              // Not JSON, fallback to text
+            }
+            if (parsed && typeof parsed === "object") {
+              // Handle DRF-style error: {"non_field_errors":["Invalid username or password."]}
+              if (parsed.non_field_errors && Array.isArray(parsed.non_field_errors) && parsed.non_field_errors.length > 0) {
+                errorMsg = parsed.non_field_errors[0];
+              } else if (parsed.detail) {
+                errorMsg = parsed.detail;
+              } else {
+                errorMsg = text;
+              }
+            } else if (text) {
+              errorMsg = text;
+            }
+          } catch (e) {
+            // fallback to default errorMsg
+          }
+
           set({
-            error: text || `Login failed: ${response.status}`,
+            error: errorMsg,
             loading: false,
           });
+
+          // Clear error after 3 seconds
+          setTimeout(() => {
+            set({ error: "" });
+          }, 3000);
+
           return;
         }
 
         const data = await response.json();
+        if (config.userType !== data?.user_details?.user_type) {
+          router.push("/login")
+        }
         console.log("data", data);
         set({
-          user: data.user_details,
+          user: {
+            id: data.user_details?.user_id,
+            user_type: config.userType,
+            ...data?.user_details
+          },
           token: data.access,
           loading: false,
           error: null,
