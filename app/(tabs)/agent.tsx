@@ -2,7 +2,8 @@ import useAgent from "@/hooks/use-agent";
 import { useAuthStore } from "@/store/auth";
 import api from "@/utils/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { MoveLeft } from "lucide-react-native";
+import { router } from "expo-router";
+import { ArrowLeft, MoveLeft } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -104,14 +105,30 @@ const AgentForm = ({
     if (!form.username.trim()) newErrors.username = "Username is required";
     if (!defaultValues?.id && !form.password.trim())
       newErrors.password = "Password is required";
+
+    if (!form.calculate_str.trim())
+      newErrors.calculate_str = "Calculate String is required";
     if (
-      form.secret_pin.length !== 4 ||
-      !/^\d{4}$/.test(form.secret_pin.trim())
-    )
-      newErrors.secret_pin = "Secret PIN must be 4 digits";
+      !form?.secret_pin)
+      newErrors.secret_pin = "Secret PIN is required";
+    // if (
+    //   form.secret_pin.length !== 4 ||
+    //   !/^\d{4}$/.test(form.secret_pin.trim())
+    // )
+    //   newErrors.secret_pin = "Secret PIN must be 4 digits";
+    if (!form?.commission)
+      newErrors.commission = "Commission is required";
     if (Number(form.commission) < 0)
       newErrors.commission = "Commission cannot be negative";
-    if (Number(form.cap_amount) < 0) newErrors.cap_amount = "Cap cannot be negative";
+
+    if (!form?.single_digit_number_commission)
+      newErrors.single_digit_number_commission = "required";
+    if (Number(form.single_digit_number_commission) < 0)
+      newErrors.single_digit_number_commission = "Single digit Commission cannot be negative";
+
+
+    if (!form?.cap_amount) newErrors.cap_amount = "required";
+    if (Number(form?.cap_amount) < 0) newErrors.cap_amount = "Cap cannot be negative";
 
     setErrors(newErrors);
     setGeneralError("");
@@ -138,7 +155,7 @@ const AgentForm = ({
     { key: "username", label: "Username", keyboardType: "default" as const, secureTextEntry: false, icon: "@" },
     { key: "password", label: "Password", keyboardType: "default" as const, secureTextEntry: true, optional: !!defaultValues?.id, icon: "🔒" },
     { key: "calculate_str", label: "Calculate String", keyboardType: "default" as const, secureTextEntry: false, icon: "🧮" },
-    { key: "secret_pin", label: "Secret PIN", keyboardType: "numeric" as const, secureTextEntry: true, icon: "🔐" },
+    { key: "secret_pin", label: "Secret PIN", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🔐" },
     { key: "commission", label: "Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💰" },
     { key: "single_digit_number_commission", label: "Single Digit Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "📊" },
     { key: "cap_amount", label: "Cap Amount", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🎯" },
@@ -333,7 +350,7 @@ const AgentCard = ({
 
           <View className="flex-row gap-2">
             {
-              (user?.user_type === "DEALER" || user?.user_type === "ADMIN") && <TouchableOpacity
+              (user?.user_type === "DEALER") && <TouchableOpacity
                 onPress={onEdit}
                 className="px-3 py-1.5 bg-gray-100 rounded-md"
                 activeOpacity={0.8}
@@ -342,7 +359,7 @@ const AgentCard = ({
               </TouchableOpacity>
             }
             {
-              (user?.user_type === "DEALER" || user?.user_type === "ADMIN") &&
+              (user?.user_type === "DEALER") &&
               <TouchableOpacity
                 onPress={onDelete}
                 className="px-3 py-1.5 bg-red-100 rounded-md"
@@ -413,7 +430,7 @@ const AgentCard = ({
 
 
 // Main Agent Tab with enhanced UI
-export default function AgentTab() {
+export default function AgentTab({ id }: { id?: string }) {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editData, setEditData] = useState<Agent | null>(null);
@@ -430,10 +447,14 @@ export default function AgentTab() {
     refetch,
     isFetching,
   } = useQuery<Agent[]>({
-    queryKey: ["agents"],
+    queryKey: ["agents", id],
     queryFn: async () => {
       try {
-        const res = await api.get("/agent/manage/");
+        let url = "/agent/manage/";
+        if (id) {
+          url += `?assigned_dealer__id=${encodeURIComponent(id)}`;
+        }
+        const res = await api.get(url);
         return res.data;
       } catch (err: any) {
         // Try to extract error message
@@ -645,11 +666,21 @@ export default function AgentTab() {
         <View className="px-6 pt-10 pb-6">
           <View className="flex-row justify-between items-center  mb-4" >
             {/* Title */}
-            <Text className="text-2xl font-bold text-gray-800">
-              Agent Management
-            </Text>
+            <View className="flex-row gap-2 items-center">
+              {
+                id &&
+                <TouchableOpacity onPress={() => {
+                  router.back();
+                }}>
+                  <ArrowLeft />
+                </TouchableOpacity>
+              }
+              <Text className="text-2xl font-bold text-gray-800">
+                Agent Management
+              </Text>
+            </View>
             {
-              (user?.user_type === "DEALER" || user?.user_type === "ADMIN") && <TouchableOpacity
+              (user?.user_type === "DEALER") && <TouchableOpacity
                 onPress={() => {
                   setEditData(null);
                   setShowForm(true);
@@ -744,21 +775,25 @@ export default function AgentTab() {
           <Text className="text-xl font-bold text-gray-800 mb-2">
             {searchQuery ? 'No agents found' : 'No agents yet'}
           </Text>
-          <Text className="text-gray-500 text-center mb-8">
-            {searchQuery
-              ? `No agents match "${searchQuery}"`
-              : 'Get started by creating your first agent'
-            }
-          </Text>
-          {!searchQuery && (
-            <TouchableOpacity
-              onPress={() => setShowForm(true)}
-              className="bg-blue-600 px-8 py-4 rounded-xl active:scale-95"
-              activeOpacity={0.9}
-            >
-              <Text className="text-white font-bold text-lg">Create First Agent</Text>
-            </TouchableOpacity>
-          )}
+          {user?.user_type === "DEALER" &&
+            <View>
+              <Text className="text-gray-500 text-center mb-8">
+                {searchQuery
+                  ? `No agents match "${searchQuery}"`
+                  : 'Get started by creating your first agent'
+                }
+              </Text>
+              {!searchQuery && (
+                <TouchableOpacity
+                  onPress={() => setShowForm(true)}
+                  className="bg-blue-600 px-8 py-4 rounded-xl w-fit active:scale-95"
+                  activeOpacity={0.9}
+                >
+                  <Text className="text-white font-bold text-lg w-fit text-center">Create First Agent</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          }
           {/* Allow pull to refresh even on empty */}
           <FlatList
             data={[]}

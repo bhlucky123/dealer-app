@@ -114,15 +114,14 @@ const BookingScreen: React.FC = () => {
     refetchOnMount: true,
   });
 
-  console.log("DrawSessionDetails", DrawSessionDetails, "selectedDraw?.id", selectedDraw?.id);
-
   const { mutate } = useMutation({
     mutationFn: async (data: any) => api.post("/draw-booking/create/", data),
     onSuccess: () => {
-      Alert.alert("Success", "Booking submitted.");
+      ToastAndroid.show("Booking submitted.", 300)
       setBookingDetails([]);
       clearInputs();
       setEditIndex(null);
+      setCustomerName("")
     },
     onError: (error: any) => {
       let errorMessage = "Failed to submit.";
@@ -139,7 +138,6 @@ const BookingScreen: React.FC = () => {
           }
         }
       }
-      console.log("error - while submitting booking", error);
       Dialog.show({
         type: ALERT_TYPE.DANGER,
         title: 'Error',
@@ -164,7 +162,6 @@ const BookingScreen: React.FC = () => {
     }
   };
 
-  // --- REWRITE addBooking ---
   const addBooking = (
     subType: string,
     number?: string,
@@ -184,6 +181,9 @@ const BookingScreen: React.FC = () => {
       ? (user?.single_digit_number_commission ?? 0)
       : (user?.commission ?? 0);
 
+      console.log("commission",commission);
+      
+
     // Helper to create entries with custom lsk
     const createEntry = (
       number: string,
@@ -196,8 +196,8 @@ const BookingScreen: React.FC = () => {
         lsk,
         number,
         count,
-        amount: amt,
-        d_amount: parseFloat((amt - commission).toFixed(2)),
+        amount: price,
+        d_amount: parseFloat((amt - count * commission).toFixed(2)),
         c_amount: amt,
         type: bookingType,
         sub_type: subTypeOverride ?? lsk,
@@ -555,6 +555,10 @@ const BookingScreen: React.FC = () => {
   };
 
   const handleSubmit = () => {
+    if (!bookingDetails?.length) {
+      Alert.alert("No bookings", "Please add at least one booking before submitting.");
+      return;
+    }
     if (DrawSessionDetails?.session?.active_session_id) {
       const data = {
         customer_name: customerName,
@@ -1007,10 +1011,10 @@ const BookingScreen: React.FC = () => {
               <Text className="w-[20%] text-xs font-bold text-center">
                 D.AMOUNT
               </Text>
-              <Text className="w-[12%] text-xs font-bold text-center">
+              <Text className="w-[18%] text-xs font-bold text-center">
                 C.AMOUNT
               </Text>
-              <Text className="w-[8%] text-xs font-bold text-center"></Text>
+              {/* <Text className="w-[8%] text-xs font-bold text-center"></Text> */}
             </View>
             <FlatList
               data={bookingDetails || []}

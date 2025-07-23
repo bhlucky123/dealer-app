@@ -86,6 +86,7 @@ export default function MoreTab() {
         data: myBalance,
         isLoading: ismyBalanceLoading,
         refetch: refetchMyBalance,
+        isFetching: isFetchingMyBalance,
     } = useQuery<myBalanceResponse>({
         queryKey: ["/draw-payment/get-my-pending-balance/"],
         enabled: (user?.user_type === "AGENT" || user?.user_type === "DEALER"),
@@ -353,9 +354,33 @@ export default function MoreTab() {
                         {ismyBalanceLoading ? (
                             <ActivityIndicator color="#6b7280" size="small" />
                         ) : (
-                            <Text className="text-gray-800 text-2xl font-bold">
-                                ₹ {myBalance?.balance_amount?.toLocaleString("en-IN") ?? "0"}
-                            </Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                                <Text className="text-gray-800 text-2xl font-bold">
+                                    ₹ {myBalance?.balance_amount?.toLocaleString("en-IN") ?? "0"}
+                                </Text>
+                                <TouchableOpacity
+                                    onPress={() => refetchMyBalance()}
+                                    style={{
+                                        marginLeft: 16,
+                                        backgroundColor: "#e0e7ef",
+                                        borderRadius: 8,
+                                        paddingVertical: 6,
+                                        paddingHorizontal: 14,
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                    }}
+                                    activeOpacity={0.8}
+                                    disabled={isFetchingMyBalance}
+                                >
+                                    {isFetchingMyBalance ? (
+                                        <ActivityIndicator size="small" color="#2563eb" />
+                                    ) : (
+                                        <Text style={{ color: "#2563eb", fontWeight: "bold", fontSize: 14 }}>
+                                            Refresh
+                                        </Text>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
                         )}
                     </View>
                 </View>
