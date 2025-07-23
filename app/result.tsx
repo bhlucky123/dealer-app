@@ -228,7 +228,7 @@ const ResultPage: React.FC = () => {
     console.log("canEditIcon", canEditIcon, "data.published_at", data?.published_at);
 
 
-    return (
+    return ( 
         <ScrollView className="flex-1">
             {/* Date filter */}
             <View className="px-4 pt-4 flex-row items-end justify-between">

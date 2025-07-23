@@ -64,17 +64,22 @@ const DealerForm = ({
         // Password is only required for new creations
         if (!defaultValues?.id && !form.password.trim())
             newErrors.password = "Password is required";
-        if (
-            form.secret_pin.length !== 4 ||
-            !/^\d{4}$/.test(form.secret_pin.trim())
-        )
-            newErrors.secret_pin = "Secret PIN must be 4 digits";
+        if (!form?.calculate_str?.trim())
+            newErrors.calculate_str = "required";
+        if (!form.secret_pin.trim())
+            newErrors.secret_pin = "required";
+        if (!form?.commission)
+            newErrors.commission = "required";
         if (Number(form.commission) < 0)
             newErrors.commission = "Commission cannot be negative";
+        if (!form?.single_digit_number_commission)
+            newErrors.single_digit_number_commission = "required";
+        if (Number(form.single_digit_number_commission) < 0)
+            newErrors.single_digit_number_commission = "Single digit Commission cannot be negative";
+        if (!form?.cap_amount)
+            newErrors.cap_amount = "required";
         if (Number(form.cap_amount) < 0)
             newErrors.cap_amount = "Cap amount cannot be negative";
-        if (Number(form.single_digit_number_commission) < 0)
-            newErrors.single_digit_number_commission = "Single digit commission cannot be negative";
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -111,7 +116,7 @@ const DealerForm = ({
         { key: "username", label: "Username", keyboardType: "default" as const, secureTextEntry: false, icon: "👤" },
         { key: "password", label: "Password", keyboardType: "default" as const, secureTextEntry: true, optional: !!defaultValues?.id, icon: "🔒" }, // Optional for edit
         { key: "calculate_str", label: "Calculate String", keyboardType: "default" as const, secureTextEntry: false, icon: "🧮" },
-        { key: "secret_pin", label: "Secret PIN", keyboardType: "numeric" as const, secureTextEntry: true, icon: "🔑" },
+        { key: "secret_pin", label: "Secret PIN", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🔑" },
         { key: "commission", label: "Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💰" },
         { key: "single_digit_number_commission", label: "Single Digit Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🎯" },
         { key: "cap_amount", label: "Cap Amount", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💲" },
@@ -223,7 +228,6 @@ const DealerForm = ({
                         </Text>
                         <TouchableOpacity
                             onPress={() => {
-                                console.log("activvvving");
                                 handleChange('is_active', !form.is_active)
                             }}
                             className={`
@@ -277,7 +281,7 @@ const DealerCard = ({ item, onEdit, onDelete }: { item: Dealer; onEdit: () => vo
                     <Text className="text-lg font-semibold">{item.username}</Text>
                     <View className="flex-row gap-2">
                         <TouchableOpacity onPress={() => {
-                            router.push("/agent")
+                            router.push(`/agent/${item.id}`)
                         }} className="px-3 py-1 bg-gray-100 rounded-md">
                             <Text>Agent</Text>
                         </TouchableOpacity>
@@ -332,17 +336,11 @@ export default function DealerManagement() {
         queryFn: () => api.get("/administrator/dealer/").then((res) => res.data),
         retry: false, // Do not retry on error, only call once
     });
-
-    console.log("errorss", error);
-
-
     const { createDealer, editDealer, deleteDealer } = useDealer();
 
     const filteredDealers = dealers.filter(d => d.username.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const handleCreate = (data: any) => {
-        console.log("on create");
-
         createDealer(data, {
             onSuccess: (newDealer) => {
                 queryClient.setQueryData<any[]>(["dealers"], (old) => [newDealer, ...(old || [])]);

@@ -4,13 +4,11 @@ import api from "@/utils/axios";
 import { getToday, getTommorow } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
-    Switch,
     Text,
-    TextInput,
     TouchableOpacity,
     View
 } from "react-native";
@@ -55,7 +53,7 @@ const WinnersReportScreen = () => {
     const [toDate, setToDate] = useState<Date>(getTommorow());
     const [showFromPicker, setShowFromPicker] = useState(false);
     const [showToPicker, setShowToPicker] = useState(false);
-    const [fullView, setFullView] = useState(false);
+    // const [fullView, setFullView] = useState(false);
     const [selectedAgent, setSelectedAgent] = useState("");
     const [selectedDealer, setSelectedDealer] = useState("");
 
@@ -93,7 +91,7 @@ const WinnersReportScreen = () => {
         const params: Record<string, string> = {};
         if (fromDate) params["date_time__gte"] = fromDate.toISOString();
         if (toDate) params["date_time__lte"] = toDate.toISOString();
-        if (fullView) params["full_view"] = "true";
+        // if (fullView) params["full_view"] = "true";
         if (user?.user_type === "DEALER" && selectedAgent)
             params["booked_agent__id"] = selectedAgent;
         if (user?.user_type === "ADMIN" && selectedDealer)
@@ -105,20 +103,46 @@ const WinnersReportScreen = () => {
             .join("&");
     };
 
-    const { data = [], isLoading, error } = useQuery<WinnerReport[]>({
+    const { data = [], isLoading, error, refetch } = useQuery<WinnerReport[]>({
         queryKey: ["/draw-result/winners/", buildQuery()],
         queryFn: async () => {
             const res = await api.get(`/draw-result/winners/?${buildQuery()}`);
-            return res.data;
+            return res?.data || [];
         },
         enabled: !!selectedDraw?.id,
     });
 
-    console.log("winners", data);
+    // Filter by search (bill number)
+    const filteredData = useMemo(() => {
+        if (!search) return data;
+        return data.filter(item =>
+            item.bill_number?.toString().includes(search)
+        );
+    }, [data, search]);
 
+    // Calculate totals
+    const totals = useMemo(() => {
+        let totalPrize = 0;
+        let totalCount = 0;
+        let totalAmount = 0;
+        filteredData.forEach(item => {
+            const count = Number(item.count) || 0;
+            const prize = Number(item.prize) || 0;
+            totalPrize += prize;
+            totalCount += count;
+            // If you have a separate amount field, use it. Otherwise, use prize as amount.
+            totalAmount += prize;
+        });
+        return {
+            totalPrize,
+            totalCount,
+            totalAmount,
+            totalBills: filteredData.length,
+        };
+    }, [filteredData]);
 
     // Determine if we should show the total footer
-    const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && data;
+    const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && filteredData.length > 0;
 
     // Helper to safely get username from dealer/agent (string or object)
     const getUsername = (userField: any) => {
@@ -132,15 +156,15 @@ const WinnersReportScreen = () => {
         <SafeAreaView className="flex-1 bg-white">
             <View className="flex-1 p-4">
                 {/* Filters */}
-                <View className="gap-3">
-                    <TextInput
+                <View className="gap-3 mb-3">
+                    {/* <TextInput
                         placeholder="Search by Bill No."
                         value={search}
                         keyboardType="numeric"
                         onChangeText={setSearch}
                         className="border border-gray-300 rounded-lg px-4 py-3 text-base focus:border-violet-500"
                         placeholderTextColor="#9ca3af"
-                    />
+                    /> */}
 
                     <View className="flex-row gap-3">
                         <TouchableOpacity
@@ -243,7 +267,7 @@ const WinnersReportScreen = () => {
                         />
                     )}
 
-                    <View className="flex-row items-center justify-between px-1 pt-1">
+                    {/* <View className="flex-row items-center justify-between px-1 pt-1">
                         <Text className="text-sm text-gray-700">Full View</Text>
                         <Switch
                             value={fullView}
@@ -252,7 +276,7 @@ const WinnersReportScreen = () => {
                             thumbColor={fullView ? "#7c3aed" : "#f4f3f4"}
                             ios_backgroundColor="#e5e7eb"
                         />
-                    </View>
+                    </View> */}
                 </View>
 
                 {/* --- Main Content Area --- */}
@@ -264,131 +288,143 @@ const WinnersReportScreen = () => {
                     </View>
                 ) : isLoading ? (
                     <View className="flex-1 justify-center items-center">
-                        <ActivityIndicator size="large" color="#7c3aed" />
-                        <Text className="mt-3 text-gray-600">Loading Winners data...</Text>
-                    </View>
-                ) : error ? (
-                    <View className="flex-1 bg-red-50 border border-red-200 px-4 py-3 rounded-lg justify-center items-center">
-                        <Text className="text-red-700 font-medium">
-                            Error loading report.
-                        </Text>
-                    </View>
-                ) : (
-                    <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden">
-                        <FlatList
-                            data={data || []}
-                            keyExtractor={(item, index) => item?.bill_number?.toString() || index?.toString()}
-                            ListHeaderComponent={() => (
-                                <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
-                                    <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">Date</Text>
-                                    <Text className="flex-[1.2] text-xs font-semibold text-center text-gray-600 uppercase">Game</Text>
-                                    <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Number</Text>
-                                    <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Dealer</Text>
-                                    <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">Prize</Text>
-                                    <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">Amount</Text>
-                                </View>
-                            )}
-                            renderItem={({ item, index }) => (
-                                <View
-                                    className={[
-                                        "px-4 py-2 border-b border-gray-100",
-                                        index % 2 === 0 ? "bg-white" : "bg-gray-50"
-                                    ].join(" ")}
-                                    style={{
-                                        marginBottom: 6,
-                                        borderRadius: 10,
-                                        marginHorizontal: 6,
-                                        shadowColor: "#000",
-                                        shadowOpacity: 0.03,
-                                        shadowRadius: 2,
-                                        elevation: 1,
-                                    }}
-                                >
-                                    {/* Top Row: Date, Game, Dealer */}
-                                    <View className="flex-row items-center mb-1">
-                                        <View className="flex-[1.1]">
-                                            <Text className="text-xs text-gray-700 font-semibold">
-                                                {item.booking_datetime ? formatDateToDDMMYYYY(item.booking_datetime) : ""}
-                                            </Text>
-                                            <Text className="text-[10px] text-gray-400">
-                                                Bill #{item.bill_number}
-                                            </Text>
-                                        </View>
-                                        <Text className="flex-[1.2] text-xs text-center text-violet-700 font-semibold">
-                                            {item.draw}
-                                        </Text>
-                                        <View className="flex-1 items-center">
-                                            <Text className="text-xs text-center text-gray-700 font-semibold">
-                                                {getUsername(item.dealer)}
-                                            </Text>
-                                            {item.agent && (
-                                                <Text className="text-[10px] text-center text-gray-400">
-                                                    Agent: {getUsername(item.agent)}
-                                                </Text>
-                                            )}
-                                        </View>
-                                    </View>
-                                    <View className="h-[1px] bg-gray-200 my-1" />
-                                    {/* Bottom Row: Number, LSK, Count, Prize, Amount */}
-                                    <View className="flex-row items-center">
-                                        <View className="flex-1 items-center">
-                                            <Text className="text-base text-center text-emerald-700 font-bold tracking-widest">
-                                                {item.win_number}
-                                            </Text>
-                                            <Text className="text-xs text-center text-gray-500">
-                                                {item.lsk}
-                                            </Text>
-                                            <Text className="text-[11px] text-center text-gray-400">
-                                                Count: <Text className="font-semibold">{item.count}</Text>
-                                            </Text>
-                                        </View>
-                                        <View className="flex-1 items-end">
-                                            <Text className="text-sm text-right text-violet-700 font-bold">
-                                                ₹{item.prize.toLocaleString()}
-                                            </Text>
-                                            <Text className="text-xs text-right text-emerald-700 font-semibold">
-                                                Amount: ₹{item.prize.toLocaleString()}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                </View>
-                            )}
-                            ListEmptyComponent={
-                                <View className="flex-1 justify-center items-center py-16">
-                                    <Text className="text-gray-500 text-base">
-                                        No Winner's data available.
-                                    </Text>
-                                </View>
-                            }
-                        />
-                    </View>
-                )}
-
-                {/* --- Total Footer (always at the bottom if applicable) --- */}
-                {shouldShowTotalFooter && (
-                    <View className="border-t border-gray-200 py-3 bg-gray-100 px-4 mt-4 rounded-lg">
-                        <View className="flex-row">
-                            <Text className="flex-1 font-bold text-sm text-gray-800">TOTAL</Text>
-                            <Text className="flex-1 text-sm"> </Text>
-                            <Text className="flex-1 text-sm"> </Text>
-                            <Text className="flex-1 text-sm text-center font-semibold text-gray-700">
-                                {/* These fields are not available on WinnerReport[]; adjust as needed */}
-                                {/* {data?.total_bill_count || 0} */}
-                                0
-                            </Text>
-                            <Text className="flex-1 text-sm text-right font-semibold text-violet-700">
-                                {/* {data?.total_dealer_amount || 0} */}
-                                0
-                            </Text>
-                            <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">
-                                {/* {data?.total_customer_amount || 0} */}
-                                0
-                            </Text>
+                        <View className="bg-white rounded-xl px-6 py-8 shadow-md border border-gray-200 items-center">
+                            <ActivityIndicator size="large" color="#7c3aed" />
+                            <Text className="mt-4 text-lg font-semibold text-violet-700">Loading Winners Data...</Text>
+                            <Text className="mt-1 text-gray-500 text-base">Please wait while we fetch the latest results.</Text>
                         </View>
                     </View>
+                ) : error ? (
+                    <View className="flex-1 justify-center items-center">
+                        <View className="bg-red-50 border border-red-200 px-6 py-8 rounded-xl items-center shadow">
+                            <Text className="text-2xl mb-2">😢</Text>
+                            <Text className="text-red-700 font-bold text-lg mb-1">
+                                Error loading report
+                            </Text>
+                            <Text className="text-red-600 text-base mb-3">
+                                There was a problem fetching the winners data.
+                            </Text>
+                            <TouchableOpacity
+                                onPress={() => refetch()}
+                                className="bg-violet-600 px-4 py-2 rounded-lg"
+                            >
+                                <Text className="text-white font-semibold">Retry</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                ) : (
+                    <>
+                        <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden">
+                            <FlatList
+                                data={filteredData || []}
+                                keyExtractor={(item, index) => index?.toString()}
+                                ListHeaderComponent={() => (
+                                    <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
+                                        <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">Date</Text>
+                                        <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Number</Text>
+                                        <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Dealer</Text>
+                                        <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Prize</Text>
+                                        <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">Amount</Text>
+                                    </View>
+                                )}
+                                renderItem={({ item, index }) => (
+                                    <View
+                                        className={[
+                                            "px-2 py-2 border-b border-gray-100",
+                                            index % 2 === 0 ? "bg-white" : "bg-gray-50"
+                                        ].join(" ")}
+                                      
+                                    >
+                                        <View className="flex-row items-center">
+                                            {/* Date */}
+                                            <View className="flex-[1.1]">
+                                                <Text className="text-xs text-gray-700 font-semibold">
+                                                    {item.booking_datetime && (
+                                                        <>
+                                                            {formatDateToDDMMYYYY(item.booking_datetime)}
+                                                            {" "}
+                                                            <Text className="text-[10px] text-gray-500">
+                                                                {new Date(item.booking_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            </Text>
+                                                        </>
+                                                    )}
+                                                </Text>
+                                            </View>
+                                            {/* Number */}
+                                            <View className="flex-1 items-center">
+                                                <Text className="text-base text-center text-emerald-700 font-bold tracking-widest">
+                                                    {item.win_number}
+                                                </Text>
+                                                <Text className="text-xs text-center text-gray-500">
+                                                    {item.lsk}
+                                                </Text>
+                                                <Text className="text-[11px] text-center text-gray-400">
+                                                    Count: <Text className="font-semibold">{item.count}</Text>
+                                                </Text>
+                                            </View>
+                                            {/* Dealer */}
+                                            <View className="flex-1 items-center">
+                                                <Text className="text-xs text-center text-gray-700 font-semibold">
+                                                    {getUsername(item.dealer)}
+                                                </Text>
+                                                {item.agent && (
+                                                    <Text className="text-[10px] text-center text-gray-400">
+                                                        Agent: {getUsername(item.agent)}
+                                                    </Text>
+                                                )}
+                                            </View>
+                                            {/* Prize */}
+                                            <View className="flex-1 items-end">
+                                                <Text className="text-sm text-center w-full text-violet-700 font-bold">
+                                                    ₹{Number(item.prize).toLocaleString()}
+                                                </Text>
+                                            </View>
+                                            {/* Amount */}
+                                            <View className="flex-1 items-end">
+                                                <Text className="text-sm text-center w-full text-emerald-700 font-semibold">
+                                                    ₹{Number(item.prize).toLocaleString()}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                )}
+                                ListEmptyComponent={
+                                    <View className="flex-1 justify-center items-center py-16">
+                                        <Text className="text-gray-500 text-base">
+                                            No Winner's data available.
+                                        </Text>
+                                    </View>
+                                }
+                            />
+                        </View>
+
+                        {shouldShowTotalFooter && (
+                            <View className="border-t border-gray-200 py-3 bg-gray-100 px-4 mt-4 rounded-lg">
+                                <View className="flex-row">
+                                    <Text className="flex-1 font-bold text-sm text-gray-800">TOTAL</Text>
+                                    {/* <Text className="flex-1 text-sm text-center font-semibold text-gray-700">
+                                        {totals.totalBills}
+                                    </Text>
+                                    <Text className="flex-1 text-sm text-center font-semibold text-gray-700">
+                                        {totals.totalCount}
+                                    </Text> */}
+                                    <Text className="flex-1 text-sm text-center font-semibold text-gray-700">
+                                        {/* (Unused column, could be left blank or used for something else) */}
+                                    </Text>
+                                    <Text className="flex-1 text-sm text-right font-semibold text-violet-700">
+                                        {/* Total Prize */}
+                                        ₹{totals.totalPrize.toLocaleString()}
+                                    </Text>
+                                    <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">
+                                        {/* Total Amount */}
+                                        ₹{totals.totalAmount.toLocaleString()}
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
+                    </>
                 )}
 
-                {/* --- Date Pickers --- */}
                 {showFromPicker && (
                     <DateTimePicker
                         mode="date"
