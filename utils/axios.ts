@@ -34,21 +34,16 @@ api.interceptors.response.use(
       const { status, data } = error.response;
       console.log("❌ Axios Error:", status, data);
 
-      if (status === 401) {
-        console.log("navigating", status);
-
-        router.push("/login")
+      if (status === 503) {
+        router.push("/")
         return
       }
 
-      // Example: extracting common message formats
-      // if (data?.message) {
-      //   console.error("Backend Message:", data.message);
-      // } else if (data?.detail) {
-      //   console.error("Backend Detail:", data.detail);
-      // } else {
-      //   console.error("Unknown backend error format", data);
-      // }
+
+      if (status === 401) {
+        router.push("/login")
+        return
+      }
       return Promise.reject({ status: status || 500, message: data || "something went wrong" });
 
     } else {

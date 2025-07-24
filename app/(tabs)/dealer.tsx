@@ -33,6 +33,18 @@ type Dealer = {
     cap_amount: number;
 };
 
+// Eye icon SVG (simple inline, no extra dependency)
+const EyeIcon = ({ visible }: { visible: boolean }) => (
+    <View style={{ width: 24, height: 24, justifyContent: "center", alignItems: "center" }}>
+        {visible ? (
+            // Open eye
+            <Text style={{ fontSize: 20 }}>👁️</Text>
+        ) : (
+            // Closed eye (using emoji for simplicity)
+            <Text style={{ fontSize: 20 }}>🙈</Text>
+        )}
+    </View>
+);
 
 const DealerForm = ({
     onSubmit,
@@ -57,6 +69,7 @@ const DealerForm = ({
 
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [focusedField, setFocusedField] = useState<string | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
 
     const validate = () => {
         const newErrors: Record<string, string> = {};
@@ -163,6 +176,72 @@ const DealerForm = ({
                         const hasError = !!errors[key];
                         const hasValue = !!form[key as keyof typeof form]; // Check if the field has any value
 
+                        // Only for password field: show/hide logic and eye icon
+                        if (key === "password") {
+                            return (
+                                <View key={key} className="mb-6">
+                                    <Text className="text-gray-700 font-semibold mb-2 ml-1">
+                                        <Text>{icon} </Text>
+                                        <Text>{label}</Text>
+                                        {!optional && <Text className="text-red-500"> *</Text>}
+                                    </Text>
+                                    <View className={`relative ${hasError ? 'mb-1' : ''}`}>
+                                        <TextInput
+                                            placeholder={optional ? `${label} (optional)` : `Enter ${label.toLowerCase()}`}
+                                            className={`
+                      border-2 rounded-xl px-4 py-4 bg-white text-gray-800 font-medium
+                      ${hasError
+                                                    ? 'border-red-300 bg-red-50'
+                                                    : isFocused
+                                                        ? 'border-blue-400 bg-blue-50'
+                                                        : hasValue // Apply green if it has a value and no error
+                                                            ? 'border-green-300 bg-green-50'
+                                                            : 'border-gray-200'
+                                                }
+                      shadow-sm
+                    `}
+                                            value={
+                                                typeof form[key as keyof typeof form] === "boolean"
+                                                    ? form[key as keyof typeof form]
+                                                        ? "true"
+                                                        : "false"
+                                                    : (form[key as keyof typeof form] as string)
+                                            }
+                                            onChangeText={(text) => handleChange(key, text)}
+                                            onFocus={() => setFocusedField(key)}
+                                            onBlur={() => setFocusedField(null)}
+                                            keyboardType={keyboardType}
+                                            secureTextEntry={!showPassword}
+                                            autoCapitalize="none"
+                                            placeholderTextColor="#9CA3AF"
+                                        />
+                                        {/* Eye icon button */}
+                                        <TouchableOpacity
+                                            onPress={() => setShowPassword((v) => !v)}
+                                            style={{
+                                                position: "absolute",
+                                                right: 12,
+                                                top: "50%",
+                                                marginTop: -12,
+                                                padding: 4,
+                                                zIndex: 10,
+                                            }}
+                                            accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                        >
+                                            <EyeIcon visible={showPassword} />
+                                        </TouchableOpacity>
+                                    </View>
+                                    {hasError && (
+                                        <Text className="text-red-500 text-sm mt-1 ml-1 font-medium">
+                                            {errors[key]}
+                                        </Text>
+                                    )}
+                                </View>
+                            );
+                        }
+
+                        // All other fields
                         return (
                             <View key={key} className="mb-6">
                                 <Text className="text-gray-700 font-semibold mb-2 ml-1">

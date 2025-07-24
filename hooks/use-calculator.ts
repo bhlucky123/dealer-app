@@ -28,13 +28,20 @@ export const useCalculator = () => {
 
   console.log("equationData", equationData);
 
+
   const handleNumberInput = useCallback(
     (digit: string) => {
       if (equation) {
         // Now user is entering PIN
-        const updatedPin = pinInput + digit;
-        setPinInput(updatedPin);
+        // If display is not empty, clear it and pinInput for fresh PIN entry
+        if (display !== "" || pinInput === "") {
+          setDisplay("");
+          setPinInput(digit);
+        } else {
+          setPinInput((prev) => prev + digit);
+        }
         const correctPin = equationData?.[equation];
+        const updatedPin = (display !== "" || pinInput === "") ? digit : pinInput + digit;
         if (correctPin && Number(updatedPin) === Number(correctPin)) {
           router.navigate("/login");
         }
@@ -109,12 +116,13 @@ export const useCalculator = () => {
     const inputValue = parseFloat(display);
     const result = performCalculation(operator, firstOperand, inputValue);
 
-    const equation = `${firstOperand}${operator}${secondOperand ?? display}`;
-    console.log("Equation:", equation); // ✅ You’ll see "2+5"
-    if (equationData && !!equationData[equation]) {
-      setDisplay("");
+    const equationStr = `${firstOperand}${operator}${secondOperand ?? display}`;
+    console.log("Equation:", equationStr); // ✅ You’ll see "2+5"
+    if (equationData && !!equationData[equationStr]) {
+      setDisplay(""); // Clear display for PIN entry
       setFirstOperand(null);
-      setEquation(equation);
+      setEquation(equationStr);
+      setPinInput(""); // Also clear any previous pin input
     } else {
       setDisplay(String(result));
       setFirstOperand(result);
@@ -123,7 +131,7 @@ export const useCalculator = () => {
     setOperator(null);
     setWaitingForSecondOperand(true);
     setSecondOperand(null);
-  }, [display, firstOperand, operator, secondOperand]);
+  }, [display, firstOperand, operator, secondOperand, equationData]);
 
   const handleClear = useCallback(() => {
     setDisplay("0");
@@ -136,12 +144,20 @@ export const useCalculator = () => {
   }, []);
 
   const handleDelete = useCallback(() => {
+    if (equation) {
+      // If in PIN entry mode, delete from pinInput
+      if (pinInput.length > 0) {
+        setPinInput(pinInput.slice(0, -1));
+      }
+      // Optionally, you could clear display as well, but not necessary
+      return;
+    }
     if (display.length > 1) {
       setDisplay(display.slice(0, -1));
     } else {
       setDisplay("0");
     }
-  }, [display]);
+  }, [display, equation, pinInput]);
 
   return {
     display,

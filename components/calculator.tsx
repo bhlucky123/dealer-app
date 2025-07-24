@@ -1,5 +1,4 @@
 import { useCalculator } from "@/hooks/use-calculator";
-import { router } from "expo-router";
 import React from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 
@@ -25,7 +24,7 @@ const Calculator = () => {
       <View className="flex-row mb-4">
         <TouchableOpacity
           className="flex-1 bg-gray-700 rounded-full p-6 items-center justify-center mr-2"
-          onPress={()=> router.push("/(tabs)")}
+          onPress={handleClear}
         >
           <Text className="text-white text-2xl font-bold">C</Text>
         </TouchableOpacity>

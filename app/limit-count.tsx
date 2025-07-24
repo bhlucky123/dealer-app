@@ -10,6 +10,7 @@ import {
     Platform,
     Text,
     TextInput,
+    ToastAndroid,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -151,7 +152,7 @@ const LimitCountScreen = () => {
             setNewNumber("");
             setNewCount("");
             setIsSubmitting(false);
-            Alert.alert("Success", "Limit count added successfully.");
+            ToastAndroid.show("Limit count added successfully.", ToastAndroid.SHORT);
         },
         onError: (err: any) => {
             setIsSubmitting(false);
@@ -172,7 +173,7 @@ const LimitCountScreen = () => {
             queryClient.invalidateQueries({
                 queryKey: ["/draw/limit-number-count/", selectedDraw?.id],
             });
-            Alert.alert("Success", "Limit count updated.");
+            ToastAndroid.show("Limit count updated.", ToastAndroid.SHORT);
         },
         onError: (err: any) => {
             Alert.alert(
@@ -190,7 +191,7 @@ const LimitCountScreen = () => {
             queryClient.invalidateQueries({
                 queryKey: ["/draw/limit-number-count/", selectedDraw?.id],
             });
-            Alert.alert("Deleted", "Limit count deleted.");
+            ToastAndroid.show("Limit count deleted.",ToastAndroid.SHORT);
         },
         onError: (err: any) => {
             Alert.alert(

@@ -14,6 +14,7 @@ import {
     ScrollView,
     Text,
     TextInput,
+    ToastAndroid,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -81,8 +82,6 @@ export default function PaymentTab() {
         enabled: user?.user_type === "ADMIN",
     });
 
-    console.log("dealersData", dealersData);
-
 
 
     // Fetch agents with pending balance (for DEALER)
@@ -118,7 +117,7 @@ export default function PaymentTab() {
         onSuccess: () => {
             refetchDealers();
             setModalVisible(false);
-            Alert.alert("Success", "Dealer balance updated successfully");
+            ToastAndroid.show("Dealer balance updated successfully", ToastAndroid.SHORT);
         },
         onError: (error: any) => {
             let msg = "Failed to update dealer balance";
@@ -150,7 +149,7 @@ export default function PaymentTab() {
         onSuccess: () => {
             refetchAgents();
             setModalVisible(false);
-            Alert.alert("Success", "Agent balance updated successfully");
+            ToastAndroid.show("Agent balance updated successfully", ToastAndroid.SHORT);
         },
         onError: (error: any) => {
             let msg = "Failed to update agent balance";
@@ -194,8 +193,6 @@ export default function PaymentTab() {
             return;
         }
 
-        console.log("modalItem", modalItem);
-
         if (user?.user_type === "ADMIN") {
             dealerToAdminPaymentMutation.mutate({ dealerId: modalItem.id, amount, date_received });
         } else if (user?.user_type === "DEALER") {
@@ -222,27 +219,27 @@ export default function PaymentTab() {
             <Text style={{ color: "#334155", marginTop: 4 }}>
                 Balance: <Text style={{ fontWeight: "bold" }}>₹ {item.balance_amount.toLocaleString()}</Text>
             </Text>
-            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
-                <TouchableOpacity
-                    onPress={() => {
-                        console.log("item", item);
-
-                        openUpdateModal(item)
-                    }}
-                    style={{
-                        backgroundColor: "#2563eb",
-                        paddingVertical: 8,
-                        paddingHorizontal: 16,
-                        borderRadius: 8,
-                        flex: 1,
-                        alignItems: "center",
-                    }}
-                >
-                    <Text style={{ color: "#fff", fontWeight: "bold" }}>
-                        Update Balance
-                    </Text>
-                </TouchableOpacity>
-            </View>
+            {
+                item?.balance_amount > 0 && (<View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
+                    <TouchableOpacity
+                        onPress={() => {
+                            openUpdateModal(item)
+                        }}
+                        style={{
+                            backgroundColor: "#2563eb",
+                            paddingVertical: 8,
+                            paddingHorizontal: 16,
+                            borderRadius: 8,
+                            flex: 1,
+                            alignItems: "center",
+                        }}
+                    >
+                        <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                            Update Balance
+                        </Text>
+                    </TouchableOpacity>
+                </View>)
+            }
         </View>
     );
 

@@ -115,8 +115,6 @@ const ResultPage: React.FC = () => {
 
     // ------------------- helpers -------------------
     const handleFormSubmit = async (resultData: any) => {
-        console.log("on submit");
-
         setFormError(null);
         // Validate all fields
         const validationError = validateDrawResultFields(resultData);
@@ -126,13 +124,8 @@ const ResultPage: React.FC = () => {
             return;
         }
 
-        console.log("after validation");
-
-
         try {
             if (data && data.id) {
-                console.log("on update ddd");
-
                 // Update
                 await updateDrawResult.mutateAsync({
                     id: selectedDraw?.id,
@@ -149,8 +142,6 @@ const ResultPage: React.FC = () => {
             setFormData(null);
             refetch();
         } catch (err: any) {
-            console.log("err", err);
-
             // Handle specific error: ["No draw session found for today."]
             if (Array.isArray(err) && err.length === 1 && err[0] === "No draw session found for today.") {
                 setFormError("No draw session found for the selected date. Please check the draw schedule.");
@@ -218,17 +209,11 @@ const ResultPage: React.FC = () => {
         }
     }
 
-    console.log("data", data);
-
-
     // Only allow add if no result, and only allow edit if result is updated within 1 hour
     const canAdd = user?.user_type === "ADMIN" && !data;
     const canEditIcon = user?.user_type === "ADMIN" && data && canEditResult(data.published_at);
 
-    console.log("canEditIcon", canEditIcon, "data.published_at", data?.published_at);
-
-
-    return ( 
+    return (
         <ScrollView className="flex-1">
             {/* Date filter */}
             <View className="px-4 pt-4 flex-row items-end justify-between">
@@ -304,14 +289,22 @@ const ResultPage: React.FC = () => {
                 </View>
             )}
 
-            {/* Error handling for unpublished or failed result */}
-            {!isLoading && error && (
+            {/* Show "No result published" if not loading and no data */}
+            {!isLoading && !data && (
                 <View className="flex-1 items-center justify-center bg-gray-50 py-8">
                     <AlertTriangle size={40} color="#f59e42" />
-                    <Text className={`mt-2 text-base font-semibold ${isNoResultYet ? "text-yellow-700" : "text-red-600"}`}>
-                        {isNoResultYet
-                            ? "Result not published yet for this draw"
-                            : "Failed to load result"}
+                    <Text className="mt-2 text-base font-semibold text-yellow-700">
+                        No result published yet for this draw
+                    </Text>
+                </View>
+            )}
+
+            {/* Error handling for other errors */}
+            {!isLoading && error && data && (
+                <View className="flex-1 items-center justify-center bg-gray-50 py-8">
+                    <AlertTriangle size={40} color="#f59e42" />
+                    <Text className="mt-2 text-base font-semibold text-red-600">
+                        Failed to load result
                     </Text>
                 </View>
             )}

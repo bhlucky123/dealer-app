@@ -1,14 +1,16 @@
 
-import { useGlobalSearchParams, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import AgentTab from "../(tabs)/agent";
 
 export default function AgentIdScreen() {
-    const glob = useGlobalSearchParams();
     const local = useLocalSearchParams();
-  
-    console.log("Local:", local, "Global:", glob);
+
+  // Ensure agentId is always a string
+  const agentId = Array.isArray(local?.agentId)
+    ? local.agentId[0] || ""
+    : local?.agentId || "";
 
   return (
-      <AgentTab id={local.agentId} />
+      <AgentTab id={agentId} />
   );
 }

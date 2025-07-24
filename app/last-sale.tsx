@@ -52,7 +52,6 @@ const LastSaleReportScreen = () => {
         // if (user?.user_type === "AGENT") params["booked_agent__id"] = user.id?.toString();
         if (selectedDraw?.id) params["draw_session__draw__id"] = String(selectedDraw.id);
 
-        console.log("params", params);
 
         // Convert params object to query string
         return Object.keys(params)
@@ -69,7 +68,6 @@ const LastSaleReportScreen = () => {
         enabled: !!selectedDraw?.id,
     });
 
-    console.log("sales-report", data, "selectedDraw.id", selectedDraw?.id);
 
 
     // Determine if we should show the total footer

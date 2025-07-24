@@ -325,22 +325,22 @@ const DrawForm = ({ initialData, onClose }: { initialData?: any; onClose: () => 
   const [form, setForm] = useState(
     initialData
       ? {
-          ...initialData,
-          valid_from: new Date(initialData.valid_from),
-          valid_till: new Date(initialData.valid_till),
-          cut_off_time: new Date(`1970-01-01T${initialData.cut_off_time}`),
-          draw_time: new Date(`1970-01-01T${initialData.draw_time}`),
-        }
+        ...initialData,
+        valid_from: new Date(initialData.valid_from),
+        valid_till: new Date(initialData.valid_till),
+        cut_off_time: new Date(`1970-01-01T${initialData.cut_off_time}`),
+        draw_time: new Date(`1970-01-01T${initialData.draw_time}`),
+      }
       : {
-          name: "",
-          valid_from: new Date(),
-          valid_till: new Date(),
-          cut_off_time: new Date(),
-          draw_time: new Date(),
-          color_theme: "#8B5CF6",
-          non_single_digit_price: "",
-          single_digit_number_price: "",
-        }
+        name: "",
+        valid_from: new Date(),
+        valid_till: new Date(),
+        cut_off_time: new Date(),
+        draw_time: new Date(),
+        color_theme: "#8B5CF6",
+        non_single_digit_price: "",
+        single_digit_number_price: "",
+      }
   );
   const [showDatePicker, setShowDatePicker] = useState<null | string>(null);
 
@@ -595,6 +595,7 @@ export default function HomeScreen() {
 
   const draws = data || [];
 
+
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
@@ -731,7 +732,7 @@ export default function HomeScreen() {
                         backgroundColor: "#ffff",
                         flexDirection: "row",
                         alignItems: "center",
-                        borderRadius:50,
+                        borderRadius: 50,
                         opacity: 10,
                         elevation: 3,
                       }}
@@ -748,33 +749,33 @@ export default function HomeScreen() {
                     {/* Format valid_from and valid_till as dd/mm/yyyy */}
                     {item.valid_from
                       ? (() => {
-                          const d = new Date(item.valid_from);
-                          const day = d.getDate().toString().padStart(2, "0");
-                          const month = (d.getMonth() + 1).toString().padStart(2, "0");
-                          const year = d.getFullYear();
-                          return `${day}/${month}/${year}`;
-                        })()
+                        const d = new Date(item.valid_from);
+                        const day = d.getDate().toString().padStart(2, "0");
+                        const month = (d.getMonth() + 1).toString().padStart(2, "0");
+                        const year = d.getFullYear();
+                        return `${day}/${month}/${year}`;
+                      })()
                       : ""}
                     {" - "}
                     {item.valid_till
                       ? (() => {
-                          const d = new Date(item.valid_till);
-                          const day = d.getDate().toString().padStart(2, "0");
-                          const month = (d.getMonth() + 1).toString().padStart(2, "0");
-                          const year = d.getFullYear();
-                          return `${day}/${month}/${year}`;
-                        })()
+                        const d = new Date(item.valid_till);
+                        const day = d.getDate().toString().padStart(2, "0");
+                        const month = (d.getMonth() + 1).toString().padStart(2, "0");
+                        const year = d.getFullYear();
+                        return `${day}/${month}/${year}`;
+                      })()
                       : ""}
                   </Text>
                   <Text style={[styles.drawTimeText, { color: textColor }]}>
                     {/* Format draw_time as hh:mm AM/PM */}
                     {item.draw_time
                       ? (() => {
-                          const [h, m, s] = item.draw_time.split(":");
-                          const date = new Date();
-                          date.setHours(Number(h), Number(m), Number(s || 0));
-                          return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-                        })()
+                        const [h, m, s] = item.draw_time.split(":");
+                        const date = new Date();
+                        date.setHours(Number(h), Number(m), Number(s || 0));
+                        return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                      })()
                       : ""}
                   </Text>
                 </View>
