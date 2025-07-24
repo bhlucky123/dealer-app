@@ -20,7 +20,7 @@ import {
   View
 } from "react-native";
 import { ALERT_TYPE, Dialog } from "react-native-alert-notification";
-import RNPickerSelect from "react-native-picker-select";
+import { Dropdown } from 'react-native-element-dropdown';
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type BookingDetail = {
@@ -181,8 +181,8 @@ const BookingScreen: React.FC = () => {
       ? (user?.single_digit_number_commission ?? 0)
       : (user?.commission ?? 0);
 
-      console.log("commission",commission);
-      
+    console.log("commission", commission);
+
 
     // Helper to create entries with custom lsk
     const createEntry = (
@@ -877,16 +877,28 @@ const BookingScreen: React.FC = () => {
               </TouchableOpacity>
             ))}
             <View className="flex-1 ml-2">
-              <RNPickerSelect
-                onValueChange={setSelectedRange}
-                items={rangeOptions}
+              <Dropdown
+                data={rangeOptions}
+                labelField="label"
+                valueField="value"
                 value={selectedRange}
+                onChange={item => setSelectedRange(item.value)}
+                placeholder="Select Type"
                 style={{
-                  viewContainer: {
-                    borderColor: "#9ca3af",
-                    borderWidth: 1,
-                    borderRadius: 6,
-                  },
+                  borderColor: "#9ca3af",
+                  borderWidth: 1,
+                  borderRadius: 6,
+                  paddingHorizontal: 8,
+                  padding: 10
+                }}
+                containerStyle={{
+                  borderRadius: 6,
+                }}
+                itemTextStyle={{
+                  color: "#000",
+                }}
+                selectedTextStyle={{
+                  color: "#000",
                 }}
               />
             </View>

@@ -1,4 +1,4 @@
-package com.anonymous.dealer
+package com.luckybh.dealer
 
 import android.app.Application
 import android.content.res.Configuration
