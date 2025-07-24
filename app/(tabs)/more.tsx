@@ -5,10 +5,13 @@ import React, { useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    KeyboardAvoidingView,
+    Platform,
     ScrollView,
     Switch,
     Text,
     TextInput,
+    ToastAndroid,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -119,7 +122,6 @@ export default function MoreTab() {
             type: "admin" | "dealer" | "agent";
             bank_details: string;
         }) => {
-            console.log("on mutation",user);
             
             if (!user?.id) throw new Error("No user id");
             const details = getBankDetailsForEdit(type);
@@ -140,8 +142,6 @@ export default function MoreTab() {
             if (type === "dealer") payload.user_type = "DEALER";
             if (type === "agent") payload.user_type = "AGENT";
 
-            console.log("url", url, "payload", payload, "method", method);
-
             if (method === "patch") {
                 return api.patch(url, payload);
             } else {
@@ -153,7 +153,7 @@ export default function MoreTab() {
             setBankDetailsInput("");
             setBankDetailsError(null);
             refetchBankDetails();
-            Alert.alert("Success", "Bank details updated");
+            ToastAndroid.show("Bank details updated", ToastAndroid.SHORT);
         },
         onError: () => {
             setBankDetailsError("Failed to update bank details");
@@ -200,6 +200,7 @@ export default function MoreTab() {
                             <ActivityIndicator color="#6b7280" size="small" />
                         ) : (
                             <>
+
                                 <Text className="text-gray-800 text-base mb-2">
                                     {details?.bank_details
                                         ? details.bank_details
@@ -223,6 +224,7 @@ export default function MoreTab() {
                                                 marginBottom: 8,
                                             }}
                                             multiline
+                                            numberOfLines={3}
                                         />
                                         {bankDetailsError && (
                                             <Text className="text-red-600 text-xs mb-2">{bankDetailsError}</Text>
@@ -390,67 +392,73 @@ export default function MoreTab() {
     }
 
     return (
-        <ScrollView
-            className="flex-1 px-4 py-8 bg-gradient-to-b from-gray-100 to-gray-200"
-            contentContainerStyle={{
-                justifyContent: "center",
-                alignItems: "center",
-                flexGrow: 1,
-            }}
-            keyboardShouldPersistTaps="handled"
+        <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
         >
-            <View
-                className="w-full max-w-sm bg-white rounded-3xl shadow-lg border border-gray-200"
-                style={{
-                    paddingVertical: 28,
-                    paddingHorizontal: 20,
+            <ScrollView
+                className="flex-1 px-4 py-8 "
+                contentContainerStyle={{
+                    justifyContent: "center",
                     alignItems: "center",
-                    elevation: 6,
+                    flexGrow: 1,
                 }}
+                keyboardShouldPersistTaps="handled"
             >
-                {/* My Balance Section for Agent/Dealer */}
-                {renderMyBalanceSection()}
+                <View
+                    className="w-full max-w-sm bg-white pb-44 rounded-3xl shadow-lg border border-gray-200"
+                    style={{
+                        paddingVertical: 28,
+                        paddingHorizontal: 20,
+                        alignItems: "center",
+                        elevation: 6,
+                    }}
+                >
+                    {/* My Balance Section for Agent/Dealer */}
+                    {renderMyBalanceSection()}
 
-                {/* Bank Details Section */}
-                {renderBankDetailsSection()}
+                    {/* Bank Details Section */}
+                    {renderBankDetailsSection()}
 
-                {/* Toggle */}
-                {user?.user_type === "ADMIN" && (
-                    <View
-                        className="flex-row items-center mt-2"
-                        style={{
-                            backgroundColor: "#f3f4f6",
-                            borderRadius: 16,
-                            paddingVertical: 10,
-                            paddingHorizontal: 18,
-                        }}
-                    >
-                        <Text
-                            className={`text-base font-semibold mr-4 ${isActive ? "text-green-600" : "text-gray-500"
-                                }`}
+                    {/* Toggle */}
+                    {user?.user_type === "ADMIN" && (
+                        <View
+                            className="flex-row items-center mt-2"
                             style={{
-                                letterSpacing: 1,
-                                minWidth: 70,
-                                textAlign: "right",
+                                backgroundColor: "#f3f4f6",
+                                borderRadius: 16,
+                                paddingVertical: 10,
+                                paddingHorizontal: 18,
                             }}
                         >
-                            {isActive ? "Active" : "Inactive"}
-                        </Text>
-                        <Switch
-                            value={isActive}
-                            onValueChange={handleToggle}
-                            disabled={activateMutation.isPending || deactivateMutation.isPending}
-                            thumbColor={isActive ? "#4ade80" : "#ffffff"}
-                            trackColor={{ false: "#d1d5db", true: "#bbf7d0" }}
-                            ios_backgroundColor="#d1d5db"
-                            style={{
-                                transform: [{ scaleX: 1.15 }, { scaleY: 1.15 }],
-                                marginLeft: 6,
-                            }}
-                        />
-                    </View>
-                )}
-            </View>
-        </ScrollView>
+                            <Text
+                                className={`text-base font-semibold mr-4 ${isActive ? "text-green-600" : "text-gray-500"
+                                    }`}
+                                style={{
+                                    letterSpacing: 1,
+                                    minWidth: 70,
+                                    textAlign: "right",
+                                }}
+                            >
+                                {isActive ? "Active" : "Inactive"}
+                            </Text>
+                            <Switch
+                                value={isActive}
+                                onValueChange={handleToggle}
+                                disabled={activateMutation.isPending || deactivateMutation.isPending}
+                                thumbColor={isActive ? "#4ade80" : "#ffffff"}
+                                trackColor={{ false: "#d1d5db", true: "#bbf7d0" }}
+                                ios_backgroundColor="#d1d5db"
+                                style={{
+                                    transform: [{ scaleX: 1.15 }, { scaleY: 1.15 }],
+                                    marginLeft: 6,
+                                }}
+                            />
+                        </View>
+                    )}
+                </View>
+            </ScrollView>
+        </KeyboardAvoidingView>
     );
 }

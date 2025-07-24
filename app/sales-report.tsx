@@ -68,10 +68,7 @@ const SalesReportScreen = () => {
         initialData: user?.user_type === "ADMIN" ? cachedDealers : undefined,
     });
 
-    // Remove search from backend query
     const buildQuery = () => {
-        // console.log("fromDate", fromDate?.toISOString());
-        // console.log("toDate", toDate?.toISOString());
 
         const params: Record<string, string> = {};
         // if (search) params["search"] = search; // Remove search from backend
@@ -255,7 +252,6 @@ const SalesReportScreen = () => {
 
             await shareAsync(file.uri, { dialogTitle: 'Share Sales Report' });
         } catch (err) {
-            console.error("Failed to generate PDF:", err);
             alert("An error occurred while creating the PDF.");
         }
     };

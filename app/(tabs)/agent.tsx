@@ -3,7 +3,7 @@ import { useAuthStore } from "@/store/auth";
 import api from "@/utils/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { ArrowLeft, MoveLeft } from "lucide-react-native";
+import { ArrowLeft, Eye, EyeOff, MoveLeft } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -90,6 +90,8 @@ const AgentForm = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [generalError, setGeneralError] = useState<string>("");
+  // Add state for password visibility
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (key: string, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -106,8 +108,37 @@ const AgentForm = ({
     if (!defaultValues?.id && !form.password.trim())
       newErrors.password = "Password is required";
 
-    if (!form.calculate_str.trim())
+    if (!form.calculate_str.trim()) {
       newErrors.calculate_str = "Calculate String is required";
+    } else {
+      // Validate that calculate_str is a valid equation (e.g., only numbers, +, -, *, /, parentheses, spaces)
+      const eq = form.calculate_str.trim();
+      // Only allow numbers, operators, parentheses, and spaces
+      if (!/^[\d+\-*/().\s]+$/.test(eq)) {
+        newErrors.calculate_str = "Calculate String must be a valid equation (numbers and + - * / only)";
+      } else {
+        // Try to evaluate the equation safely
+        try {
+          // eslint-disable-next-line no-new-func
+          // Only evaluate if it doesn't contain double operators or invalid patterns
+          // (basic check, not bulletproof)
+          // Disallow consecutive operators (except for minus for negative numbers)
+          if (/[\+\-\*\/]{2,}/.test(eq.replace(/--/g, ""))) {
+            throw new Error();
+          }
+          // eslint-disable-next-line no-new-func
+          // Evaluate using Function constructor (safer than eval, but still not 100% safe)
+          // Only for validation, not for actual calculation
+          // @ts-ignore
+          const result = Function(`"use strict";return (${eq})`)();
+          if (typeof result !== "number" || isNaN(result)) {
+            throw new Error();
+          }
+        } catch {
+          newErrors.calculate_str = "Calculate String must be a valid equation";
+        }
+      }
+    }
     if (
       !form?.secret_pin)
       newErrors.secret_pin = "Secret PIN is required";
@@ -205,6 +236,81 @@ const AgentForm = ({
             const hasError = !!errors[key];
             const hasValue = !!form[key as keyof typeof form];
 
+            // Password field: add view/hide toggle
+            if (key === "password") {
+              return (
+                <View key={key} className="mb-6">
+                  <Text className="text-gray-700 font-semibold mb-2 ml-1">
+                    <Text>{icon} </Text>
+                    <Text>{label}</Text>
+                    {!optional && <Text className="text-red-500"> *</Text>}
+                  </Text>
+                  <View className={`relative ${hasError ? 'mb-1' : ''}`}>
+                    <TextInput
+                      placeholder={optional ? `${label} (optional)` : `Enter ${label.toLowerCase()}`}
+                      className={`
+                        border-2 rounded-xl px-4 py-4 bg-white text-gray-800 font-medium
+                        ${hasError
+                          ? 'border-red-300 bg-red-50'
+                          : isFocused
+                            ? 'border-blue-400 bg-blue-50'
+                            : hasValue
+                              ? 'border-green-300 bg-green-50'
+                              : 'border-gray-200'
+                        }
+                        shadow-sm
+                      `}
+                      value={typeof form[key as keyof typeof form] === "boolean"
+                        ? form[key as keyof typeof form]
+                          ? "true"
+                          : "false"
+                        : (form[key as keyof typeof form] as string | undefined)
+                      }
+                      onChangeText={(text) => handleChange(key, text)}
+                      onFocus={() => setFocusedField(key)}
+                      onBlur={() => setFocusedField(null)}
+                      keyboardType={keyboardType}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      placeholderTextColor="#9CA3AF"
+                    />
+                    {/* Password view/hide toggle */}
+                    <TouchableOpacity
+                      onPress={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 bg-gray-100 rounded-full border border-gray-200"
+                      style={{
+                        zIndex: 10,
+                        // The className above handles most styling, but fallback for platforms:
+                        ...(Platform.OS === "web"
+                          ? { boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }
+                          : {}),
+                      }}
+                      // hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      activeOpacity={0.7}
+                    >
+                      {showPassword ? (
+                        <Eye color="#6b7280" size={20} />
+                      ) : (
+                        <EyeOff color="#6b7280" size={20} />
+                      )}
+                    </TouchableOpacity>
+                    {/* Success indicator */}
+                    {hasValue && !hasError && !isFocused && (
+                      <View className="absolute right-10 top-1/2 -mt-2">
+                        <Text className="text-green-500 text-lg">✓</Text>
+                      </View>
+                    )}
+                  </View>
+                  {hasError && (
+                    <Text className="text-red-500 text-sm mt-1 ml-1 font-medium">
+                      {errors[key]}
+                    </Text>
+                  )}
+                </View>
+              );
+            }
+
+            // All other fields
             return (
               <View key={key} className="mb-6">
                 <Text className="text-gray-700 font-semibold mb-2 ml-1">
@@ -261,7 +367,6 @@ const AgentForm = ({
               </View>
             );
           })}
-
           {/* Status Toggle */}
           <View className="mb-8">
             <Text className="text-gray-700 font-semibold mb-3 ml-1">

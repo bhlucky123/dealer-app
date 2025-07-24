@@ -99,6 +99,7 @@ const BookingScreen: React.FC = () => {
     "3": ["SUPER", "BOX", "BOTH"],
   };
 
+
   const {
     data: DrawSessionDetails,
     error,
@@ -113,6 +114,7 @@ const BookingScreen: React.FC = () => {
     select: (response) => response,
     refetchOnMount: true,
   });
+
 
   const { mutate } = useMutation({
     mutationFn: async (data: any) => api.post("/draw-booking/create/", data),
@@ -162,12 +164,22 @@ const BookingScreen: React.FC = () => {
     }
   };
 
+  // Helper to check if a value is a valid number string (digits only, not empty)
+  const isValidNumberString = (val: any) => typeof val === "string" && /^[0-9]+$/.test(val);
+
+  // Helper to check if a value is a valid number (not NaN, finite, > 0)
+  const isValidPositiveNumber = (val: any) => {
+    const n = typeof val === "number" ? val : parseInt(val, 10);
+    return !isNaN(n) && isFinite(n) && n > 0;
+  };
+
   const addBooking = (
     subType: string,
     number?: string,
     count?: number,
     bCount?: number
   ) => {
+
     // If number/count/bCount are provided, use them, else use state
     const digitsRequired = parseInt(drawSession);
     const bookingType = getBookingType();
@@ -180,9 +192,6 @@ const BookingScreen: React.FC = () => {
     const commission = isSingle
       ? (user?.single_digit_number_commission ?? 0)
       : (user?.commission ?? 0);
-
-    console.log("commission", commission);
-
 
     // Helper to create entries with custom lsk
     const createEntry = (
@@ -204,14 +213,36 @@ const BookingScreen: React.FC = () => {
       };
     };
 
-    // --- ENFORCE count and bCount > 0 ---
+
+    // --- ENFORCE count and bCount > 0 and number/count/bCount are valid numbers ---
     // If called from handlePastBookings, number/count/bCount are provided
     if (number && typeof count === "number") {
-      // Don't add if count or bCount is not > 0
-      if (subType === "BOTH" && (count <= 0 || (bCount ?? count) <= 0)) return;
-      if (subType === "BOX" && (bCount ?? count) <= 0) return;
-      if (subType === "SUPER" && count <= 0) return;
-      if (count <= 0) return;
+      // Validate number is a string of digits of correct length
+      if (!isValidNumberString(number) || number.length !== digitsRequired) {
+        Alert.alert("Invalid input", `Number must be a ${digitsRequired}-digit number.`);
+        return;
+      }
+      // Validate count is a positive number
+      if (!isValidPositiveNumber(count)) {
+        Alert.alert("Invalid input", "Count must be a valid number greater than 0.");
+        return;
+      }
+      // Validate bCount if needed
+      if ((subType === "BOTH" || subType === "BOX") && !isValidPositiveNumber(bCount)) {
+        Alert.alert("Invalid input", "B.Count must be a valid number greater than 0.");
+        return;
+      }
+      if (subType === "SUPER" && !isValidPositiveNumber(count)) {
+        Alert.alert("Invalid input", "Count must be a valid number greater than 0.");
+        return;
+      }
+      if (isSingle && count < 5) {
+        Alert.alert(
+          "Invalid input",
+          "For single digit bookings, the minimum count is 5. Please enter a count of at least 5."
+        );
+        return;
+      }
 
       // For triple digit, if subType is BOTH, add both SUPER and BOX
       if (subType === "BOTH") {
@@ -225,7 +256,7 @@ const BookingScreen: React.FC = () => {
         setBookingDetails((prev) => [
           ...prev,
           ...lskArr.map((lsk) =>
-            createEntry(number, count, lsk, "ALL")
+            createEntry(number, count, lsk, lsk) // sub_type is lsk, not "ALL"
           ),
         ]);
       } else if (isSingle && subType === "ALL") {
@@ -233,7 +264,7 @@ const BookingScreen: React.FC = () => {
         setBookingDetails((prev) => [
           ...prev,
           ...lskArr.map((lsk) =>
-            createEntry(number, count, lsk, "ALL")
+            createEntry(number, count, lsk, lsk) // sub_type is lsk, not "ALL"
           ),
         ]);
       } else {
@@ -249,8 +280,9 @@ const BookingScreen: React.FC = () => {
     const numberLen = numberInput.length;
     const endLen = endNumberInput.length;
 
-    if (!numberInput) {
-      Alert.alert("Missing fields", "Enter number.");
+    // Validate numberInput is a valid number string
+    if (!isValidNumberString(numberInput)) {
+      Alert.alert("Invalid input", "Number must be a valid number.");
       return;
     }
 
@@ -265,13 +297,14 @@ const BookingScreen: React.FC = () => {
     const countVal = parseNum(countInput);
     const bCountVal = parseNum(bCountInput);
 
-    // ENFORCE count and bCount > 0
-    if (countVal <= 0) {
-      Alert.alert("Invalid input", "Count must be greater than 0.");
+    // Validate countInput is a valid number
+    if (!isValidNumberString(countInput) || !isValidPositiveNumber(countInput)) {
+      Alert.alert("Invalid input", "Count must be a valid number greater than 0.");
       return;
     }
-    if ((subType === "BOTH" || subType === "BOX") && bCountVal <= 0) {
-      Alert.alert("Invalid input", "B.Count must be greater than 0.");
+    // Validate bCountInput if needed
+    if ((subType === "BOTH" || subType === "BOX") && (!isValidNumberString(bCountInput) || !isValidPositiveNumber(bCountInput))) {
+      Alert.alert("Invalid input", "B.Count must be a valid number greater than 0.");
       return;
     }
 
@@ -285,8 +318,8 @@ const BookingScreen: React.FC = () => {
 
     // ---------- Range Booking ----------
     if (selectedRange === "Range") {
-      if (!endNumberInput) {
-        Alert.alert("Missing fields", "Enter end number.");
+      if (!isValidNumberString(endNumberInput)) {
+        Alert.alert("Invalid input", "End number must be a valid number.");
         return;
       }
 
@@ -318,11 +351,11 @@ const BookingScreen: React.FC = () => {
           if (bCountVal > 0) newEntries.push(createEntry(paddedNum, bCountVal, "BOX"));
         } else if (isDouble && subType === "ALL") {
           ["AB", "BC", "AC"].forEach((lsk) => {
-            if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, "ALL"));
+            if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, lsk));
           });
         } else if (isSingle && subType === "ALL") {
           ["A", "B", "C"].forEach((lsk) => {
-            if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, "ALL"));
+            if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, lsk));
           });
         } else {
           const actualCount = subType === "BOX" ? bCountVal : countVal;
@@ -346,12 +379,12 @@ const BookingScreen: React.FC = () => {
         );
         return;
       }
-      if (!endNumberInput) {
-        Alert.alert("Missing fields", "Enter end number.");
+      if (!isValidNumberString(endNumberInput)) {
+        Alert.alert("Invalid input", "End number must be a valid number.");
         return;
       }
-      if (!differenceInput) {
-        Alert.alert("Missing fields", "Enter difference.");
+      if (!isValidNumberString(differenceInput)) {
+        Alert.alert("Invalid input", "Difference must be a valid number.");
         return;
       }
       if (endLen !== 3) {
@@ -394,6 +427,14 @@ const BookingScreen: React.FC = () => {
           if (subType === "BOTH") {
             if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, "SUPER"));
             if (bCountVal > 0) newEntries.push(createEntry(paddedNum, bCountVal, "BOX"));
+          } else if (isDouble && subType === "ALL") {
+            ["AB", "BC", "AC"].forEach((lsk) => {
+              if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, lsk));
+            });
+          } else if (isSingle && subType === "ALL") {
+            ["A", "B", "C"].forEach((lsk) => {
+              if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, lsk));
+            });
           } else {
             const actualCount = subType === "BOX" ? bCountVal : countVal;
             if (actualCount > 0) newEntries.push(createEntry(paddedNum, actualCount, subType));
@@ -458,11 +499,11 @@ const BookingScreen: React.FC = () => {
           if (bCountVal > 0) newEntries.push(createEntry(number, bCountVal, "BOX"));
         } else if (isDouble && subType === "ALL") {
           ["AB", "BC", "AC"].forEach((lsk) => {
-            if (countVal > 0) newEntries.push(createEntry(number, countVal, lsk, "ALL"));
+            if (countVal > 0) newEntries.push(createEntry(number, countVal, lsk, lsk));
           });
         } else if (isSingle && subType === "ALL") {
           ["A", "B", "C"].forEach((lsk) => {
-            if (countVal > 0) newEntries.push(createEntry(number, countVal, lsk, "ALL"));
+            if (countVal > 0) newEntries.push(createEntry(number, countVal, lsk, lsk));
           });
         } else {
           const actualCount = subType === "BOX" ? bCountVal : countVal;
@@ -481,14 +522,15 @@ const BookingScreen: React.FC = () => {
         Alert.alert("Missing fields", "Enter Count and B.Count.");
         return;
       }
-      if (countVal <= 0 || bCountVal <= 0) {
-        Alert.alert("Invalid input", "Count and B.Count must be greater than 0.");
+      if (!isValidNumberString(countInput) || !isValidPositiveNumber(countInput) ||
+          !isValidNumberString(bCountInput) || !isValidPositiveNumber(bCountInput)) {
+        Alert.alert("Invalid input", "Count and B.Count must be valid numbers greater than 0.");
         return;
       }
       const padded = numberInput.padStart(digitsRequired, "0");
       const entries = [
-        createEntry(padded, countVal, "SUPER"),
-        createEntry(padded, bCountVal, "BOX"),
+        createEntry(padded, parseNum(countInput), "SUPER"),
+        createEntry(padded, parseNum(bCountInput), "BOX"),
       ];
       setBookingDetails((prev) => [...prev, ...entries]);
       clearInputs();
@@ -501,12 +543,12 @@ const BookingScreen: React.FC = () => {
         Alert.alert("Missing fields", "Enter B.Count.");
         return;
       }
-      if (bCountVal <= 0) {
-        Alert.alert("Invalid input", "B.Count must be greater than 0.");
+      if (!isValidNumberString(bCountInput) || !isValidPositiveNumber(bCountInput)) {
+        Alert.alert("Invalid input", "B.Count must be a valid number greater than 0.");
         return;
       }
       const padded = numberInput.padStart(digitsRequired, "0");
-      const entry = createEntry(padded, bCountVal, "BOX");
+      const entry = createEntry(padded, parseNum(bCountInput), "BOX");
       setBookingDetails((prev) => [...prev, entry]);
       clearInputs();
       setBCountInput("");
@@ -520,7 +562,7 @@ const BookingScreen: React.FC = () => {
         setBookingDetails((prev) => [
           ...prev,
           ...lskArr.map((lsk) =>
-            countVal > 0 ? createEntry(padded, countVal, lsk, "ALL") : null
+            countVal > 0 ? createEntry(padded, countVal, lsk, lsk) : null
           ).filter(Boolean) as BookingDetail[],
         ]);
         clearInputs();
@@ -530,7 +572,7 @@ const BookingScreen: React.FC = () => {
         setBookingDetails((prev) => [
           ...prev,
           ...lskArr.map((lsk) =>
-            countVal > 0 ? createEntry(padded, countVal, lsk, "ALL") : null
+            countVal > 0 ? createEntry(padded, countVal, lsk, lsk) : null
           ).filter(Boolean) as BookingDetail[],
         ]);
         clearInputs();
@@ -542,13 +584,13 @@ const BookingScreen: React.FC = () => {
       Alert.alert("Missing fields", "Enter Count.");
       return;
     }
-    if (countVal <= 0) {
-      Alert.alert("Invalid input", "Count must be greater than 0.");
+    if (!isValidNumberString(countInput) || !isValidPositiveNumber(countInput)) {
+      Alert.alert("Invalid input", "Count must be a valid number greater than 0.");
       return;
     }
 
     const padded = numberInput.padStart(digitsRequired, "0");
-    const entry = createEntry(padded, countVal, subType);
+    const entry = createEntry(padded, parseNum(countInput), subType);
     setBookingDetails((prev) => [...prev, entry]);
     clearInputs();
     // --- END original addBooking code ---
@@ -559,6 +601,9 @@ const BookingScreen: React.FC = () => {
       Alert.alert("No bookings", "Please add at least one booking before submitting.");
       return;
     }
+
+
+
     if (DrawSessionDetails?.session?.active_session_id) {
       const data = {
         customer_name: customerName,
@@ -573,6 +618,7 @@ const BookingScreen: React.FC = () => {
           })
         ),
       };
+
       mutate(data);
     }
   };
@@ -586,11 +632,29 @@ const BookingScreen: React.FC = () => {
 
   const saveEdit = () => {
     if (editingEntry && editIndex !== null) {
-      // ENFORCE count > 0
-      if (!editingEntry.count || editingEntry.count <= 0) {
-        Alert.alert("Invalid input", "Count must be greater than 0.");
+      // ENFORCE number and count > 0 and are valid numbers
+      if (
+        !isValidNumberString(editingEntry.number) ||
+        editingEntry.number.length === 0
+      ) {
+        Alert.alert("Invalid input", "Number must be a valid number.");
         return;
       }
+      if (
+        !isValidPositiveNumber(editingEntry.count)
+      ) {
+        Alert.alert("Invalid input", "Count must be a valid number greater than 0.");
+        return;
+      }
+      // If sub_type is BOX or BOTH, validate b.count if present
+      if (
+        (editingEntry.sub_type === "BOX" || editingEntry.sub_type === "BOTH") &&
+        !isValidPositiveNumber(editingEntry.count)
+      ) {
+        Alert.alert("Invalid input", "B.Count must be a valid number greater than 0.");
+        return;
+      }
+
       const updated = [...bookingDetails];
 
       const bookingType = editingEntry.type;
@@ -777,6 +841,14 @@ const BookingScreen: React.FC = () => {
       for (let line of lines) {
         const parsed = parseLine(line);
         if (!parsed) continue;
+
+        // Validate number and count are valid numbers before adding
+        if (
+          !isValidNumberString(parsed.number) ||
+          !isValidPositiveNumber(parsed.count)
+        ) {
+          continue;
+        }
 
         // Determine drawSession based on number length
         let session = drawSession;

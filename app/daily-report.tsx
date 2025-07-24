@@ -41,7 +41,6 @@ const DailyReport = () => {
     if (fromDate) params.date_time__gte = fromDate.toISOString();
     if (toDate) params.date_time__lte = toDate.toISOString();
     if (selectedDraw?.id && !allGames) params.draw_session__draw__id = selectedDraw.id;
-    console.log("params", params);
     return params;
   };
 
@@ -56,7 +55,6 @@ const DailyReport = () => {
     enabled: !!selectedDraw?.id,
   });
 
-  console.log("data", data);
 
 
   const renderTableHeader = (cols: string[]) => (

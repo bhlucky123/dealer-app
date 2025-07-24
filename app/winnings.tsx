@@ -352,7 +352,6 @@ const WinnersReportScreen = () => {
                                         <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Number</Text>
                                         <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Dealer</Text>
                                         <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Prize</Text>
-                                        <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">Amount</Text>
                                     </View>
                                 )}
                                 renderItem={({ item, index }) => (
@@ -404,12 +403,6 @@ const WinnersReportScreen = () => {
                                             {/* Prize */}
                                             <View className="flex-1 items-end">
                                                 <Text className="text-sm text-center w-full text-violet-700 font-bold">
-                                                    ₹{Number(item.prize).toLocaleString()}
-                                                </Text>
-                                            </View>
-                                            {/* Amount */}
-                                            <View className="flex-1 items-end">
-                                                <Text className="text-sm text-center w-full text-emerald-700 font-semibold">
                                                     ₹{Number(item.prize).toLocaleString()}
                                                 </Text>
                                             </View>
