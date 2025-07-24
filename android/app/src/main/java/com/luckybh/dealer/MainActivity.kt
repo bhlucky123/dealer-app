@@ -1,4 +1,4 @@
-package com.anonymous.dealer
+package com.luckybh.dealer
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

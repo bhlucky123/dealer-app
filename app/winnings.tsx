@@ -12,7 +12,7 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
-import RNPickerSelect from "react-native-picker-select";
+import { Dropdown } from "react-native-element-dropdown";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Agent } from "./(tabs)/agent";
 
@@ -95,7 +95,7 @@ const WinnersReportScreen = () => {
         if (user?.user_type === "DEALER" && selectedAgent)
             params["booked_agent__id"] = selectedAgent;
         if (user?.user_type === "ADMIN" && selectedDealer)
-            params["booked_agent__id"] = selectedDealer;
+            params["booked_dealer__id"] = selectedDealer;
         if (selectedDraw?.id) params["draw_session__draw__id"] = String(selectedDraw.id);
 
         return Object.keys(params)
@@ -197,33 +197,47 @@ const WinnersReportScreen = () => {
 
                     {/* Show agent/dealer filter only for DEALER or ADMIN */}
                     {user?.user_type === "DEALER" && (
-                        <RNPickerSelect
-                            onValueChange={setSelectedAgent}
-                            items={[
-                                ...agents.map((agent) => ({
-                                    label: agent.username,
-                                    value: agent.id,
-                                    key: agent.id.toString(),
-                                })),
-                            ]}
+                        <Dropdown
+                            data={agents.map((agent) => ({
+                                label: agent.username,
+                                value: agent.id,
+                            }))}
+                            labelField="label"
+                            valueField="value"
                             value={selectedAgent}
+                            onChange={item => setSelectedAgent(item.value)}
+                            placeholder="Select Agent"
                             style={{
-                                viewContainer: {
-                                    borderColor: "#9ca3af",
-                                    borderWidth: 1,
-                                    borderRadius: 6,
-                                },
-                                placeholder: {
-                                    color: "#374151"
-                                }
+                                borderColor: "#9ca3af",
+                                borderWidth: 1,
+                                borderRadius: 6,
+                                paddingHorizontal: 8,
+                                padding: 10
                             }}
-                            placeholder={{ label: "Select Agent", value: null }}
-                            Icon={() =>
-                                selectedAgent !== null && selectedAgent !== "" ? (
+                            containerStyle={{
+                                borderRadius: 6,
+                            }}
+                            itemTextStyle={{
+                                color: "#000",
+                            }}
+                            selectedTextStyle={{
+                                color: "#000",
+                            }}
+                            renderRightIcon={() =>
+                                selectedAgent ? (
                                     <TouchableOpacity
                                         onPress={() => setSelectedAgent("")}
-                                        style={{ position: "absolute", right: 10, top: 12, zIndex: 10 }}
-                                        className="bg-white w-10 h-10 flex items-center"
+                                        style={{
+                                            position: "absolute",
+                                            right: 10,
+                                            zIndex: 10,
+                                            backgroundColor: "#fff",
+                                            width: 24,
+                                            height: 24,
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            borderRadius: 12,
+                                        }}
                                     >
                                         <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
                                     </TouchableOpacity>
@@ -232,33 +246,47 @@ const WinnersReportScreen = () => {
                         />
                     )}
                     {user?.user_type === "ADMIN" && (
-                        <RNPickerSelect
-                            onValueChange={setSelectedDealer}
-                            items={[
-                                ...dealers.map((dealer) => ({
-                                    label: dealer.username,
-                                    value: dealer.id,
-                                    key: dealer.id.toString(),
-                                })),
-                            ]}
+                        <Dropdown
+                            data={dealers.map((dealer) => ({
+                                label: dealer.username,
+                                value: dealer.id,
+                            }))}
+                            labelField="label"
+                            valueField="value"
                             value={selectedDealer}
+                            onChange={item => setSelectedDealer(item.value)}
+                            placeholder="Select Dealer"
                             style={{
-                                viewContainer: {
-                                    borderColor: "#9ca3af",
-                                    borderWidth: 1,
-                                    borderRadius: 6,
-                                },
-                                placeholder: {
-                                    color: "#374151"
-                                }
+                                borderColor: "#9ca3af",
+                                borderWidth: 1,
+                                borderRadius: 6,
+                                paddingHorizontal: 8,
+                                padding: 10
                             }}
-                            placeholder={{ label: "Select Dealer", value: null }}
-                            Icon={() =>
-                                selectedDealer !== null && selectedDealer !== "" ? (
+                            containerStyle={{
+                                borderRadius: 6,
+                            }}
+                            itemTextStyle={{
+                                color: "#000",
+                            }}
+                            selectedTextStyle={{
+                                color: "#000",
+                            }}
+                            renderRightIcon={() =>
+                                selectedDealer ? (
                                     <TouchableOpacity
                                         onPress={() => setSelectedDealer("")}
-                                        style={{ position: "absolute", right: 10, top: 12, zIndex: 10 }}
-                                        className="bg-white w-10 h-10 flex items-center"
+                                        style={{
+                                            position: "absolute",
+                                            right: 10,
+                                            zIndex: 10,
+                                            backgroundColor: "#fff",
+                                            width: 24,
+                                            height: 24,
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            borderRadius: 12,
+                                        }}
                                     >
                                         <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
                                     </TouchableOpacity>

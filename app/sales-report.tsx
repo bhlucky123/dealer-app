@@ -15,7 +15,7 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
-import RNPickerSelect from "react-native-picker-select";
+import { Dropdown } from "react-native-element-dropdown";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Agent } from "./(tabs)/agent";
 
@@ -303,40 +303,107 @@ const SalesReportScreen = () => {
                     </View>
 
                     {user?.user_type === "ADMIN" && (
-                        <RNPickerSelect
-                            onValueChange={setSelectedFilter}
-                            items={[...dealers.map((dealer) => ({ label: dealer.username, value: dealer.id, key: dealer.id.toString(), }))]}
-                            value={selectedFilter}
-                            style={{
-                                viewContainer: { borderColor: "#9ca3af", borderWidth: 1, borderRadius: 6, },
-                                placeholder: { color: "#374151" }
-                            }}
-                            placeholder={{ label: "Select Dealer", value: null }}
-                            Icon={() => selectedFilter ? (
-                                <TouchableOpacity onPress={() => setSelectedFilter("")} style={{ position: "absolute", right: 10, top: 12, zIndex: 10 }} className="bg-white w-10 h-10 flex items-center">
-                                    <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
-                                </TouchableOpacity>
-                            ) : null
-                            }
-                        />
+                        <View className="mb-2">
+                            <Dropdown
+                                data={dealers.map((dealer) => ({
+                                    label: dealer.username,
+                                    value: dealer.id,
+                                }))}
+                                labelField="label"
+                                valueField="value"
+                                value={selectedFilter}
+                                onChange={item => setSelectedFilter(item.value)}
+                                placeholder="Select Dealer"
+                                style={{
+                                    borderColor: "#9ca3af",
+                                    borderWidth: 1,
+                                    borderRadius: 6,
+                                    paddingHorizontal: 8,
+                                    padding: 10
+                                }}
+                                containerStyle={{
+                                    borderRadius: 6,
+                                }}
+                                itemTextStyle={{
+                                    color: "#000",
+                                }}
+                                selectedTextStyle={{
+                                    color: "#000",
+                                }}
+                                renderRightIcon={() =>
+                                    selectedFilter ? (
+                                        <TouchableOpacity
+                                            onPress={() => setSelectedFilter("")}
+                                            style={{
+                                                position: "absolute",
+                                                right: 10,
+                                                zIndex: 10,
+                                                backgroundColor: "#fff",
+                                                width: 24,
+                                                height: 24,
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                borderRadius: 12,
+                                            }}
+                                        >
+                                            <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
+                                        </TouchableOpacity>
+                                    ) : null
+                                }
+                            />
+                        </View>
                     )}
                     {user?.user_type === "DEALER" && (
-                        <RNPickerSelect
-                            onValueChange={setSelectedFilter}
-                            items={[...agents.map((agent) => ({ label: agent.username, value: agent.id, key: agent.id.toString(), }))]}
-                            value={selectedFilter}
-                            style={{
-                                viewContainer: { borderColor: "#9ca3af", borderWidth: 1, borderRadius: 6, },
-                                placeholder: { color: "#374151" }
-                            }}
-                            placeholder={{ label: "Select Agent", value: null }}
-                            Icon={() => selectedFilter ? (
-                                <TouchableOpacity onPress={() => setSelectedFilter("")} style={{ position: "absolute", right: 10, top: 12, zIndex: 10 }} className="bg-white w-10 h-10 flex items-center">
-                                    <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
-                                </TouchableOpacity>
-                            ) : null
-                            }
-                        />
+                        <View className="mb-2">
+                            <Dropdown
+                                data={agents.map((agent) => ({
+                                    label: agent.username,
+                                    value: agent.id,
+                                }))}
+                                labelField="label"
+                                valueField="value"
+                                value={selectedFilter}
+                                onChange={item => setSelectedFilter(item.value)}
+                                placeholder="Select Agent"
+                                style={{
+                                    borderColor: "#9ca3af",
+                                    borderWidth: 1,
+                                    borderRadius: 6,
+                                    paddingHorizontal: 8,
+                                    padding: 10
+                                }}
+                                containerStyle={{
+                                    borderRadius: 6,
+                                }}
+                                itemTextStyle={{
+                                    color: "#000",
+                                }}
+                                selectedTextStyle={{
+                                    color: "#000",
+                                }}
+                                renderRightIcon={() =>
+                                    selectedFilter ? (
+                                        <TouchableOpacity
+                                            onPress={() => setSelectedFilter("")}
+                                            style={{
+                                                position: "absolute",
+                                                right: 10,
+                                                zIndex: 10,
+                                                backgroundColor: "#fff",
+                                                width: 24,
+                                                height: 24,
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                borderRadius: 12,
+                                                
+                                            }}
+                                        >
+                                            <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
+                                        </TouchableOpacity>
+                                    ) : null
+                                }
+                            />
+                        </View>
                     )}
 
                     <TouchableOpacity onPress={generatePdf} className="bg-violet-600 p-3 rounded-lg items-center">
