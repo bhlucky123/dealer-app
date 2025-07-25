@@ -177,6 +177,8 @@ const DrawResultForm = ({ onSubmit, initialData }: Props) => {
                                                 mainPrizeRefs[idx + 1].current?.focus();
                                             }
                                         }}
+                                        placeholderTextColor="#9ca3af"
+
                                     />
                                 </View>
                             </View>
@@ -229,6 +231,7 @@ const DrawResultForm = ({ onSubmit, initialData }: Props) => {
                                                         complementaryRefs[globalIdx + 1].current?.focus();
                                                     }
                                                 }}
+                                                placeholderTextColor="#9ca3af"
                                             />
                                         </View>
                                     );

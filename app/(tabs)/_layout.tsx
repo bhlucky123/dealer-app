@@ -22,10 +22,6 @@ export default function TabLayout() {
             right: 0,
             overflow: 'hidden',
             borderTopWidth: 0,
-            shadowColor: '#000',
-            shadowOpacity: 0.06,
-            shadowRadius: 12,
-            elevation: 8,
           },
           headerShown: false,
           tabBarShowLabel: true,
@@ -64,6 +60,7 @@ export default function TabLayout() {
           options={{
             title: 'Payment',
             tabBarIcon: ({ color }) => <CreditCard size={24} color={color} />,
+            tabBarItemStyle: { display: (user?.user_type === "DEALER" || user?.user_type === "ADMIN") ? 'flex' : "none" }
           }}
         />
         <Tabs.Screen

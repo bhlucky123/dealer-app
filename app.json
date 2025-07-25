@@ -1,10 +1,11 @@
 {
   "expo": {
     "name": "calculator",
-    "slug": "dealer",
+    "slug": "agent",
     "version": "1.0.0",
-    "scheme": "dealerapp",
+    "scheme": "agent",
     "newArchEnabled": true,
+    "userInterfaceStyle": "automatic",
     "web": {
       "bundler": "metro",
       "output": "static",
@@ -31,9 +32,9 @@
       }
     },
     "android": {
-      "package": "com.luckybh.dealer",
-      "icon": "./assets/images/app-icon.png"
+      "package": "com.luckybh.agnet",
+      "icon": "./assets/images/agent-appicon.png"
     },
-    "icon": "./assets/images/app-icon.png"
+    "icon": "./assets/images/agent-appicon.png"
   }
 }
