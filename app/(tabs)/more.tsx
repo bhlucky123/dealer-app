@@ -1,7 +1,7 @@
 import { useAuthStore } from "@/store/auth";
 import api from "@/utils/axios";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -35,34 +35,66 @@ type myBalanceResponse = {
 }
 
 export default function MoreTab() {
-    const [isActive, setIsActive] = useState(true);
+    const { setApplicationStatus, application_status, user } = useAuthStore();
 
     // For editing/adding bank details
     const [editingBankDetails, setEditingBankDetails] = useState<null | "admin" | "dealer" | "agent">(null);
     const [bankDetailsInput, setBankDetailsInput] = useState("");
     const [bankDetailsError, setBankDetailsError] = useState<string | null>(null);
 
-    const { user } = useAuthStore();
+    // Track local status to avoid UI glitches during async toggle
+    const [localStatus, setLocalStatus] = useState<boolean | null>(null);
+    const [statusLoading, setStatusLoading] = useState(false);
+    const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Mutations for activate/deactivate (ADMIN only)
     const deactivateMutation = useMutation({
         mutationFn: () => api.post("/administrator/deactivate/"),
+        onMutate: async () => {
+            setStatusLoading(true);
+            setLocalStatus(false);
+        },
         onSuccess: () => {
-            setIsActive(false);
-            Alert.alert("Status", "Account deactivated");
+            setApplicationStatus(false);
+            setStatusLoading(false);
+            setLocalStatus(null);
+            ToastAndroid.show("Account deactivated", ToastAndroid.SHORT);
         },
         onError: () => {
+            setStatusLoading(false);
+            setLocalStatus(null);
             Alert.alert("Error", "Failed to deactivate");
         }
     });
 
     const activateMutation = useMutation({
         mutationFn: () => api.post("/administrator/activate/"),
-        onSuccess: () => {
-            setIsActive(true);
-            Alert.alert("Status", "Account activated");
+        onMutate: async () => {
+            setStatusLoading(true);
+            setLocalStatus(true);
         },
-        onError: () => {
+        onSuccess: (data) => {
+            setApplicationStatus(true);
+            setStatusLoading(false);
+            setLocalStatus(null);
+            ToastAndroid.show("Account activated", ToastAndroid.SHORT);
+        },
+        onError: (err: any) => {
+            console.log("err", err);
+            // If error is "Application is already active", set status to true
+            if (
+                err &&
+                err.status === 400 &&
+                err.message &&
+                (
+                    err.message === "Application is already active." ||
+                    (typeof err.message === "object" && err.message.message === "Application is already active.")
+                )
+            ) {
+                setApplicationStatus(true);
+            }
+            setStatusLoading(false);
+            setLocalStatus(null);
             Alert.alert("Error", "Failed to activate");
         }
     });
@@ -84,6 +116,7 @@ export default function MoreTab() {
             }
         }
     });
+
 
     const {
         data: myBalance,
@@ -109,7 +142,7 @@ export default function MoreTab() {
         if (!bankDetailsData) return null;
         if (type === "admin") return bankDetailsData.admin_bank_details || null;
         if (type === "dealer") return bankDetailsData.dealer_bank_details || null;
-        if (type === "agent") return bankDetailsData.agent_bank_details || null;
+        // if (type === "agent") return bankDetailsData.agent_bank_details || null;
         return null;
     }
 
@@ -122,7 +155,7 @@ export default function MoreTab() {
             type: "admin" | "dealer" | "agent";
             bank_details: string;
         }) => {
-            
+
             if (!user?.id) throw new Error("No user id");
             const details = getBankDetailsForEdit(type);
             let url = "/draw-payment/bank-details/";
@@ -155,17 +188,48 @@ export default function MoreTab() {
             refetchBankDetails();
             ToastAndroid.show("Bank details updated", ToastAndroid.SHORT);
         },
-        onError: () => {
+        onError: (err) => {
+            console.log("err", err);
+
             setBankDetailsError("Failed to update bank details");
         }
     });
 
     // Handle switch toggle
     const handleToggle = (value: boolean) => {
+        // Prevent double toggling while loading
+        if (statusLoading || activateMutation.isPending || deactivateMutation.isPending) return;
+
+        // If already in desired state, do nothing
+        if (application_status === value) return;
+
+        // Optimistically update UI
+        setLocalStatus(value);
+        setStatusLoading(true);
+
+        // Add a fallback timeout in case mutation hangs
+        if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+        statusTimeoutRef.current = setTimeout(() => {
+            setStatusLoading(false);
+            setLocalStatus(null);
+        }, 10000);
+
         if (value) {
-            activateMutation.mutate();
+            activateMutation.mutate(undefined, {
+                onSuccess: () => {
+                    setStatusLoading(false);
+                    setLocalStatus(null);
+                    if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+                }
+            });
         } else {
-            deactivateMutation.mutate();
+            deactivateMutation.mutate(undefined, {
+                onSuccess: () => {
+                    setStatusLoading(false);
+                    setLocalStatus(null);
+                    if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+                }
+            });
         }
     };
 
@@ -225,6 +289,7 @@ export default function MoreTab() {
                                             }}
                                             multiline
                                             numberOfLines={3}
+                                            placeholderTextColor="#9ca3af"
                                         />
                                         {bankDetailsError && (
                                             <Text className="text-red-600 text-xs mb-2">{bankDetailsError}</Text>
@@ -314,27 +379,28 @@ export default function MoreTab() {
                     )}
                 </>
             );
-        } else if (user.user_type === "AGENT") {
-            // Agent can only add (if not present) and view agent bank details, and view dealer bank details
-            return (
-                <>
-                    {renderSingleBankDetailsBlock(
-                        "Dealer Bank Details",
-                        "dealer",
-                        bankDetailsData?.dealer_bank_details,
-                        false, // canEdit
-                        false // canAdd
-                    )}
-                    {renderSingleBankDetailsBlock(
-                        "Agent Bank Details",
-                        "agent",
-                        bankDetailsData?.agent_bank_details,
-                        false, // canEdit
-                        true // canAdd (can add if not present)
-                    )}
-                </>
-            );
         }
+        // else if (user.user_type === "AGENT") {
+        //     // Agent can only add (if not present) and view agent bank details, and view dealer bank details
+        //     return (
+        //         <>
+        //             {renderSingleBankDetailsBlock(
+        //                 "Dealer Bank Details",
+        //                 "dealer",
+        //                 bankDetailsData?.dealer_bank_details,
+        //                 false, // canEdit
+        //                 false // canAdd
+        //             )}
+        //             {renderSingleBankDetailsBlock(
+        //                 "Agent Bank Details",
+        //                 "agent",
+        //                 bankDetailsData?.agent_bank_details,
+        //                 false, // canEdit
+        //                 true // canAdd (can add if not present)
+        //             )}
+        //         </>
+        //     );
+        // }
         return null;
     }
 
@@ -391,6 +457,9 @@ export default function MoreTab() {
         return null;
     }
 
+    // Determine the status to show in the UI (localStatus if toggling, else from store)
+    const effectiveStatus = localStatus !== null ? localStatus : application_status;
+
     return (
         <KeyboardAvoidingView
             style={{ flex: 1 }}
@@ -433,7 +502,7 @@ export default function MoreTab() {
                             }}
                         >
                             <Text
-                                className={`text-base font-semibold mr-4 ${isActive ? "text-green-600" : "text-gray-500"
+                                className={`text-base font-semibold mr-4 ${effectiveStatus ? "text-green-600" : "text-gray-500"
                                     }`}
                                 style={{
                                     letterSpacing: 1,
@@ -441,13 +510,17 @@ export default function MoreTab() {
                                     textAlign: "right",
                                 }}
                             >
-                                {isActive ? "Active" : "Inactive"}
+                                {effectiveStatus ? "Active" : "Inactive"}
                             </Text>
                             <Switch
-                                value={isActive}
+                                value={effectiveStatus}
                                 onValueChange={handleToggle}
-                                disabled={activateMutation.isPending || deactivateMutation.isPending}
-                                thumbColor={isActive ? "#4ade80" : "#ffffff"}
+                                disabled={
+                                    statusLoading ||
+                                    activateMutation.isPending ||
+                                    deactivateMutation.isPending
+                                }
+                                thumbColor={effectiveStatus ? "#4ade80" : "#ffffff"}
                                 trackColor={{ false: "#d1d5db", true: "#bbf7d0" }}
                                 ios_backgroundColor="#d1d5db"
                                 style={{
@@ -455,6 +528,13 @@ export default function MoreTab() {
                                     marginLeft: 6,
                                 }}
                             />
+                            {statusLoading && (
+                                <ActivityIndicator
+                                    size="small"
+                                    color={effectiveStatus ? "#4ade80" : "#d1d5db"}
+                                    style={{ marginLeft: 10 }}
+                                />
+                            )}
                         </View>
                     )}
                 </View>

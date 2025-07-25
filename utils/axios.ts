@@ -17,6 +17,7 @@ api.interceptors.request.use(
     // Grab token from Zustand store
     const token = useAuthStore.getState().token;
 
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -35,7 +36,8 @@ api.interceptors.response.use(
       console.log("❌ Axios Error:", status, data);
 
       if (status === 503) {
-        router.push("/")
+        console.log("naivigating due to inative", status);
+        router.push("..")
         return
       }
 

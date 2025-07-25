@@ -345,6 +345,8 @@ export default function PaymentTab() {
                                     marginBottom: 12,
                                     fontSize: 16,
                                 }}
+                                placeholderTextColor="#9ca3af"
+
                             />
                             <TouchableOpacity
                                 onPress={() => setShowModalDatePicker(true)}

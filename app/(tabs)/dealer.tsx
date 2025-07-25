@@ -3,7 +3,7 @@ import { useAuthStore } from "@/store/auth";
 import api from "@/utils/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { MoveLeft } from "lucide-react-native";
+import { Eye, EyeOff, MoveLeft } from "lucide-react-native";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
@@ -38,10 +38,10 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
     <View style={{ width: 24, height: 24, justifyContent: "center", alignItems: "center" }}>
         {visible ? (
             // Open eye
-            <Text style={{ fontSize: 20 }}>👁️</Text>
+            <Eye color="#6b7280" size={20} />
         ) : (
             // Closed eye (using emoji for simplicity)
-            <Text style={{ fontSize: 20 }}>🙈</Text>
+            <EyeOff color="#6b7280" size={20} />
         )}
     </View>
 );
@@ -518,6 +518,7 @@ export default function DealerManagement() {
                     className="bg-gray-100 rounded-lg px-4 py-3 text-gray-800"
                     value={searchQuery}
                     onChangeText={setSearchQuery}
+                    placeholderTextColor="#9ca3af"
                 />
             </View>
             {isLoading && !isFetching ? (

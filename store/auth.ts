@@ -19,70 +19,21 @@ interface AuthState {
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   setUser: (user: User | null) => void;
+  application_status: boolean;
+  setApplicationStatus: (status: boolean) => void;
 }
 
-// Flag to control use of hardcoded data
-export const USE_HARDCODED_AUTH = false; // Set to false to disable hardcoded data
-
-const AdminToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU1MzQwMzgyLCJpYXQiOjE3NTI3NDgzODIsImp0aSI6IjcyZTVlMjM3ZmNkODQ2NzdhNzllMTlmZmNiMzk2Zjk0IiwidXNlcl9pZCI6MSwidXNlcl90eXBlIjoiQURNSU4ifQ.fEkJv75g8jrH5MBZNHE698nijW1NVK5v78-prexPMOM";
-const DealerToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU1NTk2MjE3LCJpYXQiOjE3NTMwMDQyMTcsImp0aSI6IjcyYTM1ZmIzNjk0MDQzYTliYzZhZjBmYzM4MzIwODI2IiwidXNlcl9pZCI6MiwidXNlcl90eXBlIjoiREVBTEVSIn0.uIXiozc7E2V7K-FwBbE29b1f8_RgvkHoroRnce96Nls";
-const AgentToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU1NzA5MzQzLCJpYXQiOjE3NTMxMTczNDMsImp0aSI6IjJhMjdhYWE2YzlmODQ2NjQ4ZDI3ZmM2YjAxZGY4OWI2IiwidXNlcl9pZCI6MywidXNlcl90eXBlIjoiQUdFTlQifQ.pyrnzOupIxjZT7gUHX8CyC11cpdRH1PzlUexmv2mZAI";
-
-// Dummy users for all roles
-const DummyDealer: User = {
-  id: "1",
-  username: "Dealer User",
-  cap_amount: 10000,
-  commission: 10,
-  single_digit_number_commission: 20,
-  user_type: "DEALER",
-};
-
-const DummyAdmin: User = {
-  id: "2",
-  username: "Admin User",
-  cap_amount: 999999,
-  commission: 100,
-  single_digit_number_commission: 100,
-  user_type: "ADMIN",
-};
-
-const DummyAgent: User = {
-  id: "3",
-  username: "Agent User",
-  cap_amount: 5000,
-  commission: 5,
-  single_digit_number_commission: 10,
-  user_type: "AGENT",
-};
-
-// Helper to get default user/token based on config.userType
-function getDefaultAuth() {
-  switch (config.userType) {
-    case "ADMIN":
-      return { user: DummyAdmin, token: AdminToken };
-    case "AGENT":
-      return { user: DummyAgent, token: AgentToken };
-    case "DEALER":
-    default:
-      return { user: DummyDealer, token: DealerToken };
-  }
-}
-
-export const useAuthStore = create<AuthState>((set) =>  {
-  // If using hardcoded data, initialize with dummy user/token, else null
-  const { user, token } = USE_HARDCODED_AUTH ? getDefaultAuth() : { user: null, token: null };
-
+export const useAuthStore = create<AuthState>((set) => {
   return {
-    user,
-    token,
+    user: null,
+    token: null,
     loading: false,
     error: null,
+    application_status: true,
 
     login: async (username, password) => {
       set({ loading: true, error: null });
       try {
-
         // Determine login endpoint and user-type header based on config.userType
         let loginUrl = "";
         let userTypeHeader = config.userType;
@@ -178,5 +129,7 @@ export const useAuthStore = create<AuthState>((set) =>  {
     },
 
     setUser: (user) => set({ user }),
+
+    setApplicationStatus: (status: boolean) => set({ application_status: status })
   };
 });

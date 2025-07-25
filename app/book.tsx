@@ -523,7 +523,7 @@ const BookingScreen: React.FC = () => {
         return;
       }
       if (!isValidNumberString(countInput) || !isValidPositiveNumber(countInput) ||
-          !isValidNumberString(bCountInput) || !isValidPositiveNumber(bCountInput)) {
+        !isValidNumberString(bCountInput) || !isValidPositiveNumber(bCountInput)) {
         Alert.alert("Invalid input", "Count and B.Count must be valid numbers greater than 0.");
         return;
       }
@@ -1003,6 +1003,7 @@ const BookingScreen: React.FC = () => {
                   : "Number"
               }
               className="flex-1 border border-gray-400 px-3 py-2 rounded"
+              placeholderTextColor="#9ca3af"
             />
 
             {/* End input for Range and Different */}
@@ -1027,6 +1028,7 @@ const BookingScreen: React.FC = () => {
                 keyboardType="numeric"
                 placeholder="End"
                 className="flex-1 border border-gray-400 px-3 py-2 rounded"
+                placeholderTextColor="#9ca3af"
               />
             )}
 
@@ -1043,6 +1045,7 @@ const BookingScreen: React.FC = () => {
                 keyboardType="numeric"
                 placeholder="Difference"
                 className="flex-1 border border-gray-400 px-3 py-2 rounded"
+              placeholderTextColor="#9ca3af"
               />
             )}
 
@@ -1054,6 +1057,8 @@ const BookingScreen: React.FC = () => {
               keyboardType="numeric"
               placeholder="Count"
               className="flex-1 border border-gray-400 px-3 py-2 rounded"
+              placeholderTextColor="#9ca3af"
+
             />
 
             {/* B.Count input for 3-digit only */}
@@ -1064,6 +1069,8 @@ const BookingScreen: React.FC = () => {
                 keyboardType="numeric"
                 placeholder="B.Count"
                 className="flex-1 border border-gray-400 px-3 py-2 rounded"
+              placeholderTextColor="#9ca3af"
+
               />
             )}
           </View>
@@ -1252,6 +1259,8 @@ const BookingScreen: React.FC = () => {
                   className="border border-gray-300 px-4 py-2 rounded-lg bg-gray-50 text-base"
                   autoFocus
                   returnKeyType="next"
+              placeholderTextColor="#9ca3af"
+
                 />
               </View>
 
@@ -1268,6 +1277,8 @@ const BookingScreen: React.FC = () => {
                   }
                   className="border border-gray-300 px-4 py-2 rounded-lg bg-gray-50 text-base"
                   returnKeyType="next"
+              placeholderTextColor="#9ca3af"
+
                 />
               </View>
 
