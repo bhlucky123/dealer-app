@@ -12,7 +12,12 @@ export const useCalculator = () => {
   const [equation, setEquation] = useState<string>("");
   const [pinInput, setPinInput] = useState("");
 
-  const { data: equationData } = useQuery({
+  const {
+    data: equationData,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: ["/user/get-initial-user-creds/"],
     queryFn: () => {
       return fetch(
@@ -167,5 +172,8 @@ export const useCalculator = () => {
     handleEqual,
     handleDelete,
     pinInput,
+    isLoading,
+    isError, 
+    error
   };
 };

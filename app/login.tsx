@@ -62,7 +62,7 @@ export default function LoginScreen() {
             <View className="space-y-2">
               <Text className="text-gray-700 text-sm font-semibold">Username</Text>
               <TextInput
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-base"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-base text-black"
                 placeholder="Enter username"
                 placeholderTextColor="#9ca3af"
                 value={username}

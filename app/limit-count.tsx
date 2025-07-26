@@ -142,7 +142,9 @@ const LimitCountScreen = () => {
     });
 
     const addLimitMutation = useMutation({
-        mutationFn: (payload: { number: number; count: number; draw: number }) => {
+        mutationFn: (payload: { number: string; count: number; draw: number }) => {
+            console.log("payload", payload);
+
             return api.post("/draw/limit-number-count/", payload);
         },
         onSuccess: () => {
@@ -191,7 +193,7 @@ const LimitCountScreen = () => {
             queryClient.invalidateQueries({
                 queryKey: ["/draw/limit-number-count/", selectedDraw?.id],
             });
-            ToastAndroid.show("Limit count deleted.",ToastAndroid.SHORT);
+            ToastAndroid.show("Limit count deleted.", ToastAndroid.SHORT);
         },
         onError: (err: any) => {
             Alert.alert(
@@ -206,15 +208,27 @@ const LimitCountScreen = () => {
             Alert.alert("No Draw", "Please select a draw.");
             return;
         }
-        const numberNum = parseInt(newNumber, 10);
+        // Keep the number as a string to preserve leading zeros
+        const trimmedNumber = newNumber.trim();
         const countNum = parseInt(newCount, 10);
-        if (isNaN(numberNum) || numberNum < 0 || isNaN(countNum) || countNum < 0) {
+
+        console.log("trimmed", trimmedNumber);
+
+
+        // Validate: number must be all digits and not empty, count must be a non-negative integer
+        if (
+            !/^\d+$/.test(trimmedNumber) ||
+            trimmedNumber.length === 0 ||
+            isNaN(countNum) ||
+            countNum < 0
+        ) {
             Alert.alert("Invalid", "Please enter valid number and count.");
             return;
         }
+
         setIsSubmitting(true);
         addLimitMutation.mutate({
-            number: numberNum,
+            number: trimmedNumber, // send as string to preserve leading zeros
             count: countNum,
             draw: selectedDraw.id,
         });

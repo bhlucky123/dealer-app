@@ -142,13 +142,15 @@ const ResultPage: React.FC = () => {
             setFormData(null);
             refetch();
         } catch (err: any) {
+            console.log("err", err);
+
             // Handle specific error: ["No draw session found for today."]
             if (Array.isArray(err) && err.length === 1 && err[0] === "No draw session found for today.") {
                 setFormError("No draw session found for the selected date. Please check the draw schedule.");
                 Alert.alert("No Draw Session", "No draw session found for the selected date. Please check the draw schedule.");
             } else {
                 setFormError(err || "Failed to save result.");
-                Alert.alert("Error", err || "Failed to save result.");
+                Alert.alert("Error", err?.toString() || "Failed to save result.");
             }
 
             setTimeout(() => {

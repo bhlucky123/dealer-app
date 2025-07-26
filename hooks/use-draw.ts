@@ -75,12 +75,11 @@ const useDraw = () => {
       complementary_prizes: string[];
     }) => {
       try {
-        console.log("on create  ", rest);
         const res = await api.post(`/draw-result/result/${draw_session}/`, rest);
         return res?.data;
       } catch (error: any) {
         console.log("Error creating draw result:", error);
-        throw error?.message?.detail || error?.message || "Failed to create draw result.";
+        throw error?.message?.detail || error?.message?.[0] || "Failed to create draw result.";
       }
     },
     onError: (error) => {
