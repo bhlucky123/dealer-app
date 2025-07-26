@@ -16,6 +16,7 @@ import {
     View,
 } from "react-native";
 
+// --- Types ---
 type BankDetails = {
     id: number;
     user: number;
@@ -34,20 +35,54 @@ type myBalanceResponse = {
     balance_amount?: number
 }
 
+interface PrizeConfig {
+    single_digit_prize: number;
+    double_digit_prize: number;
+    box_direct: number;
+    box_indirect: number;
+    super_first_prize: number;
+    super_second_prize: number;
+    super_third_prize: number;
+    super_fourth_prize: number;
+    super_fifth_prize: number;
+    super_complementary_prize: number;
+}
+
+const PRIZE_CONFIG_FIELDS: { key: keyof PrizeConfig; label: string }[] = [
+    { key: "single_digit_prize", label: "Single Digit Prize" },
+    { key: "double_digit_prize", label: "Double Digit Prize" },
+    { key: "box_direct", label: "Box Direct" },
+    { key: "box_indirect", label: "Box Indirect" },
+    { key: "super_first_prize", label: "Super First Prize" },
+    { key: "super_second_prize", label: "Super Second Prize" },
+    { key: "super_third_prize", label: "Super Third Prize" },
+    { key: "super_fourth_prize", label: "Super Fourth Prize" },
+    { key: "super_fifth_prize", label: "Super Fifth Prize" },
+    { key: "super_complementary_prize", label: "Super Complementary Prize" },
+];
+
+// --- Main Component ---
 export default function MoreTab() {
     const { setApplicationStatus, application_status, user } = useAuthStore();
 
-    // For editing/adding bank details
+    // --- State ---
     const [editingBankDetails, setEditingBankDetails] = useState<null | "admin" | "dealer" | "agent">(null);
     const [bankDetailsInput, setBankDetailsInput] = useState("");
     const [bankDetailsError, setBankDetailsError] = useState<string | null>(null);
 
-    // Track local status to avoid UI glitches during async toggle
     const [localStatus, setLocalStatus] = useState<boolean | null>(null);
     const [statusLoading, setStatusLoading] = useState(false);
     const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Mutations for activate/deactivate (ADMIN only)
+    // UI state for which section is open: "bank", "prize", "toggle"
+    const [activeSection, setActiveSection] = useState<"bank" | "prize" | "toggle">("bank");
+
+    // Prize config edit state
+    const [isEditingPrizeConfig, setIsEditingPrizeConfig] = useState(false);
+    const [prizeConfigForm, setPrizeConfigForm] = useState<PrizeConfig | null>(null);
+    const [prizeConfigError, setPrizeConfigError] = useState<string | null>(null);
+
+    // --- Mutations ---
     const deactivateMutation = useMutation({
         mutationFn: () => api.post("/administrator/deactivate/"),
         onMutate: async () => {
@@ -73,15 +108,13 @@ export default function MoreTab() {
             setStatusLoading(true);
             setLocalStatus(true);
         },
-        onSuccess: (data) => {
+        onSuccess: () => {
             setApplicationStatus(true);
             setStatusLoading(false);
             setLocalStatus(null);
             ToastAndroid.show("Account activated", ToastAndroid.SHORT);
         },
         onError: (err: any) => {
-            console.log("err", err);
-            // If error is "Application is already active", set status to true
             if (
                 err &&
                 err.status === 400 &&
@@ -99,7 +132,31 @@ export default function MoreTab() {
         }
     });
 
-    // Fetch all bank details for the current user
+    // --- Queries ---
+    const { data: prizeConfig, isLoading: isPrizeConfigLoading, refetch: refetchPrizeConfig } = useQuery<PrizeConfig>({
+        queryKey: ["/administrator/prize-configuration", user?.id],
+        queryFn: async () => {
+            const res = await api.get(`/administrator/prize-configuration/${user?.id}/`);
+            return res.data as PrizeConfig;
+        },
+        enabled: user?.user_type === "ADMIN"
+    });
+
+    const { mutate: prizeConfigMutation, isPending: isPrizeConfigSaving } = useMutation({
+        mutationFn: async (payload: PrizeConfig) => {
+            return await api.patch(`/administrator/prize-configuration/${user?.id}/`, payload);
+        },
+        onSuccess: () => {
+            setIsEditingPrizeConfig(false);
+            setPrizeConfigError(null);
+            refetchPrizeConfig();
+            ToastAndroid.show("Prize configuration updated", ToastAndroid.SHORT);
+        },
+        onError: () => {
+            setPrizeConfigError("Failed to update prize configuration");
+        }
+    });
+
     const {
         data: bankDetailsData,
         isLoading: isBankDetailsLoading,
@@ -116,7 +173,6 @@ export default function MoreTab() {
             }
         }
     });
-
 
     const {
         data: myBalance,
@@ -137,16 +193,14 @@ export default function MoreTab() {
         refetchOnMount: true
     });
 
-    // Helper to get the correct details for editing/updating
+    // --- Helpers ---
     function getBankDetailsForEdit(type: "admin" | "dealer" | "agent") {
         if (!bankDetailsData) return null;
         if (type === "admin") return bankDetailsData.admin_bank_details || null;
         if (type === "dealer") return bankDetailsData.dealer_bank_details || null;
-        // if (type === "agent") return bankDetailsData.agent_bank_details || null;
         return null;
     }
 
-    // Add/update bank details
     const bankDetailsMutation = useMutation({
         mutationFn: async ({
             type,
@@ -155,22 +209,18 @@ export default function MoreTab() {
             type: "admin" | "dealer" | "agent";
             bank_details: string;
         }) => {
-
             if (!user?.id) throw new Error("No user id");
             const details = getBankDetailsForEdit(type);
             let url = "/draw-payment/bank-details/";
             let method: "patch" | "post" = "post";
-            let id: number | undefined = undefined;
             if (details?.id) {
                 url += `${details.id}/`;
                 method = "patch";
-                id = details.id;
             }
             const payload: any = {
                 bank_details,
                 user: user.id,
             };
-            // Optionally, you could add user_type to payload if needed
             if (type === "admin") payload.user_type = "ADMIN";
             if (type === "dealer") payload.user_type = "DEALER";
             if (type === "agent") payload.user_type = "AGENT";
@@ -188,26 +238,17 @@ export default function MoreTab() {
             refetchBankDetails();
             ToastAndroid.show("Bank details updated", ToastAndroid.SHORT);
         },
-        onError: (err) => {
-            console.log("err", err);
-
+        onError: () => {
             setBankDetailsError("Failed to update bank details");
         }
     });
 
-    // Handle switch toggle
+    // --- UI Handlers ---
     const handleToggle = (value: boolean) => {
-        // Prevent double toggling while loading
         if (statusLoading || activateMutation.isPending || deactivateMutation.isPending) return;
-
-        // If already in desired state, do nothing
         if (application_status === value) return;
-
-        // Optimistically update UI
         setLocalStatus(value);
         setStatusLoading(true);
-
-        // Add a fallback timeout in case mutation hangs
         if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
         statusTimeoutRef.current = setTimeout(() => {
             setStatusLoading(false);
@@ -233,11 +274,50 @@ export default function MoreTab() {
         }
     };
 
-    // Render bank details section(s)
+    // --- UI Renderers ---
+
+    // --- New: Card component for better structure ---
+    function Card({ title, children, style = {} }: { title?: string, children: React.ReactNode, style?: any }) {
+        return (
+            <View
+                style={{
+                    backgroundColor: "#fff",
+                    borderRadius: 18,
+                    padding: 18,
+                    marginBottom: 18,
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.08,
+                    shadowRadius: 8,
+                    elevation: 2,
+                    borderWidth: 1,
+                    borderColor: "#e5e7eb",
+                    width: "100%",
+                    ...style,
+                }}
+            >
+                {title && (
+                    <Text
+                        style={{
+                            fontSize: 17,
+                            fontWeight: "bold",
+                            color: "#2563eb",
+                            marginBottom: 10,
+                            letterSpacing: 0.5,
+                        }}
+                    >
+                        {title}
+                    </Text>
+                )}
+                {children}
+            </View>
+        );
+    }
+
+    // --- Bank Details Section ---
     function renderBankDetailsSection() {
         if (!user?.user_type) return null;
 
-        // Helper to render a single bank details block
         function renderSingleBankDetailsBlock(
             label: string,
             type: "admin" | "dealer" | "agent",
@@ -249,293 +329,459 @@ export default function MoreTab() {
             const noBankDetails = !details?.bank_details;
 
             return (
-                <View className="w-full mb-8" key={type}>
-                    <Text className="text-base font-semibold text-gray-500 mb-2 tracking-wider uppercase">
-                        {label}
-                    </Text>
-                    <View
-                        className="w-full rounded-xl bg-gray-50 border border-gray-200 py-4 px-3 mb-1"
-                        style={{
-                            minHeight: 60,
-                            justifyContent: "center",
-                        }}
-                    >
-                        {isBankDetailsLoading ? (
-                            <ActivityIndicator color="#6b7280" size="small" />
-                        ) : (
-                            <>
-
-                                <Text className="text-gray-800 text-base mb-2">
-                                    {details?.bank_details
-                                        ? details.bank_details
-                                        : <Text className="text-gray-400">No bank details added.</Text>
-                                    }
-                                </Text>
-                                {isEditing && (canEdit || (canAdd && noBankDetails)) ? (
-                                    <>
-                                        <TextInput
-                                            placeholder="Enter bank details"
-                                            value={bankDetailsInput}
-                                            onChangeText={setBankDetailsInput}
-                                            style={{
-                                                backgroundColor: "#f3f4f6",
-                                                borderRadius: 8,
-                                                borderWidth: 1,
-                                                borderColor: "#cbd5e1",
-                                                paddingHorizontal: 10,
-                                                paddingVertical: 8,
-                                                fontSize: 16,
-                                                marginBottom: 8,
-                                            }}
-                                            multiline
-                                            numberOfLines={3}
-                                            placeholderTextColor="#9ca3af"
-                                        />
-                                        {bankDetailsError && (
-                                            <Text className="text-red-600 text-xs mb-2">{bankDetailsError}</Text>
-                                        )}
-                                        <View style={{ flexDirection: "row", gap: 10 }}>
-                                            <TouchableOpacity
-                                                className="bg-blue-600 px-4 py-2 rounded-lg"
-                                                onPress={() => {
-                                                    if (!bankDetailsInput.trim()) {
-                                                        setBankDetailsError("Bank details required");
-                                                        return;
-                                                    }
-                                                    bankDetailsMutation.mutate({
-                                                        type,
-                                                        bank_details: bankDetailsInput.trim(),
-                                                    });
-                                                }}
-                                                activeOpacity={0.85}
-                                            >
-                                                <Text className="text-white font-semibold">Save</Text>
-                                            </TouchableOpacity>
-                                            <TouchableOpacity
-                                                className="bg-gray-200 px-4 py-2 rounded-lg"
-                                                onPress={() => {
-                                                    setEditingBankDetails(null);
-                                                    setBankDetailsInput("");
-                                                    setBankDetailsError(null);
-                                                }}
-                                                activeOpacity={0.85}
-                                            >
-                                                <Text className="text-gray-700 font-semibold">Cancel</Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    </>
+                <Card title={label} key={type}>
+                    {isBankDetailsLoading ? (
+                        <ActivityIndicator color="#2563eb" size="small" />
+                    ) : (
+                        <>
+                            <View style={{ minHeight: 40, marginBottom: 8 }}>
+                                {details?.bank_details ? (
+                                    <Text style={{ color: "#22223b", fontSize: 16, marginBottom: 2 }}>
+                                        {details.bank_details}
+                                    </Text>
                                 ) : (
-                                    (canEdit || (canAdd && noBankDetails)) && (
+                                    <Text style={{ color: "#9ca3af", fontSize: 15 }}>No bank details added.</Text>
+                                )}
+                            </View>
+                            {isEditing && (canEdit || (canAdd && noBankDetails)) ? (
+                                <>
+                                    <TextInput
+                                        placeholder="Enter bank details"
+                                        value={bankDetailsInput}
+                                        onChangeText={setBankDetailsInput}
+                                        style={{
+                                            backgroundColor: "#f3f4f6",
+                                            borderRadius: 8,
+                                            borderWidth: 1,
+                                            borderColor: "#cbd5e1",
+                                            paddingHorizontal: 12,
+                                            paddingVertical: 10,
+                                            fontSize: 16,
+                                            marginBottom: 8,
+                                            minHeight: 60,
+                                        }}
+                                        multiline
+                                        numberOfLines={3}
+                                        placeholderTextColor="#9ca3af"
+                                    />
+                                    {bankDetailsError && (
+                                        <Text style={{ color: "#dc2626", fontSize: 13, marginBottom: 6 }}>{bankDetailsError}</Text>
+                                    )}
+                                    <View style={{ flexDirection: "row", gap: 10 }}>
                                         <TouchableOpacity
-                                            className="mt-2 bg-blue-100 px-4 py-2 rounded-lg"
+                                            style={{
+                                                backgroundColor: "#2563eb",
+                                                paddingVertical: 10,
+                                                paddingHorizontal: 22,
+                                                borderRadius: 8,
+                                                marginRight: 8,
+                                            }}
                                             onPress={() => {
-                                                setEditingBankDetails(type);
-                                                setBankDetailsInput(details?.bank_details || "");
+                                                if (!bankDetailsInput.trim()) {
+                                                    setBankDetailsError("Bank details required");
+                                                    return;
+                                                }
+                                                bankDetailsMutation.mutate({
+                                                    type,
+                                                    bank_details: bankDetailsInput.trim(),
+                                                });
                                             }}
                                             activeOpacity={0.85}
                                         >
-                                            <Text className="text-blue-800 font-semibold text-center">
-                                                {details?.bank_details
-                                                    ? (canEdit ? "Edit" : "Add")
-                                                    : "Add"} {label}
-                                            </Text>
+                                            <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 15 }}>Save</Text>
                                         </TouchableOpacity>
-                                    )
-                                )}
-                            </>
-                        )}
-                    </View>
-                </View>
+                                        <TouchableOpacity
+                                            style={{
+                                                backgroundColor: "#f3f4f6",
+                                                paddingVertical: 10,
+                                                paddingHorizontal: 22,
+                                                borderRadius: 8,
+                                            }}
+                                            onPress={() => {
+                                                setEditingBankDetails(null);
+                                                setBankDetailsInput("");
+                                                setBankDetailsError(null);
+                                            }}
+                                            activeOpacity={0.85}
+                                        >
+                                            <Text style={{ color: "#22223b", fontWeight: "bold", fontSize: 15 }}>Cancel</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </>
+                            ) : (
+                                (canEdit || (canAdd && noBankDetails)) && (
+                                    <TouchableOpacity
+                                        style={{
+                                            marginTop: 8,
+                                            backgroundColor: "#e0e7ef",
+                                            paddingVertical: 9,
+                                            borderRadius: 8,
+                                            alignItems: "center",
+                                        }}
+                                        onPress={() => {
+                                            setEditingBankDetails(type);
+                                            setBankDetailsInput(details?.bank_details || "");
+                                        }}
+                                        activeOpacity={0.85}
+                                    >
+                                        <Text style={{ color: "#2563eb", fontWeight: "bold", fontSize: 15 }}>
+                                            {details?.bank_details
+                                                ? (canEdit ? "Edit" : "Add")
+                                                : "Add"} {label}
+                                        </Text>
+                                    </TouchableOpacity>
+                                )
+                            )}
+                        </>
+                    )}
+                </Card>
             );
         }
 
-        // Render logic based on user type and permissions
         if (user.user_type === "ADMIN") {
-            // Admin can edit their own bank details and view them
             return renderSingleBankDetailsBlock(
                 "My Bank Details",
                 "admin",
                 bankDetailsData?.admin_bank_details,
-                true, // canEdit
-                true // canAdd (allow add if not present)
+                true,
+                true
             );
         } else if (user.user_type === "DEALER") {
-            // Dealer can only edit and view dealer bank details, and view admin bank details
             return (
                 <>
                     {renderSingleBankDetailsBlock(
                         "Admin Bank Details",
                         "admin",
                         bankDetailsData?.admin_bank_details,
-                        false, // canEdit
-                        false // canAdd
+                        false,
+                        false
                     )}
                     {renderSingleBankDetailsBlock(
                         "Dealer Bank Details",
                         "dealer",
                         bankDetailsData?.dealer_bank_details,
-                        true, // canEdit
-                        true // canAdd (allow add if not present)
+                        true,
+                        true
                     )}
                 </>
             );
         }
-        // else if (user.user_type === "AGENT") {
-        //     // Agent can only add (if not present) and view agent bank details, and view dealer bank details
-        //     return (
-        //         <>
-        //             {renderSingleBankDetailsBlock(
-        //                 "Dealer Bank Details",
-        //                 "dealer",
-        //                 bankDetailsData?.dealer_bank_details,
-        //                 false, // canEdit
-        //                 false // canAdd
-        //             )}
-        //             {renderSingleBankDetailsBlock(
-        //                 "Agent Bank Details",
-        //                 "agent",
-        //                 bankDetailsData?.agent_bank_details,
-        //                 false, // canEdit
-        //                 true // canAdd (can add if not present)
-        //             )}
-        //         </>
-        //     );
-        // }
         return null;
     }
 
-    // Render balance for agent and dealer
+    // --- Prize Config Section ---
+    function renderPrizeConfigSection() {
+        if (user?.user_type !== "ADMIN") return null;
+
+        if (isEditingPrizeConfig && prizeConfigForm) {
+            return (
+                <Card title="Edit Prize Configuration" key="prize-config-edit">
+                    {PRIZE_CONFIG_FIELDS.map(({ key, label }) => (
+                        <View key={key} style={{ marginBottom: 12 }}>
+                            <Text style={{ color: "#22223b", fontSize: 15, marginBottom: 2 }}>{label}</Text>
+                            <TextInput
+                                value={prizeConfigForm[key]?.toString() ?? ""}
+                                onChangeText={val => {
+                                    setPrizeConfigForm(prev =>
+                                        prev
+                                            ? { ...prev, [key]: Number(val.replace(/[^0-9]/g, "")) }
+                                            : prev
+                                    );
+                                }}
+                                keyboardType="numeric"
+                                style={{
+                                    backgroundColor: "#f3f4f6",
+                                    borderRadius: 8,
+                                    borderWidth: 1,
+                                    borderColor: "#cbd5e1",
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 10,
+                                    fontSize: 16,
+                                }}
+                                placeholder={`Enter ${label}`}
+                                placeholderTextColor="#9ca3af"
+                            />
+                        </View>
+                    ))}
+                    {prizeConfigError && (
+                        <Text style={{ color: "#dc2626", fontSize: 13, marginBottom: 6 }}>{prizeConfigError}</Text>
+                    )}
+                    <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
+                        <TouchableOpacity
+                            style={{
+                                backgroundColor: "#2563eb",
+                                paddingVertical: 10,
+                                paddingHorizontal: 22,
+                                borderRadius: 8,
+                                marginRight: 8,
+                            }}
+                            onPress={() => {
+                                if (
+                                    !prizeConfigForm ||
+                                    PRIZE_CONFIG_FIELDS.some(
+                                        ({ key }) =>
+                                            prizeConfigForm[key] === undefined ||
+                                            prizeConfigForm[key] === null ||
+                                            isNaN(Number(prizeConfigForm[key]))
+                                    )
+                                ) {
+                                    setPrizeConfigError("All fields are required and must be numbers");
+                                    return;
+                                }
+                                setPrizeConfigError(null);
+                                prizeConfigMutation(prizeConfigForm);
+                            }}
+                            activeOpacity={0.85}
+                            disabled={isPrizeConfigSaving}
+                        >
+                            {isPrizeConfigSaving ? (
+                                <ActivityIndicator color="#fff" size="small" />
+                            ) : (
+                                <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 15 }}>Save</Text>
+                            )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={{
+                                backgroundColor: "#f3f4f6",
+                                paddingVertical: 10,
+                                paddingHorizontal: 22,
+                                borderRadius: 8,
+                            }}
+                            onPress={() => {
+                                setIsEditingPrizeConfig(false);
+                                setPrizeConfigError(null);
+                            }}
+                            activeOpacity={0.85}
+                            disabled={isPrizeConfigSaving}
+                        >
+                            <Text style={{ color: "#22223b", fontWeight: "bold", fontSize: 15 }}>Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </Card>
+            );
+        }
+
+        return (
+            <Card title="Prize Configuration" key="prize-config">
+                {isPrizeConfigLoading ? (
+                    <ActivityIndicator color="#2563eb" size="small" />
+                ) : prizeConfig ? (
+                    <>
+                        {PRIZE_CONFIG_FIELDS.map(({ key, label }) => (
+                            <View key={key} style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+                                <Text style={{ color: "#22223b", fontSize: 15 }}>{label}</Text>
+                                <Text style={{ color: "#2563eb", fontWeight: "bold", fontSize: 15 }}>
+                                    ₹ {prizeConfig[key]?.toLocaleString("en-IN")}
+                                </Text>
+                            </View>
+                        ))}
+                        <TouchableOpacity
+                            style={{
+                                marginTop: 10,
+                                backgroundColor: "#e0e7ef",
+                                paddingVertical: 10,
+                                borderRadius: 8,
+                                alignItems: "center",
+                            }}
+                            onPress={() => {
+                                setIsEditingPrizeConfig(true);
+                                setPrizeConfigForm(prizeConfig);
+                                setPrizeConfigError(null);
+                            }}
+                            activeOpacity={0.85}
+                        >
+                            <Text style={{ color: "#2563eb", fontWeight: "bold", fontSize: 15 }}>
+                                Edit Prize Configuration
+                            </Text>
+                        </TouchableOpacity>
+                    </>
+                ) : (
+                    <Text style={{ color: "#9ca3af", fontSize: 15 }}>No prize configuration found.</Text>
+                )}
+            </Card>
+        );
+    }
+
+    // --- My Balance Section ---
     function renderMyBalanceSection() {
         if (user?.user_type === "AGENT" || user?.user_type === "DEALER") {
             return (
-                <View className="w-full mb-8" key="my-balance">
-                    <Text className="text-base font-semibold text-gray-500 mb-2 tracking-wider uppercase">
-                        My Balance
-                    </Text>
-                    <View
-                        className="w-full rounded-xl bg-gray-50 border border-gray-200 py-4 px-3 mb-1"
-                        style={{
-                            minHeight: 60,
-                            justifyContent: "center",
-                        }}
-                    >
-                        {ismyBalanceLoading ? (
-                            <ActivityIndicator color="#6b7280" size="small" />
-                        ) : (
-                            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                                <Text className="text-gray-800 text-2xl font-bold">
-                                    ₹ {myBalance?.balance_amount?.toLocaleString("en-IN") ?? "0"}
-                                </Text>
-                                <TouchableOpacity
-                                    onPress={() => refetchMyBalance()}
-                                    style={{
-                                        marginLeft: 16,
-                                        backgroundColor: "#e0e7ef",
-                                        borderRadius: 8,
-                                        paddingVertical: 6,
-                                        paddingHorizontal: 14,
-                                        flexDirection: "row",
-                                        alignItems: "center",
-                                    }}
-                                    activeOpacity={0.8}
-                                    disabled={isFetchingMyBalance}
-                                >
-                                    {isFetchingMyBalance ? (
-                                        <ActivityIndicator size="small" color="#2563eb" />
-                                    ) : (
-                                        <Text style={{ color: "#2563eb", fontWeight: "bold", fontSize: 14 }}>
-                                            Refresh
-                                        </Text>
-                                    )}
-                                </TouchableOpacity>
-                            </View>
-                        )}
-                    </View>
-                </View>
+                <Card title="My Balance" key="my-balance">
+                    {ismyBalanceLoading ? (
+                        <ActivityIndicator color="#2563eb" size="small" />
+                    ) : (
+                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                            <Text style={{ color: "#22223b", fontSize: 24, fontWeight: "bold" }}>
+                                ₹ {myBalance?.balance_amount?.toLocaleString("en-IN") ?? "0"}
+                            </Text>
+                            <TouchableOpacity
+                                onPress={() => refetchMyBalance()}
+                                style={{
+                                    marginLeft: 16,
+                                    backgroundColor: "#e0e7ef",
+                                    borderRadius: 8,
+                                    paddingVertical: 7,
+                                    paddingHorizontal: 18,
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                }}
+                                activeOpacity={0.8}
+                                disabled={isFetchingMyBalance}
+                            >
+                                {isFetchingMyBalance ? (
+                                    <ActivityIndicator size="small" color="#2563eb" />
+                                ) : (
+                                    <Text style={{ color: "#2563eb", fontWeight: "bold", fontSize: 15 }}>
+                                        Refresh
+                                    </Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                </Card>
             );
         }
         return null;
     }
 
-    // Determine the status to show in the UI (localStatus if toggling, else from store)
-    const effectiveStatus = localStatus !== null ? localStatus : application_status;
+    // --- Admin Tabs ---
+    function renderAdminTabs() {
+        if (user?.user_type !== "ADMIN") return null;
+        const tabList = [
+            { key: "bank", label: "Bank Details" },
+            { key: "prize", label: "Prize Config" },
+            { key: "toggle", label: "Activate" },
+        ] as const;
+        return (
+            <View
+                style={{
+                    flexDirection: "row",
+                    marginBottom: 18,
+                    width: "100%",
+                    justifyContent: "space-between",
+                    backgroundColor: "#f3f4f6",
+                    borderRadius: 12,
+                    padding: 4,
+                }}
+            >
+                {tabList.map(tab => (
+                    <TouchableOpacity
+                        key={tab.key}
+                        style={{
+                            flex: 1,
+                            backgroundColor: activeSection === tab.key ? "#2563eb" : "transparent",
+                            borderRadius: 8,
+                            paddingVertical: 10,
+                            marginHorizontal: 2,
+                        }}
+                        onPress={() => setActiveSection(tab.key)}
+                        activeOpacity={0.85}
+                    >
+                        <Text
+                            style={{
+                                color: activeSection === tab.key ? "#fff" : "#2563eb",
+                                fontWeight: "bold",
+                                textAlign: "center",
+                                fontSize: 16,
+                                letterSpacing: 0.2,
+                            }}
+                        >
+                            {tab.label}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
+        );
+    }
 
+    // --- Admin Toggle Section ---
+    function renderAdminToggleSection() {
+        if (user?.user_type !== "ADMIN") return null;
+        const effectiveStatus = localStatus !== null ? localStatus : application_status;
+        return (
+            <Card>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <Text
+                        style={{
+                            fontSize: 16,
+                            fontWeight: "bold",
+                            color: effectiveStatus ? "#22c55e" : "#9ca3af",
+                            letterSpacing: 1,
+                        }}
+                    >
+                        {effectiveStatus ? "Active" : "Inactive"}
+                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                        <Switch
+                            value={effectiveStatus}
+                            onValueChange={handleToggle}
+                            disabled={
+                                statusLoading ||
+                                activateMutation.isPending ||
+                                deactivateMutation.isPending
+                            }
+                            thumbColor={effectiveStatus ? "#4ade80" : "#ffffff"}
+                            trackColor={{ false: "#d1d5db", true: "#bbf7d0" }}
+                            ios_backgroundColor="#d1d5db"
+                            style={{
+                                transform: [{ scaleX: 1.15 }, { scaleY: 1.15 }],
+                                marginLeft: 6,
+                            }}
+                        />
+                        {statusLoading && (
+                            <ActivityIndicator
+                                size="small"
+                                color={effectiveStatus ? "#4ade80" : "#d1d5db"}
+                                style={{ marginLeft: 10 }}
+                            />
+                        )}
+                    </View>
+                </View>
+            </Card>
+        );
+    }
+
+    // --- Main Render ---
     return (
         <KeyboardAvoidingView
-            style={{ flex: 1 }}
+            style={{ flex: 1, backgroundColor: "#f3f4f6" }}
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
         >
             <ScrollView
-                className="flex-1 px-4 py-8 "
+                style={{ flex: 1, paddingHorizontal: 0, backgroundColor: "#f3f4f6" }}
                 contentContainerStyle={{
-                    justifyContent: "center",
+                    justifyContent: "flex-start",
                     alignItems: "center",
                     flexGrow: 1,
+                    paddingTop: 28,
+                    paddingBottom: 44,
+                    paddingHorizontal: 10,
                 }}
                 keyboardShouldPersistTaps="handled"
             >
                 <View
-                    className="w-full max-w-sm bg-white pb-44 rounded-3xl shadow-lg border border-gray-200"
                     style={{
-                        paddingVertical: 28,
-                        paddingHorizontal: 20,
+                        width: "100%",
+                        maxWidth: 420,
                         alignItems: "center",
-                        elevation: 6,
                     }}
                 >
                     {/* My Balance Section for Agent/Dealer */}
                     {renderMyBalanceSection()}
 
-                    {/* Bank Details Section */}
-                    {renderBankDetailsSection()}
+                    {/* Admin tab navigation */}
+                    {user?.user_type === "ADMIN" && renderAdminTabs()}
 
-                    {/* Toggle */}
-                    {user?.user_type === "ADMIN" && (
-                        <View
-                            className="flex-row items-center mt-2"
-                            style={{
-                                backgroundColor: "#f3f4f6",
-                                borderRadius: 16,
-                                paddingVertical: 10,
-                                paddingHorizontal: 18,
-                            }}
-                        >
-                            <Text
-                                className={`text-base font-semibold mr-4 ${effectiveStatus ? "text-green-600" : "text-gray-500"
-                                    }`}
-                                style={{
-                                    letterSpacing: 1,
-                                    minWidth: 70,
-                                    textAlign: "right",
-                                }}
-                            >
-                                {effectiveStatus ? "Active" : "Inactive"}
-                            </Text>
-                            <Switch
-                                value={effectiveStatus}
-                                onValueChange={handleToggle}
-                                disabled={
-                                    statusLoading ||
-                                    activateMutation.isPending ||
-                                    deactivateMutation.isPending
-                                }
-                                thumbColor={effectiveStatus ? "#4ade80" : "#ffffff"}
-                                trackColor={{ false: "#d1d5db", true: "#bbf7d0" }}
-                                ios_backgroundColor="#d1d5db"
-                                style={{
-                                    transform: [{ scaleX: 1.15 }, { scaleY: 1.15 }],
-                                    marginLeft: 6,
-                                }}
-                            />
-                            {statusLoading && (
-                                <ActivityIndicator
-                                    size="small"
-                                    color={effectiveStatus ? "#4ade80" : "#d1d5db"}
-                                    style={{ marginLeft: 10 }}
-                                />
-                            )}
-                        </View>
+                    {/* Section content based on tab for admin */}
+                    {user?.user_type === "ADMIN" ? (
+                        <>
+                            {activeSection === "bank" && renderBankDetailsSection()}
+                            {activeSection === "prize" && renderPrizeConfigSection()}
+                            {activeSection === "toggle" && renderAdminToggleSection()}
+                        </>
+                    ) : (
+                        renderBankDetailsSection()
                     )}
                 </View>
             </ScrollView>

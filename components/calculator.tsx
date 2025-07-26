@@ -1,6 +1,6 @@
 import { useCalculator } from "@/hooks/use-calculator";
 import React from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 
 const Calculator = () => {
   const {
@@ -11,10 +11,20 @@ const Calculator = () => {
     handleEqual,
     handleDelete,
     pinInput,
+    isLoading,
+    isError,
+    error
   } = useCalculator();
 
   return (
     <View className="flex-1 bg-gray-900 p-4 justify-end mb-12">
+      {isError && (
+        <View className="bg-red-100 border border-red-400 rounded-lg px-4 py-3 mb-4">
+          <Text className="text-red-700 text-base font-semibold text-center">
+            {error?.message || "Failed to fetch equation data."}
+          </Text>
+        </View>
+      )}
       <View className="mb-6">
         <Text className="text-white text-right text-5xl font-bold">
           {display || pinInput}
@@ -142,12 +152,20 @@ const Calculator = () => {
         >
           <Text className="text-white text-2xl font-bold">.</Text>
         </TouchableOpacity>
+
+        {/* 2. UPDATE THE EQUALS BUTTON */}
         <TouchableOpacity
-          className="flex-2 bg-primary-500 rounded-full p-6 items-center justify-center"
+          className={`flex-2 rounded-full p-6 items-center justify-center ${isError ? "bg-red-500" : "bg-primary-500"
+            }`}
           style={{ flex: 2 }}
           onPress={handleEqual}
+          disabled={isLoading}
         >
-          <Text className="text-white text-2xl font-bold">=</Text>
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#ffffff" />
+          ) : (
+            <Text className="text-white text-2xl font-bold">=</Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
