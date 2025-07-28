@@ -1,4 +1,4 @@
-package com.luckybh.agnet
+package com.luckybh.dealer
 
 import android.app.Application
 import android.content.res.Configuration

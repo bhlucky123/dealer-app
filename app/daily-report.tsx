@@ -40,11 +40,11 @@ const DailyReport = () => {
     const params: Record<string, any> = {};
     if (fromDate) params.date_time__gte = fromDate.toISOString();
     if (toDate) params.date_time__lte = toDate.toISOString();
-    if (selectedDraw?.id && !allGames) params.draw_session__draw__id = selectedDraw.id;
+    if (selectedDraw?.id && !allGames) params.draw_session__draw = selectedDraw.id;
     return params;
   };
 
-
+ 
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["/draw-booking/daily-report", buildQuery()],

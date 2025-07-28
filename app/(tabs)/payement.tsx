@@ -2,7 +2,7 @@ import { useAuthStore } from "@/store/auth";
 import api from "@/utils/axios";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -11,6 +11,7 @@ import {
     Modal,
     Platform,
     Pressable,
+    RefreshControl,
     ScrollView,
     Text,
     TextInput,
@@ -68,8 +69,13 @@ export default function PaymentTab() {
     const [modalVisible, setModalVisible] = useState(false);
     const [modalItem, setModalItem] = useState<AgentOrDealer | null>(null);
     const [modalAmount, setModalAmount] = useState<string>("");
-    const [modalDate, setModalDate] = useState<string>("");
+    // Set default date to today in yyyy-mm-dd format
+    const todayDateString = formatDateServer(new Date());
+    const [modalDate, setModalDate] = useState<string>(todayDateString);
     const [showModalDatePicker, setShowModalDatePicker] = useState(false);
+
+    // Pull-to-refresh state
+    const [refreshing, setRefreshing] = useState(false);
 
     // Fetch dealers with pending balance (for ADMIN)
     const {
@@ -82,8 +88,6 @@ export default function PaymentTab() {
         enabled: user?.user_type === "ADMIN",
     });
 
-
-
     // Fetch agents with pending balance (for DEALER)
     const {
         data: agentsData,
@@ -93,7 +97,6 @@ export default function PaymentTab() {
         queryKey: ["/draw-payment/agents-with-pending-balance"],
         queryFn: () => api.get(`/draw-payment/agents-with-pending-balance/`).then(res => res.data),
         enabled: user?.user_type === "DEALER",
-
     });
 
     console.log("agentsData", agentsData);
@@ -120,11 +123,15 @@ export default function PaymentTab() {
             ToastAndroid.show("Dealer balance updated successfully", ToastAndroid.SHORT);
         },
         onError: (error: any) => {
+            console.log("err", error);
+
             let msg = "Failed to update dealer balance";
             if (error?.response?.data?.date_received) {
                 msg = error.response.data.date_received.join("\n");
             } else if (error?.response?.data?.dealer) {
                 msg = error.response.data.dealer.join("\n");
+            } else if (error?.message?.error) {
+                msg = error?.message?.error;
             }
             Alert.alert("Error", msg);
         }
@@ -152,23 +159,26 @@ export default function PaymentTab() {
             ToastAndroid.show("Agent balance updated successfully", ToastAndroid.SHORT);
         },
         onError: (error: any) => {
+
             let msg = "Failed to update agent balance";
             if (error?.response?.data?.date_received) {
                 msg = error.response.data.date_received.join("\n");
             } else if (error?.response?.data?.agent) {
                 msg = error.response.data.agent.join("\n");
+            } else if (error?.message?.error) {
+                msg = error?.message?.error;
             }
             Alert.alert("Error", msg);
         }
     });
 
     // Open modal for a specific agent/dealer
-    const openUpdateModal = (item: AgentOrDealer) => {
+    const openUpdateModal = useCallback((item: AgentOrDealer) => {
         setModalItem(item);
         setModalAmount("");
-        setModalDate("");
+        setModalDate(todayDateString); // Set to today by default
         setModalVisible(true);
-    };
+    }, [todayDateString]);
 
     // Handler for modal date picker
     const handleModalDateChange = (_event: any, selectedDate?: Date) => {
@@ -198,6 +208,21 @@ export default function PaymentTab() {
         } else if (user?.user_type === "DEALER") {
             agentToDealerPaymentMutation.mutate({ agentId: modalItem.id, amount, date_received });
         }
+    };
+
+    // Handler for pull-to-refresh
+    const onRefresh = async () => {
+        setRefreshing(true);
+        try {
+            if (user?.user_type === "ADMIN") {
+                await refetchDealers();
+            } else if (user?.user_type === "DEALER") {
+                await refetchAgents();
+            }
+        } catch (e) {
+            // Optionally handle error
+        }
+        setRefreshing(false);
     };
 
     // Render list of agents or dealers
@@ -283,6 +308,14 @@ export default function PaymentTab() {
                     keyExtractor={(item, index) => item?.id?.toString() + index}
                     renderItem={renderItem}
                     contentContainerStyle={{ paddingBottom: 32 }}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            colors={["#2563eb"]}
+                            tintColor="#2563eb"
+                        />
+                    }
                 />
             )}
 

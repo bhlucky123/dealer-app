@@ -73,7 +73,11 @@ const DealerForm = ({
 
     const validate = () => {
         const newErrors: Record<string, string> = {};
-        if (!form.username.trim()) newErrors.username = "Username is required";
+        if (!form.username.trim()) {
+            newErrors.username = "Username is required";
+        } else if (/\s/.test(form.username)) {
+            newErrors.username = "Username should not contain spaces";
+        }
         // Password is only required for new creations
         if (!defaultValues?.id && !form.password.trim())
             newErrors.password = "Password is required";
@@ -379,17 +383,53 @@ const DealerCard = ({ item, onEdit, onDelete }: { item: Dealer; onEdit: () => vo
                 <View className="flex-row items-center mb-2">
                     <Text className="text-xs text-gray-500 mr-2">💰</Text>
                     <Text className="text-sm text-gray-700 font-medium flex-1">Commission:</Text>
-                    <Text className="text-sm text-gray-800 font-bold">₹{item.commission}</Text>
+                    <Text className="text-sm text-gray-800 font-bold">
+                        {(() => {
+                            const num = Number(item.commission);
+                            if (!isNaN(num) && num >= 100000) {
+                                if (num >= 10000000) {
+                                    return `₹${(num / 10000000).toFixed(2)} Cr`;
+                                } else {
+                                    return `₹${(num / 100000).toFixed(2)} L`;
+                                }
+                            }
+                            return `₹${item.commission}`;
+                        })()}
+                    </Text>
                 </View>
                 <View className="flex-row items-center mb-2">
                     <Text className="text-xs text-gray-500 mr-2">🎯</Text>
                     <Text className="text-sm text-gray-700 font-medium flex-1">Single Digit Comm.:</Text>
-                    <Text className="text-sm text-gray-800 font-bold">₹{item.single_digit_number_commission}</Text>
+                    <Text className="text-sm text-gray-800 font-bold">
+                        {(() => {
+                            const num = Number(item.single_digit_number_commission);
+                            if (!isNaN(num) && num >= 100000) {
+                                if (num >= 10000000) {
+                                    return `₹${(num / 10000000).toFixed(2)} Cr`;
+                                } else {
+                                    return `₹${(num / 100000).toFixed(2)} L`;
+                                }
+                            }
+                            return `₹${item.single_digit_number_commission}`;
+                        })()}
+                    </Text>
                 </View>
                 <View className="flex-row items-center">
                     <Text className="text-xs text-gray-500 mr-2">💲</Text>
                     <Text className="text-sm text-gray-700 font-medium flex-1">Cap Amount:</Text>
-                    <Text className="text-sm text-gray-800 font-bold">{item.cap_amount}</Text>
+                    <Text className="text-sm text-gray-800 font-bold">
+                        {(() => {
+                            const num = Number(item.cap_amount);
+                            if (!isNaN(num) && num >= 100000) {
+                                if (num >= 10000000) {
+                                    return `₹${(num / 10000000).toFixed(2)} Cr`;
+                                } else {
+                                    return `₹${(num / 100000).toFixed(2)} L`;
+                                }
+                            }
+                            return `${item.cap_amount}`;
+                        })()}
+                    </Text>
                 </View>
             </View>
         </View >
@@ -425,6 +465,21 @@ export default function DealerManagement() {
                 queryClient.setQueryData<any[]>(["dealers"], (old) => [newDealer, ...(old || [])]);
                 setShowForm(false);
             },
+            onError: (error) => {
+                console.log("error", error);
+                // Try to extract a field error message
+                let errorMsg = "Failed to create dealer.";
+                if (error?.message && typeof error.message === "object") {
+                    // Find the first field with an error message
+                    const field = Object.keys(error.message)[0];
+                    if (field && Array.isArray(error.message[field]) && error.message[field][0]) {
+                        errorMsg = error.message[field][0];
+                    }
+                } else if (typeof error?.message === "string") {
+                    errorMsg = error.message;
+                }
+                Alert.alert("Error", errorMsg);
+            }
         });
     };
 
@@ -449,9 +504,7 @@ export default function DealerManagement() {
                 onPress: () => {
                     deleteDealer({ id }, {
                         onSuccess: () => {
-                            queryClient.setQueryData<any[]>(["dealers"], (old) =>
-                                old?.filter((d) => d.id !== parseInt(id)) || []
-                            );
+                            refetch()
                         },
                     });
                 },
