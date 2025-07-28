@@ -24,7 +24,7 @@ export const useCalculator = () => {
         `${config.apiBaseUrl}/user/get-initial-user-creds/`,
         {
           headers: {
-            "User-Type": config.userType,
+            "User-Type": config.userType
           },
         }
       ).then((res) => res.json());

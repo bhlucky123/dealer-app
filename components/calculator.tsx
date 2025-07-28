@@ -21,7 +21,7 @@ const Calculator = () => {
       {isError && (
         <View className="bg-red-100 border border-red-400 rounded-lg px-4 py-3 mb-4">
           <Text className="text-red-700 text-base font-semibold text-center">
-            {error?.message || "Failed to fetch equation data."}
+            {JSON.stringify(error) || "Failed to fetch equation data."}
           </Text>
         </View>
       )}

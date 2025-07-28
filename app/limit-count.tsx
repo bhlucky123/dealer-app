@@ -8,6 +8,7 @@ import {
     FlatList,
     KeyboardAvoidingView,
     Platform,
+    SafeAreaView,
     Text,
     TextInput,
     ToastAndroid,
@@ -157,10 +158,16 @@ const LimitCountScreen = () => {
             ToastAndroid.show("Limit count added successfully.", ToastAndroid.SHORT);
         },
         onError: (err: any) => {
+            console.log("err",err);
+            
             setIsSubmitting(false);
+            let errorMsg = err?.message?.non_field_errors?.[0] || "Failed to add limit count.";
+            if (errorMsg === "The fields draw, number must make a unique set.") {
+                errorMsg = "This number is already limited for the selected draw.";
+            }
             Alert.alert(
                 "Error",
-                err?.response?.data?.detail || "Failed to add limit count."
+                errorMsg
             );
         },
     });
@@ -178,6 +185,8 @@ const LimitCountScreen = () => {
             ToastAndroid.show("Limit count updated.", ToastAndroid.SHORT);
         },
         onError: (err: any) => {
+            console.log("err",err);
+            
             Alert.alert(
                 "Error",
                 err?.response?.data?.detail || "Failed to update limit count."
@@ -303,7 +312,7 @@ const LimitCountScreen = () => {
             className="flex-1 bg-blue-50"
             behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-            <View className="flex-1 p-4 bg-blue-50">
+            <SafeAreaView className="flex-1 p-4 mb-24 pb-24 bg-blue-50">
                 {isLoading ? (
                     <ActivityIndicator size="large" style={{ marginTop: 32 }} color="#2563eb" />
                 ) : error ? (
@@ -328,7 +337,7 @@ const LimitCountScreen = () => {
                         />
                     </View>
                 )}
-            </View>
+            </SafeAreaView>
         </KeyboardAvoidingView>
     );
 };

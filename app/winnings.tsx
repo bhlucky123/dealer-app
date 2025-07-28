@@ -360,22 +360,23 @@ const WinnersReportScreen = () => {
                                             "px-2 py-2 border-b border-gray-100",
                                             index % 2 === 0 ? "bg-white" : "bg-gray-50"
                                         ].join(" ")}
-                                      
+
                                     >
                                         <View className="flex-row items-center">
                                             {/* Date */}
                                             <View className="flex-[1.1]">
-                                                <Text className="text-xs text-gray-700 font-semibold">
+                                                <View>
                                                     {item.booking_datetime && (
-                                                        <>
-                                                            {formatDateToDDMMYYYY(item.booking_datetime)}
-                                                            {" "}
+                                                        <View className="flex">
+                                                            <Text className="text-xs text-gray-700 font-semibold">
+                                                                {formatDateToDDMMYYYY(item.booking_datetime)}
+                                                            </Text>
                                                             <Text className="text-[10px] text-gray-500">
                                                                 {new Date(item.booking_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                             </Text>
-                                                        </>
+                                                        </View>
                                                     )}
-                                                </Text>
+                                                </View>
                                             </View>
                                             {/* Number */}
                                             <View className="flex-1 items-center">

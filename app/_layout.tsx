@@ -158,6 +158,22 @@ export default function RootLayout() {
             }}
           />
 
+          <Stack.Screen
+            name="my-commission"
+            options={{
+              headerShown: true,
+              title: "My Commission",
+              headerStyle: { backgroundColor: themeColors.headerBackground },
+              headerTitleStyle: {
+                color: themeColors.headerTitle,
+                fontWeight: "bold",
+                fontSize: 22,
+              },
+              headerTintColor: themeColors.headerTint,
+              headerShadowVisible: false,
+            }}
+          />
+
           <Stack.Screen name="agent/[agentId]" options={{
             headerShown: false,
           }} />

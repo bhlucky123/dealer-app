@@ -79,6 +79,20 @@ const OptionsPage = () => {
           </TouchableOpacity>
         )
       }
+
+{
+        (user?.user_type === "AGENT" || user?.user_type === "DEALER") && (
+          <TouchableOpacity
+            className="bg-gray-100 rounded-lg py-4 px-4 mb-3"
+            activeOpacity={0.7}
+            onPress={() => {
+              router.push("/my-commission");
+            }}
+          >
+            <Text className="text-center text-base text-black">My Commission</Text>
+          </TouchableOpacity>
+        )
+      }
     </View>
   );
 };
