@@ -5,8 +5,8 @@ import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
 import { formatDateDDMMYYYY } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, AlertTriangle, Calendar, Pencil, Plus, X } from "lucide-react-native";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { AlertCircle, AlertTriangle, Ban, Calendar, Pencil, Plus, X } from "lucide-react-native";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
@@ -100,18 +100,59 @@ const ResultPage: React.FC = () => {
 
     const filterDateString = formatDateServer(filterDate);
 
-    const { data: rawData, isLoading, error, refetch } = useQuery<DrawResult[] | null>({
+    console.log("selectedDraw?.id", selectedDraw?.id, "filterDateString", filterDateString);
+
+    const { data: rawData, isLoading, error, refetch } = useQuery<DrawResult[] | { skipped: boolean } | null>({
         queryKey: ["/draw-result/result/", selectedDraw?.id, filterDateString],
         queryFn: async () => {
             const res = await api.get(
                 `/draw-result/result/?draw_session__draw__id=${selectedDraw?.id}&draw_session__session_date=${filterDateString ?? ""}`
             );
+            console.log("res", res);
+
             return res.data;
         },
         enabled: !!selectedDraw?.id,
     });
 
-    const data = rawData?.[0];
+    // Handle skipped state
+    const isSkipped = !!rawData && typeof rawData === "object" && !Array.isArray(rawData) && (rawData as any).skipped === true;
+    const data = !isSkipped && Array.isArray(rawData) ? rawData?.[0] : undefined;
+
+    console.log("errpr", error, "rawData", rawData);
+
+    // Add skip state
+    const [skipError, setSkipError] = useState<string | null>(null);
+    const [skipLoading, setSkipLoading] = useState<boolean>(false);
+
+    const skipDrawSessionMutation = useMutation({
+        mutationFn: (payload: { draw_id: number; session_date: string }) => {
+            return api.post("/draw-result/skip-draw-session/", payload);
+        },
+        onError: (error: any) => {
+            console.log("err", error);
+
+            // Handle the error here
+            let errorMessage = "Failed to skip draw session.";
+            // Handle the specific error structure: { message: { message: "Draw session is already completed" }, status: 400 }
+            if (error?.response?.data?.detail) {
+                errorMessage = error.response.data.detail;
+            } else if (
+                error?.response?.data?.message &&
+                typeof error.response.data.message === "string"
+            ) {
+                errorMessage = error.response.data.message;
+            } else if (
+                error?.message &&
+                typeof error.message === "string"
+            ) {
+                errorMessage = error.message;
+            } else if (typeof error === "string") {
+                errorMessage = error;
+            }
+            setSkipError(errorMessage);
+        }
+    });
 
     // ------------------- helpers -------------------
     const handleFormSubmit = async (resultData: any) => {
@@ -159,6 +200,58 @@ const ResultPage: React.FC = () => {
         }
     };
 
+    // Handle skip result
+    const handleSkipResult = async () => {
+        setSkipError(null);
+        setSkipLoading(true);
+        if (!selectedDraw?.id || !filterDateString) {
+            setSkipError("Draw or date not selected.");
+            setSkipLoading(false);
+            return;
+        }
+        Alert.alert(
+            "Skip Result",
+            "Are you sure you want to skip the result for this draw and date? This action cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel", onPress: () => setSkipLoading(false) },
+                {
+                    text: "Skip",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            console.log("selectedDraw.id", selectedDraw.id);
+                            console.log("filterDateString", filterDateString);
+
+                            await skipDrawSessionMutation.mutateAsync({
+                                draw_id: selectedDraw.id,
+                                session_date: filterDateString,
+                            });
+                            setSkipLoading(false);
+                            refetch();
+                            Alert.alert("Skipped", "Result has been marked as skipped for this draw and date.");
+                        } catch (err: any) {
+                            // Handle error from mutation
+                            let errorMsg = "Failed to skip result.";
+                            if (err?.response?.data?.detail) {
+                                errorMsg = err.response.data.detail;
+                            } else if (typeof err?.message === "string") {
+                                errorMsg = err.message;
+                            } else if (typeof err === "string") {
+                                errorMsg = err;
+                            } else if (typeof err === "object" && err !== null && "message" in err && typeof err.message === "object") {
+                                // If err.message is an object, try to stringify it
+                                errorMsg = JSON.stringify(err.message);
+                            }
+                            setSkipError(errorMsg);
+                            setSkipLoading(false);
+                            Alert.alert("Error", typeof errorMsg === "string" ? errorMsg : "Failed to skip result.");
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     // ------------------- states -------------------
     if (!selectedDraw?.id) {
         return (
@@ -166,6 +259,55 @@ const ResultPage: React.FC = () => {
                 <AlertCircle size={48} color="#a1a1aa" />
                 <Text className="mt-3 text-lg text-gray-500 font-semibold">No draw selected</Text>
             </View>
+        );
+    }
+
+    // If skipped, show skipped message and do not allow add/edit/skip
+    if (isSkipped) {
+        return (
+            <ScrollView className="flex-1">
+                {/* Date filter */}
+                <View className="px-4 pt-4 flex-row items-end justify-between">
+                    {/* Date filter section */}
+                    <View className="flex-1 mr-4">
+                        <Text className="text-xs font-semibold text-gray-600 mb-1 ml-1 tracking-wider">
+                            Date
+                        </Text>
+                        <TouchableOpacity
+                            onPress={() => setShowDatePicker(true)}
+                            className="flex-row items-center justify-between border border-gray-300 rounded-xl px-4 py-2 bg-white shadow-sm"
+                            activeOpacity={0.85}
+                        >
+                            <Text className="text-base text-gray-800 font-medium">
+                                {formatDateDDMMYYYY(filterDate || new Date())}
+                            </Text>
+                            <View className="ml-2">
+                                <Calendar size={20} color="#2563eb" />
+                            </View>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+                <View className="flex-1 items-center justify-center bg-gray-50 py-16">
+                    <Ban size={48} color="#9ca3af" />
+                    <Text className="mt-4 text-lg font-semibold text-gray-700 text-center">
+                        This result has been skipped for the selected date.
+                    </Text>
+                    <Text className="mt-2 text-base text-gray-500 text-center">
+                        You cannot add or edit a result for this date.
+                    </Text>
+                </View>
+                {/* Date picker modal */}
+                {showDatePicker && (
+                    <DateTimePicker
+                        mode="date"
+                        value={filterDate || new Date()}
+                        onChange={(_e, d) => {
+                            if (d) setFilterDate(d);
+                            setShowDatePicker(false);
+                        }}
+                    />
+                )}
+            </ScrollView>
         );
     }
 
@@ -212,8 +354,17 @@ const ResultPage: React.FC = () => {
     }
 
     // Only allow add if no result, and only allow edit if result is updated within 1 hour
-    const canAdd = user?.user_type === "ADMIN" && !data;
-    const canEditIcon = user?.user_type === "ADMIN" && data && canEditResult(data.published_at);
+    const canAdd = user?.user_type === "ADMIN" && !data && !isSkipped;
+    const canEditIcon = user?.user_type === "ADMIN" && data && canEditResult(data.published_at) && !isSkipped;
+
+    // Allow skip if admin, no result, and not loading, and not skipped
+    const canSkip =
+        user?.user_type === "ADMIN" &&
+        !data &&
+        !isLoading &&
+        !!selectedDraw?.id &&
+        !!filterDateString &&
+        !isSkipped;
 
     return (
         <ScrollView className="flex-1">
@@ -283,6 +434,13 @@ const ResultPage: React.FC = () => {
                 )}
             </View>
 
+            {/* Show skip error if any */}
+            {!!skipError && (
+                <View className="mx-4 mt-2 bg-red-100 px-4 py-2 rounded">
+                    <Text className="text-red-700 text-sm">{skipError}</Text>
+                </View>
+            )}
+
             {/* Loading state */}
             {isLoading && (
                 <View className="flex-1 items-center justify-center bg-gray-50 py-8">
@@ -298,6 +456,30 @@ const ResultPage: React.FC = () => {
                     <Text className="mt-2 text-base font-semibold text-yellow-700">
                         No result published yet for this draw
                     </Text>
+                    {canSkip && (
+                        <TouchableOpacity
+                            onPress={handleSkipResult}
+                            className="w-48 h-12 rounded-full bg-gray-400 items-center justify-center shadow-lg border-4 border-white mt-4"
+                            style={{
+                                elevation: 6,
+                                shadowColor: "#6b7280",
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.2,
+                                shadowRadius: 4,
+                                opacity: skipLoading ? 0.6 : 1,
+                            }}
+                            activeOpacity={0.85}
+                            disabled={skipLoading}
+                        >
+                            {skipLoading ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <Text className="text-white font-semibold text-base">
+                                    Skip this result
+                                </Text>
+                            )}
+                        </TouchableOpacity>
+                    )}
                 </View>
             )}
 

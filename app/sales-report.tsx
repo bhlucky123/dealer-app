@@ -38,6 +38,16 @@ const formatDateDDMMYYYY = (date?: Date | null) => {
     return `${day}/${month}/${year}`;
 };
 
+// Helper for filename: format as YYYYMMDD
+const formatDateYYYYMMDD = (date?: Date | null) => {
+    if (!date) return "";
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}${month}${day}`;
+};
+
 const SalesReportScreen = () => {
     const { selectedDraw } = useDrawStore();
     const [search, setSearch] = useState("");
@@ -147,13 +157,19 @@ const SalesReportScreen = () => {
         const tableRows = pdfData.flatMap(bill =>
             bill.booking_details ? bill.booking_details.map(detail => `
                 <tr>
-                    <td>${bill.dealer?.username || 'N/A'}</td>
+                    ${
+                        user?.user_type === "ADMIN"
+                            ? `<td>${bill.dealer?.username || 'N/A'}</td>`
+                            : user?.user_type === "DEALER"
+                                ? `<td>${bill.agent?.username || 'N/A'}</td>`
+                                : ''
+                    }
                     <td>${bill.bill_number || ''}</td>
                     <td>${detail.number}</td>
                     <td>${detail.count}</td>
                     <td>${detail.amount.toFixed(2)}</td>
                 </tr>
-            `).join('') : ''
+    `).join('') : ''
         ).join('');
 
         // Use filtered total if search is applied, else backend total
@@ -164,8 +180,19 @@ const SalesReportScreen = () => {
         const formattedDate = formatDateDDMMYYYY(now);
         const formattedTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
 
+        // --- PDF filename logic ---
+        // Use selectedDraw?.name, fromDate, toDate
+        // Clean draw name for filename (remove spaces, special chars)
+        const cleanDrawName = (selectedDraw?.name || "Draw")
+            .replace(/[^a-zA-Z0-9]/g, "_")
+            .replace(/_+/g, "_")
+            .replace(/^_+|_+$/g, "");
+        const fromStr = formatDateYYYYMMDD(fromDate);
+        const toStr = formatDateYYYYMMDD(toDate);
+        const pdfFileName = `SalesReport_${cleanDrawName}_${fromStr}_to_${toStr}.pdf`;
+
         const html = `
-      <html>
+    < html >
         <head>
           <style>
             body { font-family: Arial, sans-serif; font-size: 10px; }
@@ -224,7 +251,9 @@ const SalesReportScreen = () => {
           <table>
             <thead>
               <tr>
-                <th>Agent</th>
+              ${user?.user_type === "ADMIN" && '<th>Dealer</th>' }
+              ${user?.user_type === "DEALER" && '<th>Agent</th>' }
+                
                 <th>Bill Number</th>
                 <th>No</th>
                 <th>Count</th>
@@ -239,7 +268,7 @@ const SalesReportScreen = () => {
             <p>Total Amount: ${totalAmount}</p>
           </div>
         </body>
-      </html>
+      </html >
     `;
 
         try {
@@ -248,9 +277,10 @@ const SalesReportScreen = () => {
                 base64: false,
                 width: 595, // Standard A4 width in points
                 height: 842, // Standard A4 height in points
+                fileName: pdfFileName, // <-- Set the filename here
             });
 
-            await shareAsync(file.uri, { dialogTitle: 'Share Sales Report' });
+            await shareAsync(file.uri, { dialogTitle: 'Share Sales Report', UTI: 'com.adobe.pdf', mimeType: 'application/pdf' });
         } catch (err) {
             alert("An error occurred while creating the PDF.");
         }
