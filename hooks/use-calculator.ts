@@ -33,6 +33,25 @@ export const useCalculator = () => {
 
   console.log("equationData", equationData);
 
+  // Helper to check if a valid equation exists and enter PIN mode if so
+  const tryEnterPinMode = useCallback(
+    (first: number | null, op: string | null, second: string | null, disp: string) => {
+      if (!op || first === null) return false;
+      const equationStr = `${first}${op}${second ?? disp}`;
+      if (equationData && !!equationData[equationStr]) {
+        setDisplay(""); // Clear display for PIN entry
+        setFirstOperand(null);
+        setEquation(equationStr);
+        setPinInput(""); // Also clear any previous pin input
+        setOperator(null);
+        setWaitingForSecondOperand(false);
+        setSecondOperand(null);
+        return true;
+      }
+      return false;
+    },
+    [equationData]
+  );
 
   const handleNumberInput = useCallback(
     (digit: string) => {
@@ -52,15 +71,66 @@ export const useCalculator = () => {
         }
         return;
       }
+
+      // If the previous result was shown (after pressing =), and user starts typing a new number,
+      // check if the new equation (with previous firstOperand, operator, and this digit) is in equationData
+      // This is the key addition for the prompt
+      if (
+        !operator && // No operator, just entering numbers
+        firstOperand !== null &&
+        waitingForSecondOperand
+      ) {
+        // User pressed =, then deleted result, then started typing a new number
+        // Reset everything for a new calculation
+        setDisplay(digit);
+        setFirstOperand(null);
+        setOperator(null);
+        setWaitingForSecondOperand(false);
+        setSecondOperand(null);
+        setEquation("");
+        setPinInput("");
+        return;
+      }
+
       if (waitingForSecondOperand) {
+        // User just pressed an operator, now entering second operand
         setDisplay(digit);
         setWaitingForSecondOperand(false);
         setSecondOperand(digit);
+
+        // Check if this new equation is in equationData
+        if (
+          operator &&
+          firstOperand !== null &&
+          equationData &&
+          equationData[`${firstOperand}${operator}${digit}`]
+        ) {
+          setDisplay(""); // Clear display for PIN entry
+          setFirstOperand(null);
+          setEquation(`${firstOperand}${operator}${digit}`);
+          setPinInput("");
+          setOperator(null);
+          setWaitingForSecondOperand(false);
+          setSecondOperand(null);
+          return;
+        }
       } else {
         const newDisplay = display === "0" ? digit : display + digit;
         setDisplay(newDisplay);
         if (operator && firstOperand !== null) {
           setSecondOperand((prev) => (prev ? prev + digit : digit));
+          // Check if this new equation is in equationData
+          const eqStr = `${firstOperand}${operator}${(secondOperand ? secondOperand + digit : digit)}`;
+          if (equationData && equationData[eqStr]) {
+            setDisplay(""); // Clear display for PIN entry
+            setFirstOperand(null);
+            setEquation(eqStr);
+            setPinInput("");
+            setOperator(null);
+            setWaitingForSecondOperand(false);
+            setSecondOperand(null);
+            return;
+          }
         }
       }
     },
@@ -72,6 +142,7 @@ export const useCalculator = () => {
       pinInput,
       equation,
       equationData,
+      secondOperand,
     ]
   );
 
@@ -158,9 +229,27 @@ export const useCalculator = () => {
       return;
     }
     if (display.length > 1) {
-      setDisplay(display.slice(0, -1));
+      const newDisplay = display.slice(0, -1);
+      setDisplay(newDisplay);
+
+      // If user deletes all digits and display becomes empty or "0", reset state
+      if (newDisplay === "" || newDisplay === "0") {
+        setDisplay("0");
+        setFirstOperand(null);
+        setOperator(null);
+        setWaitingForSecondOperand(false);
+        setSecondOperand(null);
+        setEquation("");
+        setPinInput("");
+      }
     } else {
       setDisplay("0");
+      setFirstOperand(null);
+      setOperator(null);
+      setWaitingForSecondOperand(false);
+      setSecondOperand(null);
+      setEquation("");
+      setPinInput("");
     }
   }, [display, equation, pinInput]);
 
