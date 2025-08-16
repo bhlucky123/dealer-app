@@ -96,7 +96,7 @@ const WinnersReportScreen = () => {
             params["booked_agent__id"] = selectedAgent;
         if (user?.user_type === "ADMIN" && selectedDealer)
             params["booked_dealer__id"] = selectedDealer;
-        if (selectedDraw?.id) params["draw_session__draw__id"] = String(selectedDraw.id);
+        if (selectedDraw?.id) params["booking_detail__booking__draw_session__draw__id"] = String(selectedDraw.id);
 
         return Object.keys(params)
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))

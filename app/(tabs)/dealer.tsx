@@ -492,6 +492,31 @@ export default function DealerManagement() {
                 setEditData(null);
                 setShowForm(false);
             },
+            onError: (err) => {
+                let errorMsg = "Failed to update dealer.";
+                // Try to extract a detailed error message
+                if (err?.message) {
+                    if (typeof err.message === "string") {
+                        errorMsg = err.message;
+                    } else if (typeof err.message === "object") {
+                        // Handle non_field_errors (array of messages)
+                        if (Array.isArray(err.message.non_field_errors) && err.message.non_field_errors.length > 0) {
+                            errorMsg = err.message.non_field_errors.join("\n");
+                        } else if (err.message.detail) {
+                            errorMsg = err.message.detail;
+                        } else {
+                            // Try to get the first field error
+                            const firstField = Object.keys(err.message)[0];
+                            if (firstField && Array.isArray(err.message[firstField]) && err.message[firstField][0]) {
+                                errorMsg = err.message[firstField][0];
+                            } else {
+                                errorMsg = JSON.stringify(err.message);
+                            }
+                        }
+                    }
+                }
+                Alert.alert("Error", errorMsg);
+            }
         });
     };
 

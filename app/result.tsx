@@ -43,7 +43,6 @@ function isThreeDigitNumber(str: string) {
 }
 
 function validateDrawResultFields(data: Partial<DrawResult> & { complementary_prizes?: string[] }) {
-    // Check all main prizes
     const mainPrizes = [
         data.first_prize,
         data.second_prize,
@@ -51,21 +50,36 @@ function validateDrawResultFields(data: Partial<DrawResult> & { complementary_pr
         data.fourth_prize,
         data.fifth_prize,
     ];
-    for (let i = 0; i < mainPrizes.length; i++) {
-        if (!mainPrizes[i] || typeof mainPrizes[i] !== "string" || !isThreeDigitNumber(mainPrizes[i]!)) {
-            return `Please enter a valid 3-digit number for ${["First", "Second", "Third", "Fourth", "Fifth"][i]} Prize.`;
+    const mainPrizeEntered = mainPrizes.some((prize) => !!prize && String(prize).trim() !== "");
+    const complementaryEntered = Array.isArray(data.complementary_prizes) && data.complementary_prizes.some((val) => !!val && String(val).trim() !== "");
+
+    // If neither main nor complementary prizes are entered, require at least one
+    if (!mainPrizeEntered && !complementaryEntered) {
+        return "Please enter at least one main prize or one complementary prize.";
+    }
+
+    // If any main prize is entered, validate all main prizes
+    if (mainPrizeEntered) {
+        for (let i = 0; i < mainPrizes.length; i++) {
+            if (!mainPrizes[i] || typeof mainPrizes[i] !== "string" || !isThreeDigitNumber(mainPrizes[i]!)) {
+                return `Please enter a valid 3-digit number for ${["First", "Second", "Third", "Fourth", "Fifth"][i]} Prize.`;
+            }
         }
     }
-    // Check complementary prizes
-    if (!Array.isArray(data.complementary_prizes) || data.complementary_prizes.length === 0) {
-        return "Please enter all complementary prizes.";
-    }
-    for (let i = 0; i < data.complementary_prizes.length; i++) {
-        const val = data.complementary_prizes[i];
-        if (!val || !isThreeDigitNumber(val)) {
-            return `Please enter a valid 3-digit number for Complementary Prize #${i + 1}.`;
+
+    // If any complementary prize is entered, validate all complementary prizes
+    if (complementaryEntered) {
+        if (!Array.isArray(data.complementary_prizes) || data.complementary_prizes.length === 0) {
+            return "Please enter all complementary prizes.";
+        }
+        for (let i = 0; i < data.complementary_prizes.length; i++) {
+            const val = data.complementary_prizes[i];
+            if (!val || !isThreeDigitNumber(val)) {
+                return `Complementary Prize ${i + 1} must be a valid 3-digit number (e.g., 123). Please check your entry.`;
+            }
         }
     }
+
     return null;
 }
 
@@ -73,12 +87,12 @@ function canEditResult(published_at: string | undefined | null) {
     if (!published_at) return false;
     const publishedDate = new Date(published_at);
     const now = new Date();
-    // Allow edit only within 1 hour of published_at
-    return now.getTime() - publishedDate.getTime() < 60 * 60 * 1000;
+    // Allow edit only within 2 hours of published_at
+    return now.getTime() - publishedDate.getTime() < 2 * 60 * 60 * 1000;
 }
 
 const ResultPage: React.FC = () => {
-    const { createDrawResult, updateDrawResult } = useDraw();
+    const { createDrawResult, updateDrawResult, createDrawResultIsPending, updateDrawResultIsPending } = useDraw();
     const { selectedDraw } = useDrawStore();
 
     const [mode, setMode] = useState<"view" | "edit">("view");
@@ -100,26 +114,25 @@ const ResultPage: React.FC = () => {
 
     const filterDateString = formatDateServer(filterDate);
 
-    console.log("selectedDraw?.id", selectedDraw?.id, "filterDateString", filterDateString);
-
     const { data: rawData, isLoading, error, refetch } = useQuery<DrawResult[] | { skipped: boolean } | null>({
         queryKey: ["/draw-result/result/", selectedDraw?.id, filterDateString],
         queryFn: async () => {
             const res = await api.get(
                 `/draw-result/result/?draw_session__draw__id=${selectedDraw?.id}&draw_session__session_date=${filterDateString ?? ""}`
             );
-            console.log("res", res);
 
             return res.data;
         },
         enabled: !!selectedDraw?.id,
     });
 
+
+    console.log("rawData", rawData);
+
+
     // Handle skipped state
     const isSkipped = !!rawData && typeof rawData === "object" && !Array.isArray(rawData) && (rawData as any).skipped === true;
     const data = !isSkipped && Array.isArray(rawData) ? rawData?.[0] : undefined;
-
-    console.log("errpr", error, "rawData", rawData);
 
     // Add skip state
     const [skipError, setSkipError] = useState<string | null>(null);
@@ -130,18 +143,22 @@ const ResultPage: React.FC = () => {
             return api.post("/draw-result/skip-draw-session/", payload);
         },
         onError: (error: any) => {
-            console.log("err", error);
 
-            // Handle the error here
             let errorMessage = "Failed to skip draw session.";
-            // Handle the specific error structure: { message: { message: "Draw session is already completed" }, status: 400 }
-            if (error?.response?.data?.detail) {
-                errorMessage = error.response.data.detail;
+
+            if (
+                error?.message &&
+                typeof error.message === "object" &&
+                typeof error.message.message === "string"
+            ) {
+                errorMessage = error.message.message;
+            } else if (error?.detail) {
+                errorMessage = error.detail;
             } else if (
                 error?.response?.data?.message &&
-                typeof error.response.data.message === "string"
+                typeof error.message === "string"
             ) {
-                errorMessage = error.response.data.message;
+                errorMessage = error.message;
             } else if (
                 error?.message &&
                 typeof error.message === "string"
@@ -150,7 +167,12 @@ const ResultPage: React.FC = () => {
             } else if (typeof error === "string") {
                 errorMessage = error;
             }
+
+            Alert.alert("Error", typeof errorMessage === "string" ? errorMessage : "Failed to skip result.");
             setSkipError(errorMessage);
+            setTimeout(() => {
+                setSkipError(null);
+            }, 3000);
         }
     });
 
@@ -169,7 +191,7 @@ const ResultPage: React.FC = () => {
             if (data && data.id) {
                 // Update
                 await updateDrawResult.mutateAsync({
-                    id: selectedDraw?.id,
+                    id: data.id,
                     ...resultData,
                 });
             } else {
@@ -183,15 +205,12 @@ const ResultPage: React.FC = () => {
             setFormData(null);
             refetch();
         } catch (err: any) {
-            console.log("err", err);
-
-            // Handle specific error: ["No draw session found for today."]
             if (Array.isArray(err) && err.length === 1 && err[0] === "No draw session found for today.") {
                 setFormError("No draw session found for the selected date. Please check the draw schedule.");
                 Alert.alert("No Draw Session", "No draw session found for the selected date. Please check the draw schedule.");
             } else {
-                setFormError(err || "Failed to save result.");
-                Alert.alert("Error", err?.toString() || "Failed to save result.");
+                setFormError(typeof err === "string" ? err : "Failed to save result.");
+                Alert.alert("Error", typeof err === "string" ? err : "Failed to save result.");
             }
 
             setTimeout(() => {
@@ -218,34 +237,14 @@ const ResultPage: React.FC = () => {
                     text: "Skip",
                     style: "destructive",
                     onPress: async () => {
-                        try {
-                            console.log("selectedDraw.id", selectedDraw.id);
-                            console.log("filterDateString", filterDateString);
+                        await skipDrawSessionMutation.mutateAsync({
+                            draw_id: selectedDraw.id,
+                            session_date: filterDateString,
+                        });
+                        setSkipLoading(false);
+                        refetch();
+                        Alert.alert("Skipped", "Result has been marked as skipped for this draw and date.");
 
-                            await skipDrawSessionMutation.mutateAsync({
-                                draw_id: selectedDraw.id,
-                                session_date: filterDateString,
-                            });
-                            setSkipLoading(false);
-                            refetch();
-                            Alert.alert("Skipped", "Result has been marked as skipped for this draw and date.");
-                        } catch (err: any) {
-                            // Handle error from mutation
-                            let errorMsg = "Failed to skip result.";
-                            if (err?.response?.data?.detail) {
-                                errorMsg = err.response.data.detail;
-                            } else if (typeof err?.message === "string") {
-                                errorMsg = err.message;
-                            } else if (typeof err === "string") {
-                                errorMsg = err;
-                            } else if (typeof err === "object" && err !== null && "message" in err && typeof err.message === "object") {
-                                // If err.message is an object, try to stringify it
-                                errorMsg = JSON.stringify(err.message);
-                            }
-                            setSkipError(errorMsg);
-                            setSkipLoading(false);
-                            Alert.alert("Error", typeof errorMsg === "string" ? errorMsg : "Failed to skip result.");
-                        }
                     }
                 }
             ]
@@ -322,11 +321,11 @@ const ResultPage: React.FC = () => {
                         <X size={22} color="#fff" />
                     </TouchableOpacity>
                 </View>
-                {formError ? (
+                {/* {formError ? (
                     <View className="bg-red-100 px-4 py-2">
                         <Text className="text-red-700 text-sm">{formError}</Text>
                     </View>
-                ) : null}
+                ) : null} */}
                 <DrawResultForm
                     initialData={formData || undefined}
                     onSubmit={handleFormSubmit}
@@ -433,13 +432,6 @@ const ResultPage: React.FC = () => {
                     </TouchableOpacity>
                 )}
             </View>
-
-            {/* Show skip error if any */}
-            {!!skipError && (
-                <View className="mx-4 mt-2 bg-red-100 px-4 py-2 rounded">
-                    <Text className="text-red-700 text-sm">{skipError}</Text>
-                </View>
-            )}
 
             {/* Loading state */}
             {isLoading && (

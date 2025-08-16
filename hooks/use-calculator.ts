@@ -27,37 +27,16 @@ export const useCalculator = () => {
             "User-Type": config.userType
           },
         }
-      ).then((res) => res.json());
+      ).then((res) => res.json());  
     },
   });
 
-  console.log("equationData", equationData);
 
-  // Helper to check if a valid equation exists and enter PIN mode if so
-  const tryEnterPinMode = useCallback(
-    (first: number | null, op: string | null, second: string | null, disp: string) => {
-      if (!op || first === null) return false;
-      const equationStr = `${first}${op}${second ?? disp}`;
-      if (equationData && !!equationData[equationStr]) {
-        setDisplay(""); // Clear display for PIN entry
-        setFirstOperand(null);
-        setEquation(equationStr);
-        setPinInput(""); // Also clear any previous pin input
-        setOperator(null);
-        setWaitingForSecondOperand(false);
-        setSecondOperand(null);
-        return true;
-      }
-      return false;
-    },
-    [equationData]
-  );
-
+  // Only check for equation match in handleEqual, not during number input
   const handleNumberInput = useCallback(
     (digit: string) => {
       if (equation) {
         // Now user is entering PIN
-        // If display is not empty, clear it and pinInput for fresh PIN entry
         if (display !== "" || pinInput === "") {
           setDisplay("");
           setPinInput(digit);
@@ -73,15 +52,11 @@ export const useCalculator = () => {
       }
 
       // If the previous result was shown (after pressing =), and user starts typing a new number,
-      // check if the new equation (with previous firstOperand, operator, and this digit) is in equationData
-      // This is the key addition for the prompt
       if (
-        !operator && // No operator, just entering numbers
+        !operator &&
         firstOperand !== null &&
         waitingForSecondOperand
       ) {
-        // User pressed =, then deleted result, then started typing a new number
-        // Reset everything for a new calculation
         setDisplay(digit);
         setFirstOperand(null);
         setOperator(null);
@@ -93,44 +68,14 @@ export const useCalculator = () => {
       }
 
       if (waitingForSecondOperand) {
-        // User just pressed an operator, now entering second operand
         setDisplay(digit);
         setWaitingForSecondOperand(false);
         setSecondOperand(digit);
-
-        // Check if this new equation is in equationData
-        if (
-          operator &&
-          firstOperand !== null &&
-          equationData &&
-          equationData[`${firstOperand}${operator}${digit}`]
-        ) {
-          setDisplay(""); // Clear display for PIN entry
-          setFirstOperand(null);
-          setEquation(`${firstOperand}${operator}${digit}`);
-          setPinInput("");
-          setOperator(null);
-          setWaitingForSecondOperand(false);
-          setSecondOperand(null);
-          return;
-        }
       } else {
         const newDisplay = display === "0" ? digit : display + digit;
         setDisplay(newDisplay);
         if (operator && firstOperand !== null) {
           setSecondOperand((prev) => (prev ? prev + digit : digit));
-          // Check if this new equation is in equationData
-          const eqStr = `${firstOperand}${operator}${(secondOperand ? secondOperand + digit : digit)}`;
-          if (equationData && equationData[eqStr]) {
-            setDisplay(""); // Clear display for PIN entry
-            setFirstOperand(null);
-            setEquation(eqStr);
-            setPinInput("");
-            setOperator(null);
-            setWaitingForSecondOperand(false);
-            setSecondOperand(null);
-            return;
-          }
         }
       }
     },
@@ -160,7 +105,7 @@ export const useCalculator = () => {
 
       setWaitingForSecondOperand(true);
       setOperator(nextOperator);
-      setSecondOperand(null); // Reset second operand for new input
+      setSecondOperand(null);
     },
     [display, firstOperand, operator]
   );
@@ -193,7 +138,6 @@ export const useCalculator = () => {
     const result = performCalculation(operator, firstOperand, inputValue);
 
     const equationStr = `${firstOperand}${operator}${secondOperand ?? display}`;
-    console.log("Equation:", equationStr); // ✅ You’ll see "2+5"
     if (equationData && !!equationData[equationStr]) {
       setDisplay(""); // Clear display for PIN entry
       setFirstOperand(null);
@@ -221,18 +165,15 @@ export const useCalculator = () => {
 
   const handleDelete = useCallback(() => {
     if (equation) {
-      // If in PIN entry mode, delete from pinInput
       if (pinInput.length > 0) {
         setPinInput(pinInput.slice(0, -1));
       }
-      // Optionally, you could clear display as well, but not necessary
       return;
     }
     if (display.length > 1) {
       const newDisplay = display.slice(0, -1);
       setDisplay(newDisplay);
 
-      // If user deletes all digits and display becomes empty or "0", reset state
       if (newDisplay === "" || newDisplay === "0") {
         setDisplay("0");
         setFirstOperand(null);
@@ -262,7 +203,7 @@ export const useCalculator = () => {
     handleDelete,
     pinInput,
     isLoading,
-    isError, 
+    isError,
     error
   };
 };

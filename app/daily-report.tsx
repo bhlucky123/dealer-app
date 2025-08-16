@@ -1,4 +1,6 @@
+import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
+import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery } from "@tanstack/react-query";
@@ -36,6 +38,8 @@ const DailyReport = () => {
   const [allGames, setAllGames] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  const { user } = useAuthStore()
+
   const buildQuery = () => {
     const params: Record<string, any> = {};
     if (fromDate) params.date_time__gte = fromDate.toISOString();
@@ -44,7 +48,7 @@ const DailyReport = () => {
     return params;
   };
 
- 
+
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["/draw-booking/daily-report", buildQuery()],
@@ -54,6 +58,9 @@ const DailyReport = () => {
     },
     enabled: !!selectedDraw?.id,
   });
+
+  console.log("data", data);
+
 
 
 
@@ -76,8 +83,12 @@ const DailyReport = () => {
         {isTotal ? "Total" : item.agent?.username || item.dealer?.username || "-"}
       </Text>
       <Text className="flex-1 text-xs text-center text-gray-800">{item.draw}</Text>
-      <Text className="flex-1 text-xs text-center text-gray-800">₹{item.total_amount}</Text>
-      {/* <Text className="flex-1 text-xs text-center text-gray-800">{item.total_win || 0}</Text> */}
+      <Text className="flex-1 text-xs text-center text-gray-800">₹{amountHandler(Number(item.total_amount))}</Text>
+      {
+        user?.user_type === "ADMIN" &&
+        <><Text className="flex-1 text-xs text-center text-gray-800">{item?.total_winning_prize || 0}</Text>
+        <Text className="flex-1 text-xs text-center text-gray-800">{(item?.total_amount || 0) - (item?.total_winning_prize || 0) || 0}</Text></>
+      }
     </View>
   );
 
@@ -93,8 +104,12 @@ const DailyReport = () => {
         {item.agent?.username || item.dealer?.username || "-"}
       </Text>
       <Text className="flex-1 text-xs text-center text-gray-800">{item.draw}</Text>
-      <Text className="flex-1 text-xs text-center text-gray-800">₹{item.total_amount}</Text>
-      {/* <Text className="flex-1 text-xs text-center text-gray-800">{item.total_win || 0}</Text> */}
+      <Text className="flex-1 text-xs text-center text-gray-800">₹{amountHandler(Number(item.total_amount))}</Text>
+      {
+        user?.user_type === "ADMIN" &&
+        <><Text className="flex-1 text-xs text-center text-gray-800">{item?.total_winning_prize || 0}</Text>
+        <Text className="flex-1 text-xs text-center text-gray-800">{(item?.total_amount || 0) - (item?.total_winning_prize || 0) || 0}</Text></>
+      }
     </View>
   );
 
@@ -214,7 +229,7 @@ const DailyReport = () => {
           {/* Summary Table */}
           <View className="border border-gray-200 rounded-lg overflow-hidden bg-white" style={{ elevation: 0 }}>
             <Text className="bg-gray-100 px-3 py-2 font-bold text-sm border-b border-gray-200">SUMMARY</Text>
-            {renderTableHeader(["SUBDEALER", "GAME", "SALE"])}
+            {renderTableHeader(user?.user_type === "ADMIN" ? ["DEALER", "GAME", "SALE", "WIN", "BAL"] : ["DEALER", "GAME", "SALE"])}
             {data?.summary?.map((item: any) => renderSummaryRow(item))}
             {data?.summary &&
               renderSummaryRow(
@@ -232,7 +247,7 @@ const DailyReport = () => {
           {/* Detailed Table */}
           <View className="border border-gray-200 rounded-lg mt-6 overflow-hidden bg-white" style={{ elevation: 0 }}>
             <Text className="bg-gray-100 px-3 py-2 font-bold text-sm border-b border-gray-200">DETAILED</Text>
-            {renderTableHeader(["DATE", "SUBDEALER", "GAME", "SALE"])}
+            {renderTableHeader(user?.user_type === "ADMIN" ? ["DATE", "DEALER", "GAME", "SALE", "WIN", "BAL"] : ["DATE", "DEALER", "GAME", "SALE"])}
             {data?.report?.map((item: any) => renderDetailRow(item))}
             {data?.report &&
               renderDetailRow(

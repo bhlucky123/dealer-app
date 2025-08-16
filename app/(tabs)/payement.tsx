@@ -24,6 +24,7 @@ type AgentOrDealer = {
     id: number;
     name: string;
     balance_amount: number;
+    to_dealer?: boolean;
 };
 
 // Helper to format date for display (dd-mm-yyyy)
@@ -107,15 +108,21 @@ export default function PaymentTab() {
             dealerId,
             amount,
             date_received,
+            to_dealer
         }: {
             dealerId: number;
             amount: number;
             date_received: string;
+            to_dealer?: boolean;
         }) => {
-            return api.post(`/draw-payment/dealer-to-administrator/${dealerId}/`, {
+            const payload = {
                 amount,
                 date_received,
-            });
+                to_dealer
+            }
+            console.log("payload", payload);
+
+            return api.post(`/draw-payment/dealer-to-administrator/${dealerId}/`, payload);
         },
         onSuccess: () => {
             refetchDealers();
@@ -194,6 +201,9 @@ export default function PaymentTab() {
         const amount = Number(modalAmount);
         const date_received = modalDate || formatDateServer(new Date());
 
+        console.log("modalItem", modalItem);
+
+
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date_received)) {
             Alert.alert("Invalid Date", "Please select a valid date in YYYY-MM-DD format.");
             return;
@@ -204,7 +214,7 @@ export default function PaymentTab() {
         }
 
         if (user?.user_type === "ADMIN") {
-            dealerToAdminPaymentMutation.mutate({ dealerId: modalItem.id, amount, date_received });
+            dealerToAdminPaymentMutation.mutate({ dealerId: modalItem.id, amount, date_received, to_dealer: modalItem?.to_dealer });
         } else if (user?.user_type === "DEALER") {
             agentToDealerPaymentMutation.mutate({ agentId: modalItem.id, amount, date_received });
         }
@@ -261,6 +271,28 @@ export default function PaymentTab() {
                     >
                         <Text style={{ color: "#fff", fontWeight: "bold" }}>
                             Update Balance
+                        </Text>
+                    </TouchableOpacity>
+                </View>)
+            }
+
+            {
+                item?.balance_amount < 0 && user?.user_type === "ADMIN" && (<View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
+                    <TouchableOpacity
+                        onPress={() => {
+                            openUpdateModal({ ...item, to_dealer: true })
+                        }}
+                        style={{
+                            backgroundColor: "red",
+                            paddingVertical: 8,
+                            paddingHorizontal: 16,
+                            borderRadius: 8,
+                            flex: 1,
+                            alignItems: "center",
+                        }}
+                    >
+                        <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                            Pay Balance
                         </Text>
                     </TouchableOpacity>
                 </View>)

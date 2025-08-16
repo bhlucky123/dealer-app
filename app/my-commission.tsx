@@ -1,5 +1,6 @@
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
+import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
 import { getToday, getTommorow } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -65,7 +66,6 @@ export type CommissionEntry = {
     total_count: number;
     dealer_commission: number;
     agent_commission: number;
-    win_commission?: number;
 };
 
 // Table row using nativewind classes
@@ -117,32 +117,45 @@ export default function MyCommissionScreen() {
         // eslint-disable-next-line
     }, [fromDate, toDate, allGames, selectedDraw?.id]);
 
-    const { data, isLoading, error } = useQuery<CommissionEntry[]>({
+    const { data, isLoading, error } = useQuery<CommissionEntry[], { status: number; message: string }>({
         queryKey: ["/draw-booking/commission/", buildQuery()],
         queryFn: async () => {
             const params = buildQuery();
             const search = Object.keys(params).length
                 ? "?" + new URLSearchParams(params as any).toString()
                 : "";
-            const res = await api.get<CommissionEntry[]>(`/draw-booking/commission/${search}`);
-            return res.data;
+            try {
+                const res = await api.get<CommissionEntry[]>(`/draw-booking/commission/${search}`);
+                return res.data;
+            } catch (err: any) {
+                // Try to extract status and message from error
+                const status = err?.status ?? 500;
+                const message =
+                    err?.response?.data?.message ||
+                    err?.response?.data?.detail ||
+                    err?.message ||
+                    "Failed to fetch commission data.";
+                throw { status, message: status === 500 ? "Failed to fetch commission data." : message };
+            }
         },
     });
+
+    console.log("data ", data, error?.status, error?.message);
+
 
     // --- DATA PROCESSING ---
     const summaryData = useMemo(() => {
         if (!data) return null;
         const totalCount = data.reduce((sum, entry) => sum + entry.total_count, 0);
-        const saleCommission = data.reduce((sum, entry) => sum + entry.dealer_commission, 0);
-        const winCommission = data.reduce((sum, entry) => sum + (entry.win_commission || 0), 0);
+        const totalAmount = data.reduce((sum, entry) => sum + entry.total_amount, 0);
+        const saleCommission = data.reduce((sum, entry) => sum + (user?.user_type === "DEALER" ? entry.dealer_commission : entry.agent_commission), 0);
 
         return {
             subDealer: data.length > 0 ? data[0].booked_by.username : "N/A",
             game: "ALL",
             totalCount,
             saleCommission,
-            winCommission,
-            total: saleCommission + winCommission,
+            total: totalAmount,
         };
     }, [data]);
 
@@ -198,12 +211,11 @@ export default function MyCommissionScreen() {
                     <View className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
                         <TableRow
                             data={[
-                                ...(user?.user_type === "DEALER" ? ["Agent"] : []),
+                                ...(user?.user_type === "DEALER" ? ["Booked by"] : []),
                                 "GAME",
                                 "TOT CNT",
-                                "S COM",
-                                "WIN C",
-                                "TOTAL"
+                                "SALE C",
+                                // "TOTAL"
                             ]}
                             className="bg-gray-100"
                             textClassName="font-bold text-gray-800"
@@ -215,8 +227,7 @@ export default function MyCommissionScreen() {
                                     summaryData.game,
                                     summaryData.totalCount,
                                     summaryData.saleCommission,
-                                    summaryData.winCommission,
-                                    summaryData.total,
+                                    // summaryData.total,
                                 ]}
                                 className="bg-white"
                                 textClassName="text-gray-900"
@@ -224,12 +235,10 @@ export default function MyCommissionScreen() {
                         )}
                         <TableRow
                             data={[
-                                "Total",
-                                "",
-                                summaryData?.totalCount || 0,
-                                summaryData?.saleCommission || 0,
-                                summaryData?.winCommission || 0,
-                                summaryData?.total || 0,
+                                ...(user?.user_type === "DEALER" ? ["Total", ""] : ["Total"]),
+                                amountHandler(Number(summaryData?.totalCount || 0)),
+                                amountHandler(Number(summaryData?.saleCommission || 0)),
+                                // amountHandler(Number(summaryData?.total || 0)),
                             ]}
                             className="bg-gray-200"
                             textClassName="font-bold text-gray-900"
@@ -245,13 +254,12 @@ export default function MyCommissionScreen() {
                     <View className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
                         <TableRow
                             data={[
-                                ...(user?.user_type === "DEALER" ? ["Agent"] : []),
+                                ...(user?.user_type === "DEALER" ? ["Booked By"] : []),
                                 "GAME",
                                 "DATE",
                                 "TOT CNT",
                                 "SALE C",
-                                "WIN C",
-                                "TOTAL",
+                                // "TOTAL",
                             ]}
                             className="bg-gray-100"
                             textClassName="font-bold text-gray-800"
@@ -265,8 +273,7 @@ export default function MyCommissionScreen() {
                                     formatDateDDMMYYYY(entry.date_time),
                                     entry.total_count,
                                     entry.dealer_commission,
-                                    entry.win_commission || 0,
-                                    entry.dealer_commission + (entry.win_commission || 0),
+                                    // entry.total_amount || 0,
                                 ]}
                                 className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
                                 textClassName="text-gray-900"
@@ -277,11 +284,9 @@ export default function MyCommissionScreen() {
                                 data={[
                                     "Total",
                                     "",
-                                    "",
+                                    // ...(user?.user_type === "AGENT" ? [""] : []),
                                     summaryData.totalCount,
-                                    summaryData.saleCommission,
-                                    summaryData.winCommission,
-                                    summaryData.total,
+                                    amountHandler(Number(summaryData.saleCommission)),
                                 ]}
                                 className="bg-gray-200"
                                 textClassName="font-bold text-gray-900"

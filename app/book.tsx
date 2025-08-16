@@ -6,11 +6,13 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Clipboard } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
+import * as RNClipboard from "react-native"; // For Clipboard.getString()
 import {
-  Alert,
+  ActivityIndicator, Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
+  Platform,
   Text,
   TextInput,
   ToastAndroid,
@@ -83,6 +85,10 @@ const BookingScreen: React.FC = () => {
   // Error state for draw session
   const [drawSessionError, setDrawSessionError] = useState<string | null>(null);
 
+  // Modal for failed lines in paste
+  const [failedPasteModalVisible, setFailedPasteModalVisible] = useState(false);
+  const [failedPasteLines, setFailedPasteLines] = useState<string[]>([]);
+
   const { selectedDraw, setSelectedDraw } = useDrawStore();
 
   const colorTheme = selectedDraw?.color_theme;
@@ -99,6 +105,35 @@ const BookingScreen: React.FC = () => {
     "2": ["AB", "BC", "AC", "ALL"],
     "3": ["SUPER", "BOX", "BOTH"],
   };
+
+  // Example: {"count": 5, "number": "356", "subType": "BOX"}
+  // This function validates a parsed object like the example above.
+  const isValidNumber = (parsed: any) => {
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      typeof parsed.number !== "string" ||
+      typeof parsed.subType !== "string" ||
+      typeof parsed.count !== "number"
+    ) {
+      return false;
+    }
+
+    // Validate number is all digits and length is 1, 2, or 3
+    if (!/^\d+$/.test(parsed.number)) return false;
+    if (![1, 2, 3].includes(parsed.number.length)) return false;
+
+
+    const allowedSubTypes = buttonsMap[String(parsed.number.length)];
+    if (!allowedSubTypes || !allowedSubTypes.includes(parsed.subType.toUpperCase())) {
+      return false;
+    }
+
+    // Validate count is a positive integer
+    if (!Number.isInteger(parsed.count) || parsed.count <= 0) return false;
+
+    return true;
+  }
 
   const {
     data: DrawSessionDetails,
@@ -124,7 +159,7 @@ const BookingScreen: React.FC = () => {
     }
   }, [isError, error, DrawSessionDetails]);
 
-  const { mutate } = useMutation({
+  const { mutate, isPending } = useMutation({
     mutationFn: async (data: any) => api.post("/draw-booking/create/", data),
     onSuccess: () => {
       ToastAndroid.show("Booking submitted.", 300)
@@ -181,19 +216,513 @@ const BookingScreen: React.FC = () => {
     return !isNaN(n) && isFinite(n) && n > 0;
   };
 
+
+
   const addBooking = (
     subType: string,
     number?: string,
     count?: number,
     bCount?: number
   ) => {
-    // ... (no change to addBooking)
-    // [Omitted for brevity, same as original]
-    // --- SNIP ---
-    // --- BEGIN original addBooking code ---
-    // ... (rest of addBooking unchanged)
+    console.log("on add booking");
+
+    // Helper to determine booking type and price/commission for a given number length
+    const getBookingTypeByLength = (len: number): BookingType => {
+      switch (len) {
+        case 1:
+          return "single_digit";
+        case 2:
+          return "double_digit";
+        case 3:
+          return "triple_digit";
+        default:
+          return "";
+      }
+    };
+    const getPriceByType = (type: BookingType) => {
+      if (type === "single_digit") return DrawSessionDetails?.single_digit_number_price;
+      return DrawSessionDetails?.non_single_digit_price;
+    };
+    const getCommissionByType = (type: BookingType) => {
+      if (type === "single_digit") return user?.single_digit_number_commission ?? 0;
+      return user?.commission ?? 0;
+    };
+
+    // Helper to create entries with custom lsk
+    const createEntry = (
+      number: string,
+      count: number,
+      lsk: string,
+      subTypeOverride?: string,
+      bookingTypeOverride?: BookingType
+    ) => {
+      const bookingType = bookingTypeOverride || getBookingTypeByLength(number.length);
+      const price = getPriceByType(bookingType);
+      const commission = getCommissionByType(bookingType);
+      const amt = count * (price || 0);
+      return {
+        lsk,
+        number,
+        count,
+        amount: price,
+        d_amount: parseFloat((amt - count * commission).toFixed(2)),
+        c_amount: amt,
+        type: bookingType,
+        sub_type: subTypeOverride ?? lsk,
+      };
+    };
+
+    // --- ENFORCE count and bCount > 0 and number/count/bCount are valid numbers ---
+    // If called from handlePastBookings, number/count/bCount are provided
+    if (number && typeof count === "number") {
+      console.log("number is there and count is number", number, 'count', count);
+
+      // Accept multiple numbers separated by comma, space, or newline
+      const numbers = number
+        .split(/[\s,]+/)
+        .map((n) => n.trim())
+        .filter((n) => n.length > 0);
+
+      let invalids: string[] = [];
+      let newEntries: BookingDetail[] = [];
+
+      numbers.forEach((num) => {
+        if (!isValidNumberString(num) || ![1, 2, 3].includes(num.length)) {
+          invalids.push(num);
+          return;
+        }
+        const bookingType = getBookingTypeByLength(num.length);
+        const isSingle = bookingType === "single_digit";
+        const isDouble = bookingType === "double_digit";
+        // Validate count
+        if (!isValidPositiveNumber(count)) {
+          invalids.push(num);
+          return;
+        }
+        // Validate bCount if needed
+        if ((subType === "BOTH" || subType === "BOX") && !isValidPositiveNumber(bCount)) {
+          invalids.push(num);
+          return;
+        }
+        if (subType === "SUPER" && !isValidPositiveNumber(count)) {
+          invalids.push(num);
+          return;
+        }
+        if (isSingle && count < 5) {
+          invalids.push(num);
+          return;
+        }
+
+        // For triple digit, if subType is BOTH, add both SUPER and BOX
+        if (subType === "BOTH") {
+          newEntries.push(createEntry(num, count, "SUPER", undefined, bookingType));
+          newEntries.push(createEntry(num, bCount ?? count, "BOX", undefined, bookingType));
+        } else if (isDouble && subType === "ALL") {
+          const lskArr = ["AB", "BC", "AC"];
+          lskArr.forEach((lsk) => {
+            newEntries.push(createEntry(num, count, lsk, lsk, bookingType));
+          });
+        } else if (isSingle && subType === "ALL") {
+          const lskArr = ["A", "B", "C"];
+          lskArr.forEach((lsk) => {
+            newEntries.push(createEntry(num, count, lsk, lsk, bookingType));
+          });
+        } else {
+          newEntries.push(createEntry(num, count, subType, undefined, bookingType));
+        }
+      });
+
+      if (invalids.length > 0) {
+        Alert.alert(
+          "Invalid input",
+          `The following numbers are invalid or do not match allowed digit lengths (1, 2, or 3):\n${invalids.join(
+            ", "
+          )}`
+        );
+        return;
+      }
+
+      if (newEntries.length > 0) {
+        setBookingDetails((prev) => [...newEntries, ...prev]);
+      }
+      return;
+    }
+
+    console.log("there");
+
+
+    // --- BEGIN original addBooking code, but allow multiple numbers in numberInput ---
+    // Accept multiple numbers separated by comma, space, or newline
+    const numbers = numberInput
+      .split(/[\s,]+/)
+      .map((n) => n.trim())
+      .filter((n) => n.length > 0);
+
+    // If more than one number, treat as "mixed" mode (copy-paste), so do not enforce drawSession digit length
+    const isMixedMode = numbers.length > 1;
+
+    let invalids: string[] = [];
+    let allEntries: BookingDetail[] = [];
+
+    numbers.forEach((num) => {
+      const numberLen = num.length;
+      const digitsRequired = isMixedMode ? numberLen : parseInt(drawSession);
+      const bookingType = getBookingTypeByLength(numberLen);
+      const isSingle = bookingType === "single_digit";
+      const isDouble = bookingType === "double_digit";
+      const parseNum = (val: string | undefined) => parseInt(val ?? "") || 0;
+      const countVal = parseNum(countInput);
+      const bCountVal = parseNum(bCountInput);
+
+      console.log("invalids1", invalids);
+
+
+      // Validate number is a valid number string
+      if (!isValidNumberString(num)) {
+        invalids.push(num);
+        return;
+      }
+      console.log("invalids2", invalids);
+
+      // In mixed mode, allow 1, 2, or 3 digit numbers; in normal mode, enforce drawSession digit length
+      if (isMixedMode) {
+        if (![1, 2, 3].includes(numberLen)) {
+          invalids.push(num);
+          return;
+        }
+      } else {
+        if (numberLen !== digitsRequired) {
+          invalids.push(num);
+          return;
+        }
+      }
+      console.log("invalids3", invalids, "countInput", countInput);
+
+      // Validate countInput is a valid number
+      if (!isValidNumberString(countInput) || !isValidPositiveNumber(countInput)) {
+        invalids.push(num);
+        return;
+      }
+      console.log("invalids4", invalids);
+
+      // Validate bCountInput if needed
+      if (
+        (subType === "BOTH" || subType === "BOX") &&
+        (!isValidNumberString(bCountInput) || !isValidPositiveNumber(bCountInput))
+      ) {
+        invalids.push(num);
+        return;
+      }
+      if (isSingle && countVal < 5) {
+        invalids.push(num);
+        return;
+      }
+      console.log("invalids5", invalids);
+
+
+      // ---------- Range Booking ----------
+      if (selectedRange === "Range" && !isMixedMode) {
+        // Only process if this is the first number (range only makes sense for one number)
+        if (numbers.length > 1) return;
+        const endLen = endNumberInput.length;
+        if (!isValidNumberString(endNumberInput)) {
+          Alert.alert("Invalid input", "End number must be a valid number.");
+          return;
+        }
+        if (endLen !== digitsRequired) {
+          Alert.alert(
+            "Invalid input",
+            `Please enter a ${digitsRequired}-digit number.`
+          );
+          return;
+        }
+        const start = parseNum(num);
+        const end = parseNum(endNumberInput);
+
+        if (isNaN(start) || isNaN(end) || start > end) {
+          Alert.alert(
+            "Invalid Range",
+            "Start should be less than or equal to end."
+          );
+          return;
+        }
+
+        const newEntries: BookingDetail[] = [];
+
+        for (let i = start; i <= end; i++) {
+          const paddedNum = i.toString().padStart(digitsRequired, "0");
+          if (subType === "BOTH") {
+            if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, "SUPER", undefined, bookingType));
+            if (bCountVal > 0) newEntries.push(createEntry(paddedNum, bCountVal, "BOX", undefined, bookingType));
+          } else if (isDouble && subType === "ALL") {
+            ["AB", "BC", "AC"].forEach((lsk) => {
+              if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, lsk, bookingType));
+            });
+          } else if (isSingle && subType === "ALL") {
+            ["A", "B", "C"].forEach((lsk) => {
+              if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, lsk, bookingType));
+            });
+          } else {
+            const actualCount = subType === "BOX" ? bCountVal : countVal;
+            if (actualCount > 0) newEntries.push(createEntry(paddedNum, actualCount, subType, undefined, bookingType));
+          }
+        }
+
+        setBookingDetails((prev) => [...newEntries, ...prev]);
+        clearInputs();
+        setEndNumberInput("");
+        setBCountInput("");
+        return;
+      }
+
+      // ---------- Different Booking ----------
+      if (selectedRange === "Different" && !isMixedMode) {
+        // Only process if this is the first number (different only makes sense for one number)
+        if (numbers.length > 1) return;
+        if (numberLen !== 3) {
+          Alert.alert(
+            "Invalid",
+            "Different option is only available for 3-digit numbers."
+          );
+          return;
+        }
+        const endLen = endNumberInput.length;
+        if (!isValidNumberString(endNumberInput)) {
+          Alert.alert("Invalid input", "End number must be a valid number.");
+          return;
+        }
+        if (!isValidNumberString(differenceInput)) {
+          Alert.alert("Invalid input", "Difference must be a valid number.");
+          return;
+        }
+        if (endLen !== 3) {
+          Alert.alert(
+            "Invalid input",
+            "Please enter a 3-digit end number."
+          );
+          return;
+        }
+        const start = parseNum(num);
+        const end = parseNum(endNumberInput);
+        const diff = parseNum(differenceInput);
+
+        if (isNaN(start) || isNaN(end) || isNaN(diff) || start > end) {
+          Alert.alert(
+            "Invalid Range",
+            "Start should be less than or equal to end, and difference should be a valid number."
+          );
+          return;
+        }
+        if (diff <= 0) {
+          Alert.alert("Invalid Difference", "Difference must be greater than 0.");
+          return;
+        }
+        if (end - start < diff) {
+          Alert.alert(
+            "No bookings",
+            "Difference is greater than the range. No bookings created."
+          );
+          return;
+        }
+
+        const newEntries: BookingDetail[] = [];
+        let i = start;
+        let addedAny = false;
+        while (i <= end) {
+          if (i > end) break;
+          if (i >= start && i <= end) {
+            const paddedNum = i.toString().padStart(3, "0");
+            if (subType === "BOTH") {
+              if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, "SUPER", undefined, bookingType));
+              if (bCountVal > 0) newEntries.push(createEntry(paddedNum, bCountVal, "BOX", undefined, bookingType));
+            } else if (isDouble && subType === "ALL") {
+              ["AB", "BC", "AC"].forEach((lsk) => {
+                if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, lsk, bookingType));
+              });
+            } else if (isSingle && subType === "ALL") {
+              ["A", "B", "C"].forEach((lsk) => {
+                if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, lsk, bookingType));
+              });
+            } else {
+              const actualCount = subType === "BOX" ? bCountVal : countVal;
+              if (actualCount > 0) newEntries.push(createEntry(paddedNum, actualCount, subType, undefined, bookingType));
+            }
+            addedAny = true;
+          }
+          i += diff;
+        }
+        if (!addedAny) {
+          Alert.alert(
+            "No bookings",
+            "No bookings created. Please check your start, end, and difference values."
+          );
+          return;
+        }
+        setBookingDetails((prev) => [...newEntries, ...prev]);
+        clearInputs();
+        setEndNumberInput("");
+        setBCountInput("");
+        setDifferenceInput("");
+        return;
+      }
+
+      // ---------- Set Booking ----------
+      if (selectedRange === "Set" && !isMixedMode) {
+        // Only process if this is the first number (set only makes sense for one number)
+        if (numbers.length > 1) return;
+        if (numberLen !== 3) {
+          Alert.alert(
+            "Invalid",
+            "Set combinations only apply to 3-digit numbers."
+          );
+          return;
+        }
+
+        const padded = num.padStart(3, "0");
+        const digits = padded.split("");
+
+        const generatePermutations = (arr: string[]) => {
+          const result = new Set<string>();
+          const permute = (path: string[], used: boolean[]) => {
+            if (path.length === arr.length) {
+              result.add(path.join(""));
+              return;
+            }
+            for (let i = 0; i < arr.length; i++) {
+              if (used[i]) continue;
+              used[i] = true;
+              permute([...path, arr[i]], [...used]);
+              used[i] = false;
+            }
+          };
+          permute([], Array(arr.length).fill(false));
+          return Array.from(result).filter((num) => num.length === 3);
+        };
+
+        const permutations = generatePermutations(digits);
+        const newEntries: BookingDetail[] = [];
+
+        for (let perm of permutations) {
+          const number = perm;
+          if (subType === "BOTH") {
+            if (countVal > 0) newEntries.push(createEntry(number, countVal, "SUPER", undefined, bookingType));
+            if (bCountVal > 0) newEntries.push(createEntry(number, bCountVal, "BOX", undefined, bookingType));
+          } else if (isDouble && subType === "ALL") {
+            ["AB", "BC", "AC"].forEach((lsk) => {
+              if (countVal > 0) newEntries.push(createEntry(number, countVal, lsk, lsk, bookingType));
+            });
+          } else if (isSingle && subType === "ALL") {
+            ["A", "B", "C"].forEach((lsk) => {
+              if (countVal > 0) newEntries.push(createEntry(number, countVal, lsk, lsk, bookingType));
+            });
+          } else {
+            const actualCount = subType === "BOX" ? bCountVal : countVal;
+            if (actualCount > 0) newEntries.push(createEntry(number, actualCount, subType, undefined, bookingType));
+          }
+        }
+
+        setBookingDetails((prev) => [...newEntries, ...prev]);
+        clearInputs();
+        return;
+      }
+
+      // ---------- Normal Booking ----------
+      if (subType === "BOTH") {
+        if (!countInput || !bCountInput) {
+          invalids.push(num);
+          return;
+        }
+        if (
+          !isValidNumberString(countInput) ||
+          !isValidPositiveNumber(countInput) ||
+          !isValidNumberString(bCountInput) ||
+          !isValidPositiveNumber(bCountInput)
+        ) {
+          invalids.push(num);
+          return;
+        }
+        const padded = num.padStart(digitsRequired, "0");
+        allEntries.push(createEntry(padded, parseNum(countInput), "SUPER", undefined, bookingType));
+        allEntries.push(createEntry(padded, parseNum(bCountInput), "BOX", undefined, bookingType));
+        return;
+      }
+
+
+      console.log("invalids", invalids);
+      console.log("bCountInput", bCountInput);
+
+      if (subType === "BOX") {
+        if (!bCountInput) {
+          invalids.push(num);
+          return;
+        }
+        if (!isValidNumberString(bCountInput) || !isValidPositiveNumber(bCountInput)) {
+          invalids.push(num);
+          return;
+        }
+        const padded = num.padStart(digitsRequired, "0");
+        allEntries.push(createEntry(padded, parseNum(bCountInput), "BOX", undefined, bookingType));
+        return;
+      }
+
+      if (subType === "ALL") {
+        const padded = num.padStart(digitsRequired, "0");
+        if (isDouble) {
+          const lskArr = ["AB", "BC", "AC"];
+          lskArr.forEach((lsk) => {
+            if (countVal > 0) allEntries.push(createEntry(padded, countVal, lsk, lsk, bookingType));
+          });
+        } else if (isSingle) {
+          const lskArr = ["A", "B", "C"];
+          lskArr.forEach((lsk) => {
+            if (countVal > 0) allEntries.push(createEntry(padded, countVal, lsk, lsk, bookingType));
+          });
+        }
+        return;
+      }
+
+      if (!countInput) {
+        invalids.push(num);
+        return;
+      }
+      if (!isValidNumberString(countInput) || !isValidPositiveNumber(countInput)) {
+        invalids.push(num);
+        return;
+      }
+
+      const padded = num.padStart(digitsRequired, "0");
+      allEntries.push(createEntry(padded, parseNum(countInput), subType, undefined, bookingType));
+    });
+
+
+
+    console.log("invalids", invalids);
+    if (invalids.length > 0) {
+
+      if (isMixedMode) {
+        Alert.alert(
+          "Invalid input",
+          `The following numbers are invalid or do not match allowed digit lengths (1, 2, or 3):\n${invalids.join(
+            ", "
+          )}`
+        );
+      } else {
+        Alert.alert(
+          "Invalid input",
+          `Number must be a ${drawSession}-digit number.`
+        );
+      }
+      return;
+    }
+
+    if (allEntries.length > 0) {
+      setBookingDetails((prev) => [...allEntries, ...prev]);
+      clearInputs();
+      setBCountInput("");
+    }
     // --- END original addBooking code ---
   };
+
 
   const handleSubmit = () => {
     if (!bookingDetails?.length) {
@@ -226,9 +755,60 @@ const BookingScreen: React.FC = () => {
   };
 
   const saveEdit = () => {
-    // ... (no change to saveEdit)
-    // [Omitted for brevity, same as original]
-  };
+    if (editingEntry && editIndex !== null) {
+      // ENFORCE number and count > 0 and are valid numbers
+      if (
+        !isValidNumberString(editingEntry.number) ||
+        editingEntry.number.length === 0
+      ) {
+        Alert.alert("Invalid input", "Number must be a valid number.");
+        return;
+      }
+      if (
+        !isValidPositiveNumber(editingEntry.count)
+      ) {
+        Alert.alert("Invalid input", "Count must be a valid number greater than 0.");
+        return;
+      }
+      // If sub_type is BOX or BOTH, validate b.count if present
+      if (
+        (editingEntry.sub_type === "BOX" || editingEntry.sub_type === "BOTH") &&
+        !isValidPositiveNumber(editingEntry.count)
+      ) {
+        Alert.alert("Invalid input", "B.Count must be a valid number greater than 0.");
+        return;
+      }
+
+      const updated = [...bookingDetails];
+
+      const bookingType = editingEntry.type;
+      const isSingle = bookingType === "single_digit";
+
+      const price = isSingle
+        ? DrawSessionDetails?.single_digit_number_price
+        : DrawSessionDetails?.non_single_digit_price;
+
+      const commission = isSingle
+        ? (user?.single_digit_number_commission ?? 0)
+        : (user?.commission ?? 0);
+
+      const amount = editingEntry.count * (price || 0);
+      const d_amount = parseFloat((amount - commission).toFixed(2));
+      const c_amount = amount;
+
+      updated[editIndex] = {
+        ...editingEntry,
+        amount,
+        d_amount,
+        c_amount,
+      };
+
+      setBookingDetails(updated);
+      setEditModalVisible(false);
+      setEditIndex(null);
+      setEditingEntry(null);
+    }
+  }
 
   const handleDelete = (index: number) => {
     setBookingDetails((prev) => prev.filter((_, idx) => idx !== index));
@@ -270,11 +850,254 @@ const BookingScreen: React.FC = () => {
     setDrawSession(num.toString());
   };
 
-  // --- REWRITE handlePastBookings ---
+  // --- REWRITE handlePastBookings to show failed lines in a modal and fix 1/2 digit paste ---
   const handlePastBookings = async () => {
-    // ... (no change to handlePastBookings)
-    // [Omitted for brevity, same as original]
-  };
+    try {
+      let clipboardText: string = "";
+      if (Platform.OS === "web") {
+        clipboardText = await navigator.clipboard.readText();
+      } else if (RNClipboard?.Clipboard && RNClipboard.Clipboard.getString) {
+        clipboardText = await RNClipboard.Clipboard.getString();
+      } else if ((global as any).Clipboard && (global as any).Clipboard.getString) {
+        clipboardText = await (global as any).Clipboard.getString();
+      } else {
+        try {
+          const { getString } = require("@react-native-clipboard/clipboard");
+          clipboardText = await getString();
+        } catch (e) {
+          ToastAndroid.show('Could not read clipboard.', ToastAndroid.SHORT);
+          return;
+        }
+      }
+
+      if (!clipboardText || !clipboardText.trim()) {
+        ToastAndroid.show('Clipboard is empty.', ToastAndroid.SHORT);
+        return;
+      }
+
+      console.log("clipboardText", clipboardText);
+
+
+      const lines = clipboardText
+        .split(/[\n,;]+/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+      console.log("lines", lines);
+
+
+      // Helper: parse a single line into {number, count, subType}
+      function parseLine(line: string) {
+        let l = line.replace(/\s+/g, " ").trim();
+
+        // Try to extract subType (box/set/ab/ac/bc/a/b/c/all/super/both)
+        let subType = "";
+        let subTypeMatch = l.match(/\b(box|set|super|both|ab|ac|bc|a|b|c|all)\b/i);
+        if (subTypeMatch) {
+          subType = subTypeMatch[1].toUpperCase();
+          l = l.replace(subTypeMatch[0], "").trim();
+        }
+
+        // Find number and count
+        // Accept separators: /, -, =, +, :, #, &, *, ., .., space
+        let match = l.match(
+          /^([0-9]{1,3})\s*([\/\-=\+:#&\*\.]{1,2})\s*([0-9]{1,3})$/i
+        );
+        if (!match) {
+          // Try with space separator
+          match = l.match(/^([0-9]{1,3})\s+([0-9]{1,3})$/);
+        }
+        if (!match) {
+          // Try with number only (single digit, default count 5)
+          match = l.match(/^([0-9]{1,3})$/);
+          if (match) {
+            let number = match[1];
+            // If not specified, for 3-digit: SUPER, 2-digit: AB, 1-digit: A
+            if (number.length === 3) {
+              return {
+                number,
+                count: 5,
+                subType: "SUPER",
+              };
+            } else if (number.length === 2) {
+              return {
+                number,
+                count: 5,
+                subType: "AB",
+              };
+            } else if (number.length === 1) {
+              return {
+                number,
+                count: 5,
+                subType: "A",
+              };
+            }
+          }
+          return null;
+        }
+
+        let number = match[1];
+        let count = parseInt(match[3] || match[2] || "5");
+        if (isNaN(count)) count = 5;
+
+        // If subType is not set, infer from separator
+        if (!subType) {
+          if (match[2]) {
+            const sep = match[2].replace(/\s/g, "");
+            // For *, #: use SUPER for 3-digit, AB for 2-digit, A for 1-digit
+            if (sep === "*" || sep === "#") {
+              if (number.length === 3) subType = "SUPER";
+              else if (number.length === 2) subType = "AB";
+              else if (number.length === 1) subType = "A";
+            }
+            else if (sep === "=" || sep === "+" || sep === ":" || sep === "-" || sep === "/" || sep === "&" || sep === "." || sep === "..") {
+              if (number.length === 3) subType = "SUPER";
+              else if (number.length === 2) subType = "AB";
+              else if (number.length === 1) subType = "A";
+            }
+          }
+        }
+
+        // If subType is still not set, default for 3-digit is SUPER, for 2-digit is AB, for 1-digit is A
+        if (!subType) {
+          if (number.length === 3) subType = "SUPER";
+          else if (number.length === 2) subType = "AB";
+          else if (number.length === 1) subType = "A";
+        }
+
+        // Special: if subType is BOTH, treat as both SUPER and BOX
+        if (subType === "BOTH") {
+          return { number, count, subType: "BOTH" };
+        }
+
+        // Map AB/AC/BC/A/B/C/ALL to their respective subTypes
+        if (
+          ["AB", "AC", "BC", "A", "B", "C", "ALL"].includes(subType)
+        ) {
+          return { number, count, subType };
+        }
+
+        // For BOX/SUPER/SET
+        if (["BOX", "SUPER", "SET"].includes(subType)) {
+          // Only allow BOX for 3-digit, otherwise force to SUPER/AB/A
+          if (subType === "BOX") {
+            if (number.length === 3) {
+              return { number, count, subType: "BOX" };
+            } else if (number.length === 2) {
+              return { number, count, subType: "AB" };
+            } else if (number.length === 1) {
+              return { number, count, subType: "A" };
+            }
+          }
+          // For SET, we want to return a special marker to handle all 3-digit combinations
+          if (subType === "SET" && number.length === 3) {
+            return { number, count, subType: "SET" };
+          }
+          return { number, count, subType: subType === "BOX" ? "SUPER" : subType };
+        }
+
+        // Fallback
+        if (number.length === 3) return { number, count, subType: "SUPER" };
+        if (number.length === 2) return { number, count, subType: "AB" };
+        if (number.length === 1) return { number, count, subType: "A" };
+        return { number, count, subType: "SUPER" };
+      }
+
+      let added = 0;
+      let failedLines: string[] = [];
+
+      for (let line of lines) {
+        const parsed = parseLine(line);
+
+        console.log("parsed", parsed);
+
+
+        // If parseLine failed, add to failedLines and continue
+        if (!parsed) {
+          failedLines.push(line);
+          continue;
+        }
+
+        // Validate number and count are valid numbers before adding
+        if (
+          !isValidNumberString(parsed.number) ||
+          !isValidPositiveNumber(parsed.count) ||
+          !isValidNumber(parsed)
+        ) {
+          failedLines.push(line);
+          continue;
+        }
+
+        // Determine drawSession based on number length
+        let session = drawSession;
+        if (parsed.number.length === 1) session = "1";
+        else if (parsed.number.length === 2) session = "2";
+        else if (parsed.number.length === 3) session = "3";
+
+        // Set drawSession if different
+        if (drawSession !== session) setDrawSession(session);
+
+        // For triple digit, if subType is BOTH, add both
+        if (session === "3" && parsed.subType === "BOTH") {
+          // Only add if count and bCount > 0
+          if (parsed.count > 0) addBooking("BOTH", parsed.number, parsed.count, parsed.count);
+          added += 2;
+        }
+        // For triple digit, if subType is SET, add all 6 permutations as SUPER
+        else if (session === "3" && parsed.subType === "SET") {
+          // Generate all unique permutations of the 3 digits
+          const digits = parsed.number.split("");
+          const perms = new Set();
+          for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+              if (j === i) continue;
+              for (let k = 0; k < 3; k++) {
+                if (k === i || k === j) continue;
+                perms.add(digits[i] + digits[j] + digits[k]);
+              }
+            }
+          }
+          let countAdded = 0;
+          perms.forEach((perm) => {
+            addBooking("SUPER", perm, parsed.count, parsed.count);
+            countAdded++;
+          });
+          added += countAdded;
+        }
+        // For triple digit, if subType is BOX, add as BOX
+        else if (session === "3" && parsed.subType === "BOX") {
+          if (parsed.count > 0) {
+            addBooking("BOX", parsed.number, parsed.count, parsed.count);
+            added += 1;
+          }
+        }
+        // For all other cases
+        else {
+          // Only add if count > 0
+          if (parsed.count > 0) addBooking(parsed.subType, parsed.number, parsed.count, parsed.count);
+          added += 1;
+        }
+      }
+
+
+      console.log("failedLines", failedLines);
+
+
+      if (added === 0) {
+        ToastAndroid.show('No valid bookings found in clipboard.', ToastAndroid.SHORT);
+      } else {
+        ToastAndroid.show(`Added ${added} booking${added > 1 ? "s" : ""} from clipboard.`, ToastAndroid.SHORT);
+      }
+
+      // If there are failed lines, show them in a modal
+      if (failedLines.length > 0) {
+        setFailedPasteLines(failedLines);
+        setFailedPasteModalVisible(true);
+      }
+    } catch (err) {
+      Alert.alert("Clipboard Error", "Could not read clipboard.");
+    }
+  }
 
   const handleBackClick = () => {
     setSelectedDraw(null)
@@ -645,12 +1468,22 @@ const BookingScreen: React.FC = () => {
           </View>
           <TouchableOpacity
             onPress={handleSubmit}
-            className="bg-green-800 rounded px-3 py-2"
-            disabled={!!drawSessionError}
+            className="bg-green-800 rounded px-3 py-2 flex-row items-center justify-center"
+            disabled={!!isPending}
+            activeOpacity={isPending ? 1 : 0.85}
           >
-            <Text className="text-white text-center font-bold text-lg">
-              SUBMIT
-            </Text>
+            {isPending ? (
+              <View className="flex-row items-center justify-center">
+                <ActivityIndicator size="small" color="#fff" />
+                <Text className="text-white text-center font-bold text-lg ml-2">
+                  SUBMITTING...
+                </Text>
+              </View>
+            ) : (
+              <Text className="text-white text-center font-bold text-lg">
+                SUBMIT
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -759,6 +1592,40 @@ const BookingScreen: React.FC = () => {
                   <Text className="text-white font-semibold">Edit</Text>
                 </TouchableOpacity>
               </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Modal for failed lines in paste */}
+        <Modal
+          visible={failedPasteModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setFailedPasteModalVisible(false)}
+        >
+          <View className="flex-1 justify-center items-center bg-black/50 px-4">
+            <View className="bg-white p-6 rounded-2xl w-full max-w-md shadow-lg">
+              <Text className="text-xl font-bold mb-4 text-center text-red-700">
+                Invalid/Skipped Bookings
+              </Text>
+              <Text className="mb-2 text-gray-700 text-center">
+                The following lines could not be added:
+              </Text>
+              <View className="max-h-60 mb-4">
+                <FlatList
+                  data={failedPasteLines}
+                  keyExtractor={(_, idx) => idx.toString()}
+                  renderItem={({ item }) => (
+                    <Text className="text-sm text-gray-800 mb-1">• {item}</Text>
+                  )}
+                />
+              </View>
+              <TouchableOpacity
+                onPress={() => setFailedPasteModalVisible(false)}
+                className="px-6 py-2 rounded-lg bg-red-700"
+              >
+                <Text className="text-white font-semibold text-base">Close</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </Modal>
