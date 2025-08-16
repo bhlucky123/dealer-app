@@ -137,6 +137,7 @@ const ResultPage: React.FC = () => {
     // Add skip state
     const [skipError, setSkipError] = useState<string | null>(null);
     const [skipLoading, setSkipLoading] = useState<boolean>(false);
+    const [loading, setLoading] = useState<boolean>(false);
 
     const skipDrawSessionMutation = useMutation({
         mutationFn: (payload: { draw_id: number; session_date: string }) => {
@@ -187,6 +188,7 @@ const ResultPage: React.FC = () => {
             return;
         }
 
+        setLoading(true)
         try {
             if (data && data.id) {
                 // Update
@@ -204,6 +206,7 @@ const ResultPage: React.FC = () => {
             setMode("view");
             setFormData(null);
             refetch();
+            setLoading(false)
         } catch (err: any) {
             if (Array.isArray(err) && err.length === 1 && err[0] === "No draw session found for today.") {
                 setFormError("No draw session found for the selected date. Please check the draw schedule.");
@@ -212,6 +215,8 @@ const ResultPage: React.FC = () => {
                 setFormError(typeof err === "string" ? err : "Failed to save result.");
                 Alert.alert("Error", typeof err === "string" ? err : "Failed to save result.");
             }
+
+            setLoading(false)
 
             setTimeout(() => {
                 setFormError("");
@@ -330,6 +335,7 @@ const ResultPage: React.FC = () => {
                     initialData={formData || undefined}
                     onSubmit={handleFormSubmit}
                     validate={validateDrawResultFields}
+                    loading={loading}
                 />
             </View>
         );
