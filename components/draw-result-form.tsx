@@ -22,9 +22,10 @@ const PRIZE_COLOURS = [
 type Props = {
     onSubmit: (data: any) => void;
     initialData?: any;
+    loading: boolean
 };
 
-const DrawResultForm = ({ onSubmit, initialData }: Props) => {
+const DrawResultForm = ({ onSubmit, initialData,loading }: Props) => {
     const [form, setForm] = useState({
         first_prize: initialData?.first_prize || '',
         second_prize: initialData?.second_prize || '',
@@ -144,7 +145,7 @@ const DrawResultForm = ({ onSubmit, initialData }: Props) => {
             <View className="flex-1 bg-gray-50">
                 <ScrollView
                     className="flex-1"
-                    contentContainerStyle={{ paddingBottom: 120 }}
+                    contentContainerStyle={{ paddingBottom: 80 }}
                     keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
                 >
@@ -258,7 +259,7 @@ const DrawResultForm = ({ onSubmit, initialData }: Props) => {
                         bottom: 0,
                         backgroundColor: "white",
                         paddingHorizontal: 16,
-                        paddingBottom: 16,
+                        paddingBottom: 34,
                         paddingTop: 8,
                         borderTopWidth: 1,
                         borderColor: "#e5e7eb", // border-gray-200
@@ -271,7 +272,9 @@ const DrawResultForm = ({ onSubmit, initialData }: Props) => {
                 >
                     <TouchableOpacity
                         className="bg-green-700 px-4 py-3 rounded-xl items-center justify-center shadow-lg"
-                        onPress={() => onSubmit(form)}
+                        onPress={() => {
+                            if (!loading) onSubmit(form);
+                        }}
                         activeOpacity={0.85}
                         style={{
                             elevation: 4,
@@ -280,8 +283,13 @@ const DrawResultForm = ({ onSubmit, initialData }: Props) => {
                             shadowOpacity: 0.15,
                             shadowRadius: 4,
                         }}
+                        disabled={loading}
                     >
-                        <Text className="text-white font-bold text-center text-base tracking-wide">Submit</Text>
+                        {loading ? (
+                            <Text className="text-white font-bold text-center text-base tracking-wide">Submitting...</Text>
+                        ) : (
+                            <Text className="text-white font-bold text-center text-base tracking-wide">Submit</Text>
+                        )}
                     </TouchableOpacity>
                 </View>
             </View>

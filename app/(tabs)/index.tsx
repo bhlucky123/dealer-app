@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   formLabel: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
     marginBottom: 8,
     color: "#374151",

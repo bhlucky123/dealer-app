@@ -123,7 +123,6 @@ const BookingScreen: React.FC = () => {
     if (!/^\d+$/.test(parsed.number)) return false;
     if (![1, 2, 3].includes(parsed.number.length)) return false;
 
-
     const allowedSubTypes = buttonsMap[String(parsed.number.length)];
     if (!allowedSubTypes || !allowedSubTypes.includes(parsed.subType.toUpperCase())) {
       return false;
@@ -216,16 +215,13 @@ const BookingScreen: React.FC = () => {
     return !isNaN(n) && isFinite(n) && n > 0;
   };
 
-
-
+  // --- FIXED addBooking for BOX/bCount ---
   const addBooking = (
     subType: string,
     number?: string,
     count?: number,
     bCount?: number
   ) => {
-    console.log("on add booking");
-
     // Helper to determine booking type and price/commission for a given number length
     const getBookingTypeByLength = (len: number): BookingType => {
       switch (len) {
@@ -275,8 +271,6 @@ const BookingScreen: React.FC = () => {
     // --- ENFORCE count and bCount > 0 and number/count/bCount are valid numbers ---
     // If called from handlePastBookings, number/count/bCount are provided
     if (number && typeof count === "number") {
-      console.log("number is there and count is number", number, 'count', count);
-
       // Accept multiple numbers separated by comma, space, or newline
       const numbers = number
         .split(/[\s,]+/)
@@ -300,8 +294,21 @@ const BookingScreen: React.FC = () => {
           return;
         }
         // Validate bCount if needed
-        if ((subType === "BOTH" || subType === "BOX") && !isValidPositiveNumber(bCount)) {
+        if (subType === "BOTH" && !isValidPositiveNumber(bCount)) {
           invalids.push(num);
+          return;
+        }
+        // For BOX, only require bCount and must be 3-digit
+        if (subType === "BOX") {
+          if (num.length !== 3) {
+            invalids.push(num);
+            return;
+          }
+          if (!isValidPositiveNumber(bCount)) {
+            invalids.push(num);
+            return;
+          }
+          newEntries.push(createEntry(num, bCount ?? count, "BOX", undefined, bookingType));
           return;
         }
         if (subType === "SUPER" && !isValidPositiveNumber(count)) {
@@ -348,9 +355,6 @@ const BookingScreen: React.FC = () => {
       return;
     }
 
-    console.log("there");
-
-
     // --- BEGIN original addBooking code, but allow multiple numbers in numberInput ---
     // Accept multiple numbers separated by comma, space, or newline
     const numbers = numberInput
@@ -374,15 +378,11 @@ const BookingScreen: React.FC = () => {
       const countVal = parseNum(countInput);
       const bCountVal = parseNum(bCountInput);
 
-      console.log("invalids1", invalids);
-
-
       // Validate number is a valid number string
       if (!isValidNumberString(num)) {
         invalids.push(num);
         return;
       }
-      console.log("invalids2", invalids);
 
       // In mixed mode, allow 1, 2, or 3 digit numbers; in normal mode, enforce drawSession digit length
       if (isMixedMode) {
@@ -396,18 +396,31 @@ const BookingScreen: React.FC = () => {
           return;
         }
       }
-      console.log("invalids3", invalids, "countInput", countInput);
+
+      // For BOX, only require bCount and must be 3-digit
+      if (subType === "BOX") {
+        if (num.length !== 3) {
+          invalids.push(num);
+          return;
+        }
+        if (!bCountInput || !isValidNumberString(bCountInput) || !isValidPositiveNumber(bCountInput)) {
+          invalids.push(num);
+          return;
+        }
+        const padded = num.padStart(3, "0");
+        allEntries.push(createEntry(padded, bCountVal, "BOX", undefined, bookingType));
+        return;
+      }
 
       // Validate countInput is a valid number
       if (!isValidNumberString(countInput) || !isValidPositiveNumber(countInput)) {
         invalids.push(num);
         return;
       }
-      console.log("invalids4", invalids);
 
       // Validate bCountInput if needed
       if (
-        (subType === "BOTH" || subType === "BOX") &&
+        subType === "BOTH" &&
         (!isValidNumberString(bCountInput) || !isValidPositiveNumber(bCountInput))
       ) {
         invalids.push(num);
@@ -417,8 +430,6 @@ const BookingScreen: React.FC = () => {
         invalids.push(num);
         return;
       }
-      console.log("invalids5", invalids);
-
 
       // ---------- Range Booking ----------
       if (selectedRange === "Range" && !isMixedMode) {
@@ -647,24 +658,6 @@ const BookingScreen: React.FC = () => {
         return;
       }
 
-
-      console.log("invalids", invalids);
-      console.log("bCountInput", bCountInput);
-
-      if (subType === "BOX") {
-        if (!bCountInput) {
-          invalids.push(num);
-          return;
-        }
-        if (!isValidNumberString(bCountInput) || !isValidPositiveNumber(bCountInput)) {
-          invalids.push(num);
-          return;
-        }
-        const padded = num.padStart(digitsRequired, "0");
-        allEntries.push(createEntry(padded, parseNum(bCountInput), "BOX", undefined, bookingType));
-        return;
-      }
-
       if (subType === "ALL") {
         const padded = num.padStart(digitsRequired, "0");
         if (isDouble) {
@@ -694,11 +687,7 @@ const BookingScreen: React.FC = () => {
       allEntries.push(createEntry(padded, parseNum(countInput), subType, undefined, bookingType));
     });
 
-
-
-    console.log("invalids", invalids);
     if (invalids.length > 0) {
-
       if (isMixedMode) {
         Alert.alert(
           "Invalid input",
@@ -707,10 +696,18 @@ const BookingScreen: React.FC = () => {
           )}`
         );
       } else {
-        Alert.alert(
-          "Invalid input",
-          `Number must be a ${drawSession}-digit number.`
-        );
+        // For BOX, show 3-digit error, else show digit error
+        if (subType === "BOX") {
+          Alert.alert(
+            "Invalid input",
+            `Number must be a 3-digit number.`
+          );
+        } else {
+          Alert.alert(
+            "Invalid input",
+            `Number must be a ${drawSession}-digit number.`
+          );
+        }
       }
       return;
     }
@@ -722,7 +719,6 @@ const BookingScreen: React.FC = () => {
     }
     // --- END original addBooking code ---
   };
-
 
   const handleSubmit = () => {
     if (!bookingDetails?.length) {
@@ -754,6 +750,7 @@ const BookingScreen: React.FC = () => {
     setEditModalVisible(true);
   };
 
+  // --- FIXED saveEdit for BOX/bCount ---
   const saveEdit = () => {
     if (editingEntry && editIndex !== null) {
       // ENFORCE number and count > 0 and are valid numbers
@@ -764,19 +761,23 @@ const BookingScreen: React.FC = () => {
         Alert.alert("Invalid input", "Number must be a valid number.");
         return;
       }
+      // For BOX, must be 3-digit and count > 0
       if (
-        !isValidPositiveNumber(editingEntry.count)
+        editingEntry.sub_type === "BOX"
       ) {
-        Alert.alert("Invalid input", "Count must be a valid number greater than 0.");
-        return;
-      }
-      // If sub_type is BOX or BOTH, validate b.count if present
-      if (
-        (editingEntry.sub_type === "BOX" || editingEntry.sub_type === "BOTH") &&
-        !isValidPositiveNumber(editingEntry.count)
-      ) {
-        Alert.alert("Invalid input", "B.Count must be a valid number greater than 0.");
-        return;
+        if (editingEntry.number.length !== 3) {
+          Alert.alert("Invalid input", "Number must be a 3-digit number for BOX.");
+          return;
+        }
+        if (!isValidPositiveNumber(editingEntry.count)) {
+          Alert.alert("Invalid input", "B.Count must be a valid number greater than 0.");
+          return;
+        }
+      } else {
+        if (!isValidPositiveNumber(editingEntry.count)) {
+          Alert.alert("Invalid input", "Count must be a valid number greater than 0.");
+          return;
+        }
       }
 
       const updated = [...bookingDetails];
@@ -875,16 +876,10 @@ const BookingScreen: React.FC = () => {
         return;
       }
 
-      console.log("clipboardText", clipboardText);
-
-
       const lines = clipboardText
         .split(/[\n,;]+/)
         .map((l) => l.trim())
         .filter(Boolean);
-
-      console.log("lines", lines);
-
 
       // Helper: parse a single line into {number, count, subType}
       function parseLine(line: string) {
@@ -1009,9 +1004,6 @@ const BookingScreen: React.FC = () => {
       for (let line of lines) {
         const parsed = parseLine(line);
 
-        console.log("parsed", parsed);
-
-
         // If parseLine failed, add to failedLines and continue
         if (!parsed) {
           failedLines.push(line);
@@ -1078,10 +1070,6 @@ const BookingScreen: React.FC = () => {
           added += 1;
         }
       }
-
-
-      console.log("failedLines", failedLines);
-
 
       if (added === 0) {
         ToastAndroid.show('No valid bookings found in clipboard.', ToastAndroid.SHORT);
@@ -1468,16 +1456,13 @@ const BookingScreen: React.FC = () => {
           </View>
           <TouchableOpacity
             onPress={handleSubmit}
-            className="bg-green-800 rounded px-3 py-2 flex-row items-center justify-center"
+            className="bg-green-800 rounded px-3 py-2 flex-row items-center justify-center w-28"
             disabled={!!isPending}
             activeOpacity={isPending ? 1 : 0.85}
           >
             {isPending ? (
               <View className="flex-row items-center justify-center">
                 <ActivityIndicator size="small" color="#fff" />
-                <Text className="text-white text-center font-bold text-lg ml-2">
-                  SUBMITTING...
-                </Text>
               </View>
             ) : (
               <Text className="text-white text-center font-bold text-lg">
@@ -1516,9 +1501,11 @@ const BookingScreen: React.FC = () => {
               </View>
 
               <View className="mb-3">
-                <Text className="mb-1 font-semibold text-gray-700">Count</Text>
+                <Text className="mb-1 font-semibold text-gray-700">
+                  {editingEntry?.sub_type === "BOX" ? "B.Count" : "Count"}
+                </Text>
                 <TextInput
-                  placeholder="Count"
+                  placeholder={editingEntry?.sub_type === "BOX" ? "B.Count" : "Count"}
                   keyboardType="numeric"
                   value={editingEntry?.count?.toString() || ""}
                   onChangeText={(text) =>
