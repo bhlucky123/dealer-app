@@ -1,8 +1,10 @@
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
+import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import * as FileSystem from 'expo-file-system';
 import { printToFileAsync } from 'expo-print';
 import { shareAsync } from "expo-sharing";
 import React, { useMemo, useState } from "react";
@@ -58,6 +60,7 @@ const SalesReportScreen = () => {
     const [fullView, setFullView] = useState(false);
     const [allGame, setAllGame] = useState(false);
     const [selectedFilter, setSelectedFilter] = useState("");
+    const [printing, setPrinting] = useState(false); // <-- Add loading state for printing
 
     const { user } = useAuthStore();
     const queryClient = useQueryClient();
@@ -114,7 +117,7 @@ const SalesReportScreen = () => {
         if (!data?.result) return [];
         if (!search) return data.result;
         // Only filter by bill_number (as per placeholder)
-        return data.result.filter(item =>
+        return data.result.filter((item: any) =>
             item.bill_number?.toString().toLowerCase().includes(search.toLowerCase())
         );
     }, [data, search]);
@@ -129,7 +132,7 @@ const SalesReportScreen = () => {
             };
         }
         return filteredResult.reduce(
-            (acc, item) => {
+            (acc: any, item: any) => {
                 acc.total_bill_count += item.bill_count || 0;
                 acc.total_dealer_amount += item.dealer_amount || 0;
                 acc.total_customer_amount += item.customer_amount || 0;
@@ -146,146 +149,172 @@ const SalesReportScreen = () => {
     const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && data;
 
     const generatePdf = async () => {
-        // Use filteredResult for PDF if search is applied, else use all data
-        const pdfData = search ? filteredResult : (data?.result || []);
-        if (!pdfData || pdfData.length === 0) {
-            alert("No data available to generate PDF.");
-            return;
-        }
-
-        // Generate table rows from the data
-        const tableRows = pdfData.flatMap(bill =>
-            bill.booking_details ? bill.booking_details.map(detail => `
-                <tr>
-                    ${
-                        user?.user_type === "ADMIN"
-                            ? `<td>${bill.dealer?.username || 'N/A'}</td>`
-                            : user?.user_type === "DEALER"
-                                ? `<td>${bill.agent?.username || 'N/A'}</td>`
-                                : ''
-                    }
-                    <td>${bill.bill_number || ''}</td>
-                    <td>${detail.number}</td>
-                    <td>${detail.count}</td>
-                    <td>${detail.amount.toFixed(2)}</td>
-                </tr>
-    `).join('') : ''
-        ).join('');
-
-        // Use filtered total if search is applied, else backend total
-        const totalAmount = search
-            ? filteredTotals.total_customer_amount.toFixed(0)
-            : (data?.total_customer_amount ? data.total_customer_amount.toFixed(2) : "0");
-        const now = new Date();
-        const formattedDate = formatDateDDMMYYYY(now);
-        const formattedTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
-
-        // --- PDF filename logic ---
-        // Use selectedDraw?.name, fromDate, toDate
-        // Clean draw name for filename (remove spaces, special chars)
-        const cleanDrawName = (selectedDraw?.name || "Draw")
-            .replace(/[^a-zA-Z0-9]/g, "_")
-            .replace(/_+/g, "_")
-            .replace(/^_+|_+$/g, "");
-        const fromStr = formatDateYYYYMMDD(fromDate);
-        const toStr = formatDateYYYYMMDD(toDate);
-        const pdfFileName = `SalesReport_${cleanDrawName}_${fromStr}_to_${toStr}.pdf`;
-
-        const html = `
-    < html >
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; font-size: 10px; }
-            .header { 
-              text-align: center; 
-              margin-bottom: 15px; 
-              background: linear-gradient(90deg, #6D28D9 0%, #7C3AED 100%);
-              padding: 18px 0 10px 0;
-              border-radius: 8px 8px 0 0;
-              color: #fff;
-            }
-            .header h1 { 
-              font-size: 18px; 
-              margin: 0; 
-              color: #FFD700; /* Gold color for heading */
-              letter-spacing: 1px;
-              text-shadow: 1px 1px 2px #4B0082;
-            }
-            .header p { 
-              font-size: 12px; 
-              margin: 0; 
-              color: #E0E7FF;
-            }
-            table { 
-              width: 100%; 
-              border-collapse: collapse; 
-              margin-top: 10px;
-              background: #F3F4F6;
-              border-radius: 0 0 8px 8px;
-              overflow: hidden;
-            }
-            th, td { 
-              border: 1px solid #A78BFA; 
-              padding: 5px; 
-              text-align: center; 
-            }
-            th { 
-              font-weight: bold; 
-              background: #C7D2FE;
-              color: #3730A3;
-            }
-            .footer { 
-              text-align: right; 
-              margin-top: 20px; 
-              font-size: 12px; 
-              font-weight: bold; 
-              color: #6D28D9;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>${selectedDraw?.name}</h1>
-            <p>${formattedDate} ${formattedTime}</p>
-          </div>
-          <table>
-            <thead>
-              <tr>
-              ${user?.user_type === "ADMIN" && '<th>Dealer</th>' }
-              ${user?.user_type === "DEALER" && '<th>Agent</th>' }
-                
-                <th>Bill Number</th>
-                <th>No</th>
-                <th>Count</th>
-                <th>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${tableRows}
-            </tbody>
-          </table>
-          <div class="footer">
-            <p>Total Amount: ${totalAmount}</p>
-          </div>
-        </body>
-      </html >
-    `;
-
+        setPrinting(true);
         try {
+            // Use filteredResult for PDF if search is applied, else use all data
+            const pdfData = search ? filteredResult : (data?.result || []);
+            if (!pdfData || pdfData.length === 0) {
+                alert("No data available to generate PDF.");
+                setPrinting(false);
+                return;
+            }
+
+            // Generate table rows from the data
+            const tableRows = pdfData.flatMap((bill: any) =>
+                bill.booking_details ? bill.booking_details.map((detail: any) => `
+                    <tr>
+                        ${(user?.user_type === "ADMIN" || user?.user_type === "DEALER") ?
+                            `<td>${bill?.dealer?.username
+                                ? `${bill.dealer.username} (${bill.dealer.user_type || ''})`
+                                : bill?.agent?.username
+                                    ? `${bill.agent.username} (${bill.agent.user_type || ''})`
+                                    : 'N/A'
+                            }</td>` : ""
+                        }
+                        <td>${bill.bill_number || ''}</td>
+                        <td>${detail.number}</td>
+                        <td>${detail.count}</td>
+                        <td>${amountHandler(Number(detail.customer_amount))}</td>
+                    </tr>
+                `).join('') : ''
+            ).join('');
+
+            const totalAmount = search
+                ? filteredTotals.total_customer_amount.toFixed(0)
+                : (data?.total_customer_amount ? data.total_customer_amount.toFixed(2) : "0");
+
+            const now = new Date();
+            const formattedDate = formatDateDDMMYYYY(now);
+            const formattedTime = now.toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            }).toUpperCase();
+
+            const cleanDrawName = (selectedDraw?.name || "Draw")
+                .replace(/[^a-zA-Z0-9]/g, "_")
+                .replace(/_+/g, "_")
+                .replace(/^_+|_+$/g, "");
+
+            const fromStr = formatDateDDMMYYYY(fromDate);
+            const toStr = formatDateDDMMYYYY(toDate);
+
+            const safePdfFileName = `SalesReport_${cleanDrawName}_${fromStr}_to_${toStr}.pdf`.replace(/[\/\\?%*:|"<>]/g, "_");
+
+            const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <style>
+              body { font-family: Arial, sans-serif; font-size: 10px; }
+              .header { 
+                text-align: center; 
+                margin-bottom: 15px; 
+                background: linear-gradient(90deg, #6D28D9 0%, #7C3AED 100%);
+                padding: 18px 0 10px 0;
+                border-radius: 8px 8px 0 0;
+                color: #fff;
+              }
+              .header h1 { 
+                font-size: 18px; 
+                margin: 0; 
+                color: #FFD700;
+                letter-spacing: 1px;
+                text-shadow: 1px 1px 2px #4B0082;
+              }
+              .header p { 
+                font-size: 12px; 
+                margin: 0; 
+                color: #E0E7FF;
+              }
+              table { 
+                width: 100%; 
+                border-collapse: collapse; 
+                margin-top: 10px;
+                background: #F3F4F6;
+                border-radius: 0 0 8px 8px;
+                overflow: hidden;
+              }
+              th, td { 
+                border: 1px solid #A78BFA; 
+                padding: 5px; 
+                text-align: center; 
+              }
+              th { 
+                font-weight: bold; 
+                background: #C7D2FE;
+                color: #3730A3;
+              }
+              .footer { 
+                text-align: right; 
+                margin-top: 20px; 
+                font-size: 12px; 
+                font-weight: bold; 
+                color: #6D28D9;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>${selectedDraw?.name || ""}</h1>
+              <p>${formattedDate} ${formattedTime}</p>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  ${(user?.user_type === "ADMIN" || user?.user_type === "DEALER") ? '<th>Booked By</th>' : ''}
+                  <th>Bill Number</th>
+                  <th>Number</th>
+                  <th>Count</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tableRows}
+              </tbody>
+            </table>
+            <div class="footer">
+              <p>Total Amount: ${amountHandler(Number(totalAmount))}</p>
+            </div>
+          </body>
+        </html>
+        `;
+
             const file = await printToFileAsync({
                 html: html,
-                base64: false,
-                width: 595, // Standard A4 width in points
-                height: 842, // Standard A4 height in points
-                fileName: pdfFileName, // <-- Set the filename here
+                base64: false, // ✅ Important fix
+                width: 595,
+                height: 842,
             });
 
-            await shareAsync(file.uri, { dialogTitle: 'Share Sales Report', UTI: 'com.adobe.pdf', mimeType: 'application/pdf' });
+            const newPdfUri = `${FileSystem.cacheDirectory}${safePdfFileName}`; // ✅ Removed trailing space
+            let finalPdfUri = file.uri;
+
+            try {
+                if (file.uri !== newPdfUri) {
+                    await FileSystem.moveAsync({
+                        from: file.uri,
+                        to: newPdfUri,
+                    });
+                    finalPdfUri = newPdfUri;
+                }
+            } catch (moveErr: any) {
+                console.log("PDF move error:", moveErr);
+                alert("Could not save PDF with the desired filename. The file will be shared with a temporary name.");
+            }
+
+            await shareAsync(finalPdfUri, {
+                dialogTitle: 'Share Sales Report',
+                UTI: 'com.adobe.pdf',
+                mimeType: 'application/pdf',
+            });
         } catch (err) {
+            console.log("PDF generation error:", err);
             alert("An error occurred while creating the PDF.");
+        } finally {
+            setPrinting(false);
         }
     };
-
 
     return (
         <SafeAreaView className="flex-1 bg-white">
@@ -421,7 +450,7 @@ const SalesReportScreen = () => {
                                                 alignItems: "center",
                                                 justifyContent: "center",
                                                 borderRadius: 12,
-                                                
+
                                             }}
                                         >
                                             <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
@@ -432,8 +461,20 @@ const SalesReportScreen = () => {
                         </View>
                     )}
 
-                    <TouchableOpacity onPress={generatePdf} className="bg-violet-600 p-3 rounded-lg items-center">
-                        <Text className="text-white font-bold">Print Report</Text>
+                    <TouchableOpacity
+                        onPress={generatePdf}
+                        className="bg-violet-600 p-3 rounded-lg items-center"
+                        disabled={printing}
+                        style={printing ? { opacity: 0.7 } : undefined}
+                    >
+                        {printing ? (
+                            <View className="flex-row items-center">
+                                <ActivityIndicator size="small" color="#fff" />
+                                <Text className="text-white font-bold ml-2">Printing...</Text>
+                            </View>
+                        ) : (
+                            <Text className="text-white font-bold">Print Report</Text>
+                        )}
                     </TouchableOpacity>
 
                     <View className="flex-row justify-between items-center   px-2">
@@ -475,11 +516,14 @@ const SalesReportScreen = () => {
                         <Text className="mt-3 text-gray-600">Loading sales data...</Text>
                     </View>
                 ) : error ? (
-                    <View className="flex-1 bg-red-50 border border-red-200 px-4 py-3 rounded-lg justify-center items-center">
-                        <Text className="text-red-700 font-medium">
-                            Error loading report.
-                        </Text>
-                    </View>
+                    // Only show error if not loading
+                    !isLoading && (
+                        <View className="flex-1 bg-red-50 border border-red-200 px-4 py-3 rounded-lg justify-center items-center">
+                            <Text className="text-red-700 font-medium">
+                                Error loading report.
+                            </Text>
+                        </View>
+                    )
                 ) : (
                     <>
                         <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden mt-4">
@@ -508,8 +552,8 @@ const SalesReportScreen = () => {
                                             <Text className="flex-[1.2] text-sm text-center text-gray-700">{item.dealer.username}</Text>
                                             <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_number}</Text>
                                             <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_count}</Text>
-                                            <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{item.dealer_amount.toFixed(0)}</Text>
-                                            <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{item.customer_amount.toFixed(0)}</Text>
+                                            <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{amountHandler(Number(item.dealer_amount))}</Text>
+                                            <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{amountHandler(Number(item.customer_amount))}</Text>
                                         </View>
 
                                         {fullView && Array.isArray(item.booking_details) && item.booking_details.length > 0 && (
@@ -521,9 +565,9 @@ const SalesReportScreen = () => {
                                                         <Text className="flex-[1.1] text-[10px] text-gray-600">{d.sub_type}</Text>
                                                         <Text className="flex-[1.2] text-[10px] text-center text-gray-600">{d.number}</Text>
                                                         <Text className="flex-1 text-[10px] text-center text-gray-600">{d.count}</Text>
-                                                        <Text className="flex-1 text-[10px] text-center text-gray-600">₹{d.amount}</Text>
-                                                        <Text className="flex-1 text-[10px] text-right text-violet-600">₹{d.dealer_amount.toFixed(0)}</Text>
-                                                        <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{d.agent_amount.toFixed(0)}</Text>
+                                                        <Text className="flex-1 text-[10px] text-center text-gray-600">₹{amountHandler(Number(d.amount))}</Text>
+                                                        <Text className="flex-1 text-[10px] text-right text-violet-600">₹{amountHandler(Number(d.dealer_amount))}</Text>
+                                                        <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{amountHandler(Number(d.agent_amount))}</Text>
                                                     </View>
                                                 )}
                                                 initialNumToRender={5}
@@ -556,13 +600,13 @@ const SalesReportScreen = () => {
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-violet-700">
                                 ₹{search
-                                    ? filteredTotals.total_dealer_amount.toFixed(2)
-                                    : (data?.total_dealer_amount?.toFixed(0) || 0)}
+                                    ? amountHandler(Number(filteredTotals.total_dealer_amount))
+                                    : amountHandler(Number(data?.total_dealer_amount?.toFixed(0) || 0))}
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">
                                 ₹{search
-                                    ? filteredTotals.total_customer_amount.toFixed(2)
-                                    : (data?.total_customer_amount?.toFixed(0) || 0)}
+                                    ? amountHandler(Number(filteredTotals.total_customer_amount))
+                                    : amountHandler(Number(data?.total_customer_amount?.toFixed(0) || 0))}
                             </Text>
                         </View>
                     </View>

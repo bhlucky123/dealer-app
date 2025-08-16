@@ -103,7 +103,6 @@ const useDraw = () => {
     }) => {
       try {
         const res = await api.patch(`/draw-result/result/${id}/`, rest);
-        console.log("res", res);
         return res?.data;
       } catch (error: any) {
         console.log("Error updating draw result:", error);
@@ -112,6 +111,8 @@ const useDraw = () => {
       }
     },
     onError: (error) => {
+      console.log("errror", error);
+
       // You can handle side effects here, e.g., show a toast or log
       // console.log("Mutation error in updateDrawResult:", error);
     },
@@ -124,6 +125,8 @@ const useDraw = () => {
     updateDraw: updateDraw,
     createDrawResult: createDrawResult,
     updateDrawResult: updateDrawResult,
+    updateDrawResultIsPending: updateDrawResult.isPending,
+    createDrawResultIsPending: createDrawResult.isPending
   };
 };
 

@@ -1,5 +1,6 @@
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
+import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
 import { formatDateDDMMYYYY } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -152,11 +153,10 @@ const LastSaleReportScreen = () => {
                                                     {item.bill_count}
                                                 </Text>
                                                 <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">
-                                                    ₹{item.dealer_amount.toFixed(0)} {/* Format to 2 decimal places */}
+                                                    ₹{amountHandler(Number(item.dealer_amount))}
                                                 </Text>
                                                 <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">
-                                                    ₹{item.customer_amount.toFixed(0)}{" "}
-                                                    {/* Format to 2 decimal places */}
+                                                    ₹{amountHandler(Number(item.customer_amount))}
                                                 </Text>
                                             </View>
 
@@ -177,13 +177,13 @@ const LastSaleReportScreen = () => {
                                                             {d.count}
                                                         </Text>
                                                         <Text className="flex-1 text-[10px] text-center text-gray-600">
-                                                            {d.amount}
+                                                            {amountHandler(Number(d.amount))}
                                                         </Text>
                                                         <Text className="flex-1 text-[10px] text-right text-violet-600">
-                                                            ₹{d.dealer_amount.toFixed(0)}
+                                                            ₹{amountHandler(Number(d.dealer_amount))}
                                                         </Text>
                                                         <Text className="flex-1 text-[10px] text-right text-emerald-600">
-                                                            ₹{d.agent_amount.toFixed(0)}
+                                                            ₹{amountHandler(Number(d.agent_amount))}
                                                         </Text>
                                                     </View>
                                                 ))}
@@ -220,10 +220,10 @@ const LastSaleReportScreen = () => {
                                 {data?.total_bill_count || 0} {/* Ensure 0 if null/undefined */}
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-violet-700">
-                                {data?.total_dealer_amount || 0}
+                                {amountHandler(Number(data?.total_dealer_amount || 0))}
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">
-                                {data?.total_customer_amount || 0}
+                                {amountHandler(Number(data?.total_customer_amount || 0))}
                             </Text>
                         </View>
                     </View>

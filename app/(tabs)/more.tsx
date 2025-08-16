@@ -1,12 +1,14 @@
 import { useAuthStore } from "@/store/auth";
 import api from "@/utils/axios";
+import { useFocusEffect } from "@react-navigation/native";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import React, { useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
   ScrollView,
   Switch,
   Text,
@@ -263,6 +265,9 @@ export default function MoreTab() {
   const [prizeConfigForm, setPrizeConfigForm] = useState<PrizeConfig | null>(null);
   const [prizeConfigError, setPrizeConfigError] = useState<string | null>(null);
 
+  // --- Refresh state for pull-to-refresh ---
+  const [refreshing, setRefreshing] = useState(false);
+
   const deactivateMutation = useMutation({
     mutationFn: () => api.post("/administrator/deactivate/"),
     onSuccess: () => {
@@ -319,7 +324,13 @@ export default function MoreTab() {
     onError: () => setPrizeConfigError("Failed to update prize configuration"),
   });
 
-  const { data: bankDetailsData, isLoading: isBankDetailsLoading, refetch: refetchBankDetails } = useQuery<BankDetailsResponse>({
+  // --- Bank Details Query ---
+  const {
+    data: bankDetailsData,
+    isLoading: isBankDetailsLoading,
+    refetch: refetchBankDetails,
+    isFetching: isFetchingBankDetails,
+  } = useQuery<BankDetailsResponse>({
     queryKey: ["bank-details", user?.id, user?.user_type],
     enabled: !!user?.id,
     queryFn: async () => {
@@ -332,6 +343,17 @@ export default function MoreTab() {
     },
     refetchOnMount: true,
   });
+
+  // --- Refetch admin/dealer bank details on focus for DEALER/AGENT ---
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.user_type === "DEALER" || user?.user_type === "AGENT") {
+        // Always refetch on focus for these user types
+        refetchBankDetails();
+      }
+      // No cleanup needed
+    }, [user?.user_type, refetchBankDetails])
+  );
 
   const { data: myBalance, isLoading: ismyBalanceLoading, refetch: refetchMyBalance, isFetching: isFetchingMyBalance } = useQuery<myBalanceResponse>({
     queryKey: ["/draw-payment/get-my-pending-balance/"],
@@ -346,6 +368,36 @@ export default function MoreTab() {
     },
     refetchOnMount: true,
   });
+
+  // --- Prize Config Query Fetching State ---
+  const { isFetching: isFetchingPrizeConfig } = useQuery<PrizeConfig>({
+    queryKey: ["/administrator/prize-configuration", user?.id],
+    queryFn: async () => {
+      const res = await api.get(`/administrator/prize-configuration/${user?.id}/`);
+      return res.data as PrizeConfig;
+    },
+    enabled: false, // Only for fetching state, not for data
+  });
+
+  // --- Pull-to-refresh handler ---
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // Refetch all relevant data
+    const promises: Promise<any>[] = [];
+    if (user?.user_type === "ADMIN") {
+      promises.push(refetchPrizeConfig());
+    }
+    promises.push(refetchBankDetails());
+    if (user?.user_type === "AGENT" || user?.user_type === "DEALER") {
+      promises.push(refetchMyBalance());
+    }
+    try {
+      await Promise.all(promises);
+    } catch (e) {
+      // ignore
+    }
+    setRefreshing(false);
+  }, [user?.user_type, refetchPrizeConfig, refetchBankDetails, refetchMyBalance]);
 
   const handleToggle = (value: boolean) => {
     if (statusLoading) return;
@@ -407,7 +459,7 @@ export default function MoreTab() {
         </>
       );
     }
-     if (user?.user_type === "AGENT") {
+    if (user?.user_type === "AGENT") {
       return (
         <BankDetailsBlock
           label="Dealer Bank Details"
@@ -697,6 +749,14 @@ export default function MoreTab() {
           paddingHorizontal: 10,
         }}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#2563eb"]}
+            tintColor="#2563eb"
+          />
+        }
       >
         <View
           style={{
