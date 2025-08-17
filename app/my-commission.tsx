@@ -272,7 +272,7 @@ export default function MyCommissionScreen() {
                                     entry.draw,
                                     formatDateDDMMYYYY(entry.date_time),
                                     entry.total_count,
-                                    entry.dealer_commission,
+                                    entry?.[user?.user_type === "DEALER" ? "dealer_commission" : "agent_commission"],
                                     // entry.total_amount || 0,
                                 ]}
                                 className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}

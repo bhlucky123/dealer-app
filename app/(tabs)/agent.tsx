@@ -1,10 +1,11 @@
 import useAgent from "@/hooks/use-agent";
 import { useAuthStore } from "@/store/auth";
+import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { ArrowLeft, Eye, EyeOff, MoveLeft } from "lucide-react-native";
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -64,10 +65,12 @@ const AgentForm = ({
   onSubmit,
   defaultValues = {},
   onCancel,
+  loading = false,
 }: {
   onSubmit: (data: any, setApiErrors: (errs: Record<string, string>) => void, setGeneralError: (msg: string) => void) => void;
   defaultValues?: Partial<Agent>;
   onCancel: () => void;
+  loading?: boolean
 }) => {
   const { user } = useAuthStore()
   const [form, setForm] = useState({
@@ -394,12 +397,15 @@ const AgentForm = ({
           <View className="pb-20">
             {/* Added padding-bottom for the submit button */}
             <TouchableOpacity
-              className="bg-blue-600 py-4 rounded-xl shadow-lg active:scale-95"
+              className={`bg-blue-600 py-4 rounded-xl shadow-lg active:scale-95 ${loading ? 'opacity-60' : ''}`}
               onPress={handleSubmit}
               activeOpacity={0.9}
+              disabled={loading}
             >
               <Text className="text-white text-center font-bold text-lg">
-                {defaultValues?.id ? "Update Agent" : "Create Agent"}
+                {loading
+                  ? (defaultValues?.id ? "Updating..." : "Creating...")
+                  : (defaultValues?.id ? "Update Agent" : "Create Agent")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -471,7 +477,7 @@ const AgentCard = ({
         </View>
 
         {/* Info grid */}
-        <View className="flex-row flex-wrap -mx-2">
+        <View className="flex-row justify-between items-center">
           {[
             {
               label: 'Commission',
@@ -486,7 +492,7 @@ const AgentCard = ({
             {
               label: 'Cap Amount',
               value: item?.cap_amount != null
-                ? `₹${Number(item.cap_amount) >= 100000 ? Number(item.cap_amount).toLocaleString() : item.cap_amount}`
+                ? `₹${amountHandler(Number(item.cap_amount))}`
                 : '₹0',
               icon: '🎯',
               bg: 'bg-blue-50',
@@ -504,31 +510,21 @@ const AgentCard = ({
               iconColor: 'text-yellow-600',
             },
           ].map(({ label, value, icon, bg, iconBg, iconColor }, index) => (
-            <View key={index} className="w-1/2 px-2 mb-3">
-              <View className={`flex-row items-center ${bg} p-3 rounded-xl shadow-sm`}>
-                <View className={`w-9 h-9 rounded-full ${iconBg} items-center justify-center mr-3`}>
-                  <Text className={`text-lg ${iconColor}`}>{icon}</Text>
-                </View>
-                <View>
-                  <Text className="text-xs text-gray-500 font-semibold uppercase mb-0.5 tracking-wide">
-                    {label}
-                  </Text>
-                  <Text className="text-base font-bold text-gray-900 text-ellipsis w-28 mr-3">
-                    {(() => {
-                      // Remove currency symbol and commas for numeric check
-                      const num = Number(String(value).replace(/[₹,]/g, ""));
-                      if (!isNaN(num) && num >= 100000) {
-                        // Show in lakhs/crores if very large
-                        if (num >= 10000000) {
-                          return `₹${(num / 10000000).toFixed(2)} Cr`;
-                        } else if (num >= 100000) {
-                          return `₹${(num / 100000).toFixed(2)} L`;
-                        }
-                      }
-                      return value;
-                    })()}
-                  </Text>
-                </View>
+            <View
+              key={index}
+              className={`flex-row items-center ${bg} rounded-lg px-2 py-1 mx-1`}
+              style={{ minWidth: 0, flexShrink: 1 }}
+            >
+              {/* <View className={`w-6 h-6 rounded-full ${iconBg} items-center justify-center mr-1`}>
+                <Text className={`text-base ${iconColor}`}>{icon}</Text>
+              </View> */}
+              <View style={{ minWidth: 0 }}>
+                <Text className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">
+                  {label}
+                </Text>
+                <Text className="text-xs font-bold text-gray-900" numberOfLines={1} ellipsizeMode="tail">
+                  {value}
+                </Text>
               </View>
             </View>
           ))}
@@ -549,7 +545,8 @@ export default function AgentTab({ id }: { id?: string }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [listError, setListError] = useState<string>("");
-  const { user } = useAuthStore()
+  const { user } = useAuthStore();
+  const [loading, setLoading] = useState(false);
 
   const {
     data: agents = [],
@@ -591,21 +588,83 @@ export default function AgentTab({ id }: { id?: string }) {
   const { createAgent, editAgent, deleteAgent } = useAgent();
 
   // Filter agents based on search
-  const filteredAgents = agents.filter(agent =>
-    agent.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredAgents = agents.filter(agent => {
+    const query = searchQuery.toLowerCase();
+
+    // Check username
+    if (agent.username && agent.username.toLowerCase().includes(query)) {
+      return true;
+    }
+
+    // Check commission
+    if (
+      typeof agent.commission === "number" &&
+      agent.commission.toString().toLowerCase().includes(query)
+    ) {
+      return true;
+    }
+
+    // Check single_digit_number_commission
+    if (
+      typeof agent.single_digit_number_commission === "number" &&
+      agent.single_digit_number_commission.toString().toLowerCase().includes(query)
+    ) {
+      return true;
+    }
+
+    // Check cap_amount
+    if (
+      typeof agent.cap_amount === "number" &&
+      agent.cap_amount.toString().toLowerCase().includes(query)
+    ) {
+      return true;
+    }
+
+    return false;
+  });
 
   // Enhanced handleCreate and handleEdit to handle API errors
   const handleCreate = (data: any, setApiErrors: (errs: Record<string, string>) => void, setGeneralError: (msg: string) => void) => {
+    setLoading(true)
     createAgent(data, {
       onSuccess: () => {
-        refetch()
         setShowForm(false);
+        refetch()
+        setLoading(false)
       },
       onError: (err: any) => {
+        console.log('errss', err);
+
+        setLoading(false)
         let errorData = err?.response?.data ?? err?.message ?? err;
+
+        console.log('errorData', errorData);
+
+        if (Array.isArray(errorData) && errorData.length) {
+          Alert.alert('Error', errorData?.[0]?.toString())
+        }
+
+        // Special handling for error shape: { message: [ ... ], status: 400 }
+        if (
+          errorData &&
+          typeof errorData === "object" &&
+          Array.isArray(errorData.message) &&
+          errorData.status === 400
+        ) {
+          console.log('in');
+          Alert.alert(errorData.message.join(" "));
+          return;
+        }
+
         // If errorData is an object with a "message" key, use that as the error object
         if (errorData && typeof errorData === "object" && "message" in errorData) {
+          if (Array.isArray(errorData.message)) {
+            Alert.alert(errorData.message.join(" "));
+            return;
+          } else if (typeof errorData.message === "string") {
+            Alert.alert(errorData.message);
+            return;
+          }
           errorData = errorData.message;
         }
 
@@ -616,11 +675,24 @@ export default function AgentTab({ id }: { id?: string }) {
 
           // Handle non_field_errors or general error messages
           if (errorData.non_field_errors) {
-            setGeneralError(
-              Array.isArray(errorData.non_field_errors)
-                ? errorData.non_field_errors.join(" ")
-                : String(errorData.non_field_errors)
-            );
+            // Special handling for "Agent with this calculate_str already exists."
+            if (
+              Array.isArray(errorData.non_field_errors) &&
+              errorData.non_field_errors.includes("Agent with this calculate_str already exists.")
+            ) {
+              Alert.alert(
+                "Error",
+                "Agent with this calculate_str already exists."
+              );
+              // setGeneralError("Agent with this calculate_str already exists.");
+              return;
+            } else {
+              setGeneralError(
+                Array.isArray(errorData.non_field_errors)
+                  ? errorData.non_field_errors.join(" ")
+                  : String(errorData.non_field_errors)
+              );
+            }
           }
         } else if (typeof errorData === "string") {
           setGeneralError(errorData);
@@ -637,6 +709,8 @@ export default function AgentTab({ id }: { id?: string }) {
       delete data.password
     }
 
+    setLoading(true)
+
     // Fix: If assigned_dealer is an object, extract its id
     let assigned_dealer = data.assigned_dealer;
     if (assigned_dealer && typeof assigned_dealer === "object" && "id" in assigned_dealer) {
@@ -649,23 +723,45 @@ export default function AgentTab({ id }: { id?: string }) {
       { ...data, id: editData?.id, assigned_dealer },
       {
         onSuccess: () => {
+          setShowForm(false);
           refetch()
           setEditData(null);
-          setShowForm(false);
+          setLoading(false)
         },
         onError: (err: any) => {
+          setLoading(false);
           // Handle error response for agent edit
-          // The error may be in err.response.data, or in err.message, or elsewhere
-          // Example: err = { message: { username: [...] }, status: 400 }
           let errorData = err?.response?.data ?? err?.message ?? err;
           // If errorData is an object with a "message" key, use that as the error object
           if (errorData && typeof errorData === "object" && "message" in errorData) {
             errorData = errorData.message;
           }
 
+          // Check if errorData is an HTML page (string containing <html or <!DOCTYPE)
+          if (
+            typeof errorData === "string" &&
+            (errorData.includes("<html") || errorData.includes("<!DOCTYPE"))
+          ) {
+            Alert.alert('Alert', "Something went wrong. Please try again.");
+            return;
+          }
+
           if (errorData && typeof errorData === "object") {
             const apiErrors = parseApiErrors(errorData);
             setApiErrors(apiErrors);
+
+            // Special handling for "Agent with this calculate_str already exists."
+            if (
+              Array.isArray(errorData.non_field_errors) &&
+              errorData.non_field_errors.includes("Agent with this calculate_str already exists.")
+            ) {
+              Alert.alert(
+                "Error",
+                "Agent with this calculate_str already exists."
+              );
+              return;
+            }
+
             // Handle non_field_errors or general error messages
             if (errorData.non_field_errors) {
               setGeneralError(
@@ -742,6 +838,7 @@ export default function AgentTab({ id }: { id?: string }) {
       <AgentForm
         onSubmit={editData ? handleEdit : handleCreate}
         defaultValues={editData || {}}
+        loading={loading}
         onCancel={() => {
           setShowForm(false);
           setEditData(null);
