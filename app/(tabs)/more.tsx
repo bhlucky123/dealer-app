@@ -215,6 +215,7 @@ const BankDetailsBlock = React.memo(
               multiline
               numberOfLines={3}
               autoFocus={true}
+              scrollEnabled
             />
             {error && <Text style={{ color: "#dc2626", fontSize: 13, marginBottom: 6 }}>{error}</Text>}
             <View style={{ flexDirection: "row", gap: 10 }}>
@@ -276,9 +277,9 @@ export default function MoreTab() {
     },
     onError: () => Alert.alert("Error", "Failed to deactivate"),
     onSettled: () => {
-        setStatusLoading(false);
-        setLocalStatus(null);
-        if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+      setStatusLoading(false);
+      setLocalStatus(null);
+      if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
     }
   });
 
@@ -289,16 +290,16 @@ export default function MoreTab() {
       ToastAndroid.show("Application activated", ToastAndroid.SHORT);
     },
     onError: (err: any) => {
-        if (err?.message?.message === "Application is already active.") {
-          setApplicationStatus(true);
-        } else {
-            Alert.alert("Error", "Failed to activate");
-        }
+      if (err?.message?.message === "Application is already active.") {
+        setApplicationStatus(true);
+      } else {
+        Alert.alert("Error", "Failed to activate");
+      }
     },
     onSettled: () => {
-        setStatusLoading(false);
-        setLocalStatus(null);
-        if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+      setStatusLoading(false);
+      setLocalStatus(null);
+      if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
     }
   });
 
@@ -405,8 +406,8 @@ export default function MoreTab() {
     setLocalStatus(value);
     setStatusLoading(true);
     statusTimeoutRef.current = setTimeout(() => {
-        setStatusLoading(false);
-        setLocalStatus(null);
+      setStatusLoading(false);
+      setLocalStatus(null);
     }, 10000);
 
     if (value) {

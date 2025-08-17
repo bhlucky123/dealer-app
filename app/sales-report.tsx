@@ -7,7 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as FileSystem from 'expo-file-system';
 import { printToFileAsync } from 'expo-print';
 import { shareAsync } from "expo-sharing";
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -164,13 +164,13 @@ const SalesReportScreen = () => {
                 bill.booking_details ? bill.booking_details.map((detail: any) => `
                     <tr>
                         ${(user?.user_type === "ADMIN" || user?.user_type === "DEALER") ?
-                            `<td>${bill?.dealer?.username
-                                ? `${bill.dealer.username} (${bill.dealer.user_type || ''})`
-                                : bill?.agent?.username
-                                    ? `${bill.agent.username} (${bill.agent.user_type || ''})`
-                                    : 'N/A'
-                            }</td>` : ""
-                        }
+                        `<td>${bill?.dealer?.username
+                            ? `${bill.dealer.username} (${bill.dealer.user_type || ''})`
+                            : bill?.agent?.username
+                                ? `${bill.agent.username} (${bill.agent.user_type || ''})`
+                                : 'N/A'
+                        }</td>` : ""
+                    }
                         <td>${bill.bill_number || ''}</td>
                         <td>${detail.number}</td>
                         <td>${detail.count}</td>
@@ -533,10 +533,12 @@ const SalesReportScreen = () => {
                                 ListHeaderComponent={() => (
                                     <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
                                         <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">Date</Text>
-                                        <Text className="flex-[1.2] text-xs font-semibold text-center text-gray-600 uppercase">Dealer</Text>
+                                        {
+                                            user?.user_type !== 'AGENT' && (
+                                                <Text className="flex-[1.2] text-xs font-semibold text-center text-gray-600 uppercase">Booked</Text>)}
                                         <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Bill No.</Text>
                                         <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Cnt</Text>
-                                        <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">D. Amt</Text>
+                                        <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">{user?.user_type === 'AGENT' ? 'D. Amt' : 'Amt'}</Text>
                                         <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">C. Amt</Text>
                                     </View>
                                 )}
@@ -549,10 +551,33 @@ const SalesReportScreen = () => {
                                                     {new Date(item.date_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false, })}
                                                 </Text>
                                             </View>
-                                            <Text className="flex-[1.2] text-sm text-center text-gray-700">{item.dealer.username}</Text>
+                                            {
+                                                user?.user_type !== 'AGENT' && (
+                                                    <View className="flex-[1.2]">
+                                                        <Text
+                                                            className="flex-[1.2] text-sm text-center text-gray-700"
+                                                            numberOfLines={1}
+                                                            ellipsizeMode="tail"
+                                                            style={{ minWidth: 0 }}
+                                                        >
+                                                            {item.dealer.username}
+                                                        </Text>
+                                                        {item?.agent?.username && (
+                                                            <Text
+                                                                className="text-xs text-center text-green-600"
+                                                                numberOfLines={1}
+                                                                ellipsizeMode="tail"
+                                                                style={{ minWidth: 0 }}
+                                                            >
+                                                                {item.agent.username}
+                                                            </Text>
+                                                        )}
+                                                    </View>
+                                                )
+                                            }
                                             <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_number}</Text>
                                             <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_count}</Text>
-                                            <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{amountHandler(Number(item.dealer_amount))}</Text>
+                                            <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{amountHandler(Number(user?.user_type === 'AGENT' ? item.agent_amount : item.dealer_amount))}</Text>
                                             <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{amountHandler(Number(item.customer_amount))}</Text>
                                         </View>
 
@@ -562,12 +587,16 @@ const SalesReportScreen = () => {
                                                 keyExtractor={(d) => d.id?.toString?.() ?? Math.random().toString()}
                                                 renderItem={({ item: d }) => (
                                                     <View className="flex-row px-4 py-2 bg-amber-50/20 border-b border-amber-100 last:border-b-0">
-                                                        <Text className="flex-[1.1] text-[10px] text-gray-600">{d.sub_type}</Text>
-                                                        <Text className="flex-[1.2] text-[10px] text-center text-gray-600">{d.number}</Text>
-                                                        <Text className="flex-1 text-[10px] text-center text-gray-600">{d.count}</Text>
+                                                        {
+                                                            user?.user_type !== 'AGENT' &&
+                                                            <Text className="flex-[1.2] text-[10px] text-center text-gray-600"></Text>
+                                                        }
+                                                        <Text className="flex-[1.1] text-[10px] text-gray-600">{d.sub_type} {d.number}</Text>
                                                         <Text className="flex-1 text-[10px] text-center text-gray-600">₹{amountHandler(Number(d.amount))}</Text>
-                                                        <Text className="flex-1 text-[10px] text-right text-violet-600">₹{amountHandler(Number(d.dealer_amount))}</Text>
-                                                        <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{amountHandler(Number(d.agent_amount))}</Text>
+
+                                                        <Text className="flex-1 text-[10px] text-center text-gray-600">{d.count}</Text>
+                                                        <Text className="flex-1 text-[10px] text-right text-violet-600">₹{amountHandler(Number(user?.user_type === 'AGENT' ? d.agent_amount : d.dealer_amount))}</Text>
+                                                        <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{amountHandler(Number(d.customer_amount))}</Text>
                                                     </View>
                                                 )}
                                                 initialNumToRender={5}

@@ -5,7 +5,7 @@ import api from "@/utils/axios";
 import { formatDateDDMMYYYY } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery } from "@tanstack/react-query";
-import React, { useState } from "react";
+import { useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -107,87 +107,81 @@ const LastSaleReportScreen = () => {
                                     keyExtractor={(item, index) => item?.bill_number?.toString() || index?.toString() }
                                     ListHeaderComponent={() => (
                                         <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
-                                            <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">
-                                                Date
-                                            </Text>
-                                            <Text className="flex-[1.2] text-xs font-semibold text-center text-gray-600 uppercase">
-                                                Dealer
-                                            </Text>
-                                            <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">
-                                                Bill No.
-                                            </Text>
-                                            <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">
-                                                Cnt
-                                            </Text>
-                                            <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">
-                                                D. Amt
-                                            </Text>
-                                            <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">
-                                                C. Amt
-                                            </Text>
-                                        </View>
+                                        <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">Date</Text>
+                                        {
+                                            user?.user_type !== 'AGENT' && (
+                                                <Text className="flex-[1.2] text-xs font-semibold text-center text-gray-600 uppercase">Booked</Text>)}
+                                        <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Bill No.</Text>
+                                        <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Cnt</Text>
+                                        <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">{user?.user_type === 'AGENT' ? 'D. Amt' : 'Amt'}</Text>
+                                        <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">C. Amt</Text>
+                                    </View>
                                     )}
                                     renderItem={({ item, index }) => (
                                         <View className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                                            {/* ------------ main bill row ------------ */}
-                                            <View className="flex-row px-4 py-3 items-center border-b border-gray-100">
-                                                <View className="flex-[1.1] flex-col justify-center">
-                                                    <Text className="text-[10px] text-gray-800 font-medium">
-                                                        {formatDateDDMMYYYY(new Date(item.date_time))}
-                                                    </Text>
-                                                    <Text className="text-[9px] text-gray-500 mt-0.5">
-                                                        {new Date(item.date_time).toLocaleTimeString([], {
-                                                            hour: "2-digit",
-                                                            minute: "2-digit",
-                                                            hour12: false,
-                                                        })}
-                                                    </Text>
-                                                </View>
-                                                <Text className="flex-[1.2] text-sm text-center text-gray-700">
-                                                    {item.dealer.username}
-                                                </Text>
-                                                <Text className="flex-1 text-sm text-center text-gray-700">
-                                                    {item.bill_number}
-                                                </Text>
-                                                <Text className="flex-1 text-sm text-center text-gray-700">
-                                                    {item.bill_count}
-                                                </Text>
-                                                <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">
-                                                    ₹{amountHandler(Number(item.dealer_amount))}
-                                                </Text>
-                                                <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">
-                                                    ₹{amountHandler(Number(item.customer_amount))}
+                                        <View className="flex-row px-4 py-3 items-center border-b border-gray-100">
+                                            <View className="flex-[1.1] flex-col justify-center">
+                                                <Text className="text-[10px] text-gray-800 font-medium">{formatDateDDMMYYYY(new Date(item.date_time))}</Text>
+                                                <Text className="text-[9px] text-gray-500 mt-0.5">
+                                                    {new Date(item.date_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false, })}
                                                 </Text>
                                             </View>
-
-                                            {/* ------------ optional detail rows (Full View) ------------ */}
-                                            {fullView &&
-                                                item.booking_details?.map((d) => (
-                                                    <View
-                                                        key={d.id}
-                                                        className="flex-row px-4 py-2 bg-amber-50/20 border-b border-amber-100 last:border-b-0"
-                                                    >
-                                                        <Text className="flex-[1.1] text-[10px] text-gray-600">
-                                                            {d.sub_type}
+                                            {
+                                                user?.user_type !== 'AGENT' && (
+                                                    <View className="flex-[1.2]">
+                                                        <Text
+                                                            className="flex-[1.2] text-sm text-center text-gray-700"
+                                                            numberOfLines={1}
+                                                            ellipsizeMode="tail"
+                                                            style={{ minWidth: 0 }}
+                                                        >
+                                                            {item.dealer.username}
                                                         </Text>
-                                                        <Text className="flex-[1.2] text-[10px] text-center text-gray-600">
-                                                            {d.number}
-                                                        </Text>
-                                                        <Text className="flex-1 text-[10px] text-center text-gray-600">
-                                                            {d.count}
-                                                        </Text>
-                                                        <Text className="flex-1 text-[10px] text-center text-gray-600">
-                                                            {amountHandler(Number(d.amount))}
-                                                        </Text>
-                                                        <Text className="flex-1 text-[10px] text-right text-violet-600">
-                                                            ₹{amountHandler(Number(d.dealer_amount))}
-                                                        </Text>
-                                                        <Text className="flex-1 text-[10px] text-right text-emerald-600">
-                                                            ₹{amountHandler(Number(d.agent_amount))}
-                                                        </Text>
+                                                        {item?.agent?.username && (
+                                                            <Text
+                                                                className="text-xs text-center text-green-600"
+                                                                numberOfLines={1}
+                                                                ellipsizeMode="tail"
+                                                                style={{ minWidth: 0 }}
+                                                            >
+                                                                {item.agent.username}
+                                                            </Text>
+                                                        )}
                                                     </View>
-                                                ))}
+                                                )
+                                            }
+                                            <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_number}</Text>
+                                            <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_count}</Text>
+                                            <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{amountHandler(Number(user?.user_type === 'AGENT' ? item.agent_amount : item.dealer_amount))}</Text>
+                                            <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{amountHandler(Number(item.customer_amount))}</Text>
                                         </View>
+
+                                        {fullView && Array.isArray(item.booking_details) && item.booking_details.length > 0 && (
+                                            <FlatList
+                                                data={item?.booking_details || []}
+                                                keyExtractor={(d) => d.id?.toString?.() ?? Math.random().toString()}
+                                                renderItem={({ item: d }) => (
+                                                    <View className="flex-row px-4 py-2 bg-amber-50/20 border-b border-amber-100 last:border-b-0">
+                                                        {
+                                                            user?.user_type !== 'AGENT' &&
+                                                            <Text className="flex-[1.2] text-[10px] text-center text-gray-600"></Text>
+                                                        }
+                                                        <Text className="flex-[1.1] text-[10px] text-gray-600">{d.sub_type} {d.number}</Text>
+                                                        <Text className="flex-1 text-[10px] text-center text-gray-600">₹{amountHandler(Number(d.amount))}</Text>
+
+                                                        <Text className="flex-1 text-[10px] text-center text-gray-600">{d.count}</Text>
+                                                        <Text className="flex-1 text-[10px] text-right text-violet-600">₹{amountHandler(Number(user?.user_type === 'AGENT' ? d.agent_amount : d.dealer_amount))}</Text>
+                                                        <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{amountHandler(Number(d.customer_amount))}</Text>
+                                                    </View>
+                                                )}
+                                                initialNumToRender={5}
+                                                maxToRenderPerBatch={10}
+                                                windowSize={5}
+                                                removeClippedSubviews={true}
+                                                scrollEnabled={false}
+                                            />
+                                        )}
+                                    </View>
                                     )}
                                     ListEmptyComponent={
                                         <View className="flex-1 justify-center items-center py-16">

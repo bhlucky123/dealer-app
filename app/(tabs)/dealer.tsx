@@ -1,10 +1,11 @@
 import useDealer from "@/hooks/use-dealer";
 import { useAuthStore } from "@/store/auth";
+import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Eye, EyeOff, MoveLeft } from "lucide-react-native";
-import React, { useState } from "react";
+import { useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -50,10 +51,12 @@ const DealerForm = ({
     onSubmit,
     defaultValues = {},
     onCancel,
+    submitting = false
 }: {
     onSubmit: (data: any) => void;
     defaultValues?: Partial<Dealer>;
     onCancel: () => void;
+    submitting?: boolean
 }) => {
     const [form, setForm] = useState({
         username: defaultValues.username || "",
@@ -338,12 +341,15 @@ const DealerForm = ({
                     <View className="pb-20">
                         {/* Added padding-bottom for the submit button */}
                         <TouchableOpacity
-                            className="bg-blue-600 py-4 rounded-xl shadow-lg active:scale-95"
+                            className={`bg-blue-600 py-4 rounded-xl shadow-lg active:scale-95 ${submitting ? 'opacity-60' : ''}`}
                             onPress={handleSubmit}
                             activeOpacity={0.9}
+                            disabled={submitting}
                         >
                             <Text className="text-white text-center font-bold text-lg">
-                                {defaultValues?.id ? "Update Dealer" : "Create Dealer"}
+                                {submitting
+                                    ? (defaultValues?.id ? "Updating..." : "Creating...")
+                                    : (defaultValues?.id ? "Update Dealer" : "Create Dealer")}
                             </Text>
                         </TouchableOpacity>
                     </View>
@@ -384,51 +390,21 @@ const DealerCard = ({ item, onEdit, onDelete }: { item: Dealer; onEdit: () => vo
                     <Text className="text-xs text-gray-500 mr-2">💰</Text>
                     <Text className="text-sm text-gray-700 font-medium flex-1">Commission:</Text>
                     <Text className="text-sm text-gray-800 font-bold">
-                        {(() => {
-                            const num = Number(item.commission);
-                            if (!isNaN(num) && num >= 100000) {
-                                if (num >= 10000000) {
-                                    return `₹${(num / 10000000).toFixed(2)} Cr`;
-                                } else {
-                                    return `₹${(num / 100000).toFixed(2)} L`;
-                                }
-                            }
-                            return `₹${item.commission}`;
-                        })()}
+                        ₹{amountHandler(item.commission)}
                     </Text>
                 </View>
                 <View className="flex-row items-center mb-2">
                     <Text className="text-xs text-gray-500 mr-2">🎯</Text>
                     <Text className="text-sm text-gray-700 font-medium flex-1">Single Digit Comm.:</Text>
                     <Text className="text-sm text-gray-800 font-bold">
-                        {(() => {
-                            const num = Number(item.single_digit_number_commission);
-                            if (!isNaN(num) && num >= 100000) {
-                                if (num >= 10000000) {
-                                    return `₹${(num / 10000000).toFixed(2)} Cr`;
-                                } else {
-                                    return `₹${(num / 100000).toFixed(2)} L`;
-                                }
-                            }
-                            return `₹${item.single_digit_number_commission}`;
-                        })()}
+                        ₹{amountHandler(item.single_digit_number_commission)}
                     </Text>
                 </View>
                 <View className="flex-row items-center">
                     <Text className="text-xs text-gray-500 mr-2">💲</Text>
                     <Text className="text-sm text-gray-700 font-medium flex-1">Cap Amount:</Text>
                     <Text className="text-sm text-gray-800 font-bold">
-                        {(() => {
-                            const num = Number(item.cap_amount);
-                            if (!isNaN(num) && num >= 100000) {
-                                if (num >= 10000000) {
-                                    return `₹${(num / 10000000).toFixed(2)} Cr`;
-                                } else {
-                                    return `₹${(num / 100000).toFixed(2)} L`;
-                                }
-                            }
-                            return `${item.cap_amount}`;
-                        })()}
+                        ₹{amountHandler(item.cap_amount)}
                     </Text>
                 </View>
             </View>
@@ -442,6 +418,7 @@ export default function DealerManagement() {
     const [editData, setEditData] = useState<Dealer | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [refreshing, setRefreshing] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
 
     const {
         data: dealers = [],
@@ -460,16 +437,27 @@ export default function DealerManagement() {
     const filteredDealers = dealers.filter(d => d.username.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const handleCreate = (data: any) => {
+        setSubmitting(true)
         createDealer(data, {
             onSuccess: (newDealer) => {
+                setSubmitting(false)
                 queryClient.setQueryData<any[]>(["dealers"], (old) => [newDealer, ...(old || [])]);
                 setShowForm(false);
             },
             onError: (error) => {
+                setSubmitting(false)
                 console.log("error", error);
-                // Try to extract a field error message
                 let errorMsg = "Failed to create dealer.";
-                if (error?.message && typeof error.message === "object") {
+
+                // Handle the specific error: {"message": ["Dealer with this calculate_str and secret_pin already exists."], "status": 400}
+                if (
+                    error?.message &&
+                    Array.isArray(error.message) &&
+                    error.message.length > 0 &&
+                    typeof error.message[0] === "string"
+                ) {
+                    errorMsg = error.message[0];
+                } else if (error?.message && typeof error.message === "object") {
                     // Find the first field with an error message
                     const field = Object.keys(error.message)[0];
                     if (field && Array.isArray(error.message[field]) && error.message[field][0]) {
@@ -484,37 +472,54 @@ export default function DealerManagement() {
     };
 
     const handleEdit = (data: any) => {
+        setSubmitting(true)
+
         editDealer({ ...data, id: editData?.id }, {
             onSuccess: (updated) => {
+                setShowForm(false);
+                setSubmitting(false)
                 queryClient.setQueryData<any[]>(["dealers"], (old) =>
                     old?.map(d => (d.id === updated.id ? updated : d)) || []
                 );
                 setEditData(null);
-                setShowForm(false);
             },
             onError: (err) => {
+                setSubmitting(false);
                 let errorMsg = "Failed to update dealer.";
-                // Try to extract a detailed error message
+
                 if (err?.message) {
-                    if (typeof err.message === "string") {
-                        errorMsg = err.message;
-                    } else if (typeof err.message === "object") {
+                    // If error is an array like: ["Dealer with this calculate_str and secret_pin already exists."]
+                    if (Array.isArray(err.message) && err.message.length > 0 && typeof err.message[0] === "string") {
+                        errorMsg = err.message[0];
+                    } else if (typeof err.message === "string") {
+                        // If error is a string and looks like HTML, show generic message
+                        if (err.message.trim().startsWith("<!DOCTYPE html") || err.message.trim().startsWith("<html")) {
+                            errorMsg = "Something went wrong. Please try again.";
+                        } else {
+                            errorMsg = err.message;
+                        }
+                    } else if (typeof err.message === "object" && err.message !== null) {
                         // Handle non_field_errors (array of messages)
-                        if (Array.isArray(err.message.non_field_errors) && err.message.non_field_errors.length > 0) {
-                            errorMsg = err.message.non_field_errors.join("\n");
-                        } else if (err.message.detail) {
-                            errorMsg = err.message.detail;
+                        if (Array.isArray((err.message as any).non_field_errors) && (err.message as any).non_field_errors.length > 0) {
+                            errorMsg = (err.message as any).non_field_errors.join("\n");
+                        } else if ((err.message as any).detail) {
+                            errorMsg = (err.message as any).detail;
                         } else {
                             // Try to get the first field error
                             const firstField = Object.keys(err.message)[0];
-                            if (firstField && Array.isArray(err.message[firstField]) && err.message[firstField][0]) {
-                                errorMsg = err.message[firstField][0];
+                            if (
+                                firstField &&
+                                Array.isArray((err.message as any)[firstField]) &&
+                                (err.message as any)[firstField][0]
+                            ) {
+                                errorMsg = (err.message as any)[firstField][0];
                             } else {
                                 errorMsg = JSON.stringify(err.message);
                             }
                         }
                     }
                 }
+
                 Alert.alert("Error", errorMsg);
             }
         });
@@ -578,7 +583,7 @@ export default function DealerManagement() {
         )
     }
     if (showForm) {
-        return <DealerForm onSubmit={editData ? handleEdit : handleCreate} defaultValues={editData || {}} onCancel={() => { setShowForm(false); setEditData(null); }} />;
+        return <DealerForm onSubmit={editData ? handleEdit : handleCreate} submitting={submitting} defaultValues={editData || {}} onCancel={() => { setShowForm(false); setEditData(null); }} />;
     }
 
     return (

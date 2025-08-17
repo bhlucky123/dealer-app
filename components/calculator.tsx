@@ -1,5 +1,4 @@
 import { useCalculator } from "@/hooks/use-calculator";
-import React from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 
 const Calculator = () => {
@@ -18,13 +17,7 @@ const Calculator = () => {
 
   return (
     <View className="flex-1 bg-gray-900 p-4 justify-end mb-12">
-      {isError && (
-        <View className="bg-red-100 border border-red-400 rounded-lg px-4 py-3 mb-4">
-          <Text className="text-red-700 text-base font-semibold text-center">
-            {JSON.stringify(error) || "Failed to fetch equation data."}
-          </Text>
-        </View>
-      )}
+    
       <View className="mb-6">
         <Text className="text-white text-right text-5xl font-bold">
           {display || pinInput}

@@ -5,7 +5,7 @@ import api from "@/utils/axios";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery } from "@tanstack/react-query";
 import { Calendar, Check } from "lucide-react-native";
-import React, { useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -79,15 +79,23 @@ const DailyReport = () => {
       key={isTotal ? "summary-total" : item.draw + (item.agent?.username || "")}
       className={`flex-row py-2 border-b border-gray-100 ${isTotal ? "bg-gray-100" : "bg-white"}`}
     >
-      <Text className="flex-1 text-xs text-center text-gray-800">
+      {isTotal &&
+        <Text className="flex-1 text-xs text-center text-gray-800">
+          Total
+        </Text>
+      }
+      {/* <Text className="flex-1 text-xs text-center text-gray-800">
         {isTotal ? "Total" : item.agent?.username || item.dealer?.username || "-"}
-      </Text>
-      <Text className="flex-1 text-xs text-center text-gray-800">{item.draw}</Text>
-      <Text className="flex-1 text-xs text-center text-gray-800">₹{amountHandler(Number(item.total_amount))}</Text>
+      </Text> */}
+      {
+        !isTotal &&
+        <Text className="flex-1 text-xs text-center text-gray-800">{item.draw}</Text>
+      }
+      <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(Number(item.total_amount))}</Text>
       {
         user?.user_type === "ADMIN" &&
-        <><Text className="flex-1 text-xs text-center text-gray-800">{item?.total_winning_prize || 0}</Text>
-        <Text className="flex-1 text-xs text-center text-gray-800">{(item?.total_amount || 0) - (item?.total_winning_prize || 0) || 0}</Text></>
+        <><Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(item?.total_winning_prize || 0)}</Text>
+          <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler((item?.total_amount || 0) - (item?.total_winning_prize || 0) || 0)}</Text></>
       }
     </View>
   );
@@ -100,15 +108,15 @@ const DailyReport = () => {
       <Text className="flex-1 text-xs text-center text-gray-800">
         {isTotal ? "Total" : item.date}
       </Text>
-      <Text className="flex-1 text-xs text-center text-gray-800">
+      {/* <Text className="flex-1 text-xs text-center text-gray-800">
         {item.agent?.username || item.dealer?.username || "-"}
-      </Text>
-      <Text className="flex-1 text-xs text-center text-gray-800">{item.draw}</Text>
-      <Text className="flex-1 text-xs text-center text-gray-800">₹{amountHandler(Number(item.total_amount))}</Text>
+      </Text> */}
+      {/* <Text className="flex-1 text-xs text-center text-gray-800">{item.draw}</Text> */}
+      <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(Number(item.total_amount))}</Text>
       {
         user?.user_type === "ADMIN" &&
-        <><Text className="flex-1 text-xs text-center text-gray-800">{item?.total_winning_prize || 0}</Text>
-        <Text className="flex-1 text-xs text-center text-gray-800">{(item?.total_amount || 0) - (item?.total_winning_prize || 0) || 0}</Text></>
+        <><Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(item?.total_winning_prize || 0)}</Text>
+          <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler((item?.total_amount || 0) - (item?.total_winning_prize || 0) || 0)}</Text></>
       }
     </View>
   );
@@ -229,13 +237,14 @@ const DailyReport = () => {
           {/* Summary Table */}
           <View className="border border-gray-200 rounded-lg overflow-hidden bg-white" style={{ elevation: 0 }}>
             <Text className="bg-gray-100 px-3 py-2 font-bold text-sm border-b border-gray-200">SUMMARY</Text>
-            {renderTableHeader(user?.user_type === "ADMIN" ? ["DEALER", "GAME", "SALE", "WIN", "BAL"] : ["DEALER", "GAME", "SALE"])}
+            {renderTableHeader(user?.user_type === "ADMIN" ? ["GAME", "SALE", "WIN", "BAL"] : ["GAME", "SALE"])}
             {data?.summary?.map((item: any) => renderSummaryRow(item))}
             {data?.summary &&
               renderSummaryRow(
                 data.summary.reduce(
                   (acc: any, cur: any) => ({
                     total_amount: (acc.total_amount || 0) + cur.total_amount,
+                    total_winning_prize: (acc.total_winning_prize || 0) + cur.total_winning_prize,
                     total_win: (acc.total_win || 0) + (cur.total_win || 0),
                   }),
                   {}
@@ -245,15 +254,16 @@ const DailyReport = () => {
           </View>
 
           {/* Detailed Table */}
-          <View className="border border-gray-200 rounded-lg mt-6 overflow-hidden bg-white" style={{ elevation: 0 }}>
+          <View className="border border-gray-200 rounded-lg mt-6 mb-14 overflow-hidden bg-white" style={{ elevation: 0 }}>
             <Text className="bg-gray-100 px-3 py-2 font-bold text-sm border-b border-gray-200">DETAILED</Text>
-            {renderTableHeader(user?.user_type === "ADMIN" ? ["DATE", "DEALER", "GAME", "SALE", "WIN", "BAL"] : ["DATE", "DEALER", "GAME", "SALE"])}
+            {renderTableHeader(user?.user_type === "ADMIN" ? ["DATE", "SALE", "WIN", "BAL"] : ["DATE", "GAME", "SALE"])}
             {data?.report?.map((item: any) => renderDetailRow(item))}
             {data?.report &&
               renderDetailRow(
                 data.report.reduce(
                   (acc: any, cur: any) => ({
                     total_amount: (acc.total_amount || 0) + cur.total_amount,
+                    total_winning_prize: (acc.total_winning_prize || 0) + cur.total_winning_prize,
                     total_win: (acc.total_win || 0) + (cur.total_win || 0),
                   }),
                   {}

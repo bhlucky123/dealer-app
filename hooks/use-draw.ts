@@ -75,6 +75,8 @@ const useDraw = () => {
       complementary_prizes: string[];
     }) => {
       try {
+        console.log("payload", rest);
+
         const res = await api.post(`/draw-result/result/${draw_session}/`, rest);
         return res?.data;
       } catch (error: any) {

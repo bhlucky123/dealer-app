@@ -189,17 +189,29 @@ const ResultPage: React.FC = () => {
         }
 
         setLoading(true)
+        // Remove complementary_prizes if all elements are empty strings
+        let submitData = { ...resultData };
+        if (
+            Array.isArray(submitData.complementary_prizes) &&
+            submitData.complementary_prizes.every((item: any) => item === "")
+        ) {
+            // Remove the key if all are empty strings
+            delete submitData.complementary_prizes;
+        }
+
+        console.log("submitData", submitData);
+
         try {
             if (data && data.id) {
                 // Update
                 await updateDrawResult.mutateAsync({
                     id: data.id,
-                    ...resultData,
+                    ...submitData,
                 });
             } else {
                 // Create
                 await createDrawResult.mutateAsync({
-                    ...resultData,
+                    ...submitData,
                     draw_session: selectedDraw?.id,
                 });
             }

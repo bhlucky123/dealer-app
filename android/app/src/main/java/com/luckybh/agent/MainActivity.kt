@@ -1,4 +1,4 @@
-package com.luckybh.admin
+package com.luckybh.agent
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

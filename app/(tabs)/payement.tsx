@@ -2,7 +2,7 @@ import { useAuthStore } from "@/store/auth";
 import api from "@/utils/axios";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import React, { useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -337,7 +337,7 @@ export default function PaymentTab() {
             ) : (
                 <FlatList
                     data={listData || []}
-                    keyExtractor={(item, index) => item?.id?.toString() + index}
+                    keyExtractor={(item, index) => item?.id?.toString()}
                     renderItem={renderItem}
                     contentContainerStyle={{ paddingBottom: 32 }}
                     refreshControl={
