@@ -256,7 +256,7 @@ const DailyReport = () => {
           {/* Detailed Table */}
           <View className="border border-gray-200 rounded-lg mt-6 mb-14 overflow-hidden bg-white" style={{ elevation: 0 }}>
             <Text className="bg-gray-100 px-3 py-2 font-bold text-sm border-b border-gray-200">DETAILED</Text>
-            {renderTableHeader(user?.user_type === "ADMIN" ? ["DATE", "SALE", "WIN", "BAL"] : ["DATE", "GAME", "SALE"])}
+            {renderTableHeader(user?.user_type === "ADMIN" ? ["DATE", "SALE", "WIN", "BAL"] : ["DATE", "SALE"])}
             {data?.report?.map((item: any) => renderDetailRow(item))}
             {data?.report &&
               renderDetailRow(

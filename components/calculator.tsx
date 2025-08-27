@@ -12,12 +12,24 @@ const Calculator = () => {
     pinInput,
     isLoading,
     isError,
-    error
+    error,
+    refetch
   } = useCalculator();
 
   return (
     <View className="flex-1 bg-gray-900 p-4 justify-end mb-12">
-    
+
+
+      {isError && (
+        <View className="mb-4 bg-red-700 rounded p-2">
+          <Text className="text-white text-center">
+            {typeof error === "object" && error?.message
+              ? error.message
+              : "An error occurred. Please try again."}
+          </Text>
+        </View>
+      )}
+
       <View className="mb-6">
         <Text className="text-white text-right text-5xl font-bold">
           {display || pinInput}
@@ -27,7 +39,7 @@ const Calculator = () => {
       <View className="flex-row mb-4">
         <TouchableOpacity
           className="flex-1 bg-gray-700 rounded-full p-6 items-center justify-center mr-2"
-          onPress={handleClear}
+          onPress={() => refetch()}
         >
           <Text className="text-white text-2xl font-bold">C</Text>
         </TouchableOpacity>
