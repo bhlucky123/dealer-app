@@ -114,10 +114,10 @@ const SalesReportScreen = () => {
 
     // Frontend search filter
     const filteredResult = useMemo(() => {
-        if (!data?.result) return [];
-        if (!search) return data.result;
+        if (!data?.results?.data) return [];
+        if (!search) return data?.results?.data;
         // Only filter by bill_number (as per placeholder)
-        return data.result.filter((item: any) =>
+        return data.results?.data.filter((item: any) =>
             item.bill_number?.toString().toLowerCase().includes(search.toLowerCase())
         );
     }, [data, search]);

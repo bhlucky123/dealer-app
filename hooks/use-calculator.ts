@@ -1,3 +1,4 @@
+import api from "@/utils/axios";
 import { config } from "@/utils/config";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
@@ -17,19 +18,45 @@ export const useCalculator = () => {
     isLoading,
     isError,
     error,
+    refetch
   } = useQuery({
     queryKey: ["/user/get-initial-user-creds/"],
-    queryFn: () => {
-      return fetch(
-        `${config.apiBaseUrl}/user/get-initial-user-creds/`,
-        {
+    queryFn: async () => {
+      try {
+        console.log("api calling");
+        
+        const res = await api.get("/user/get-initial-user-creds/", {
           headers: {
             "User-Type": config.userType
-          },
+          }
+        });
+
+        // Axios only throws on network or non-2xx, so if we get here, it's a 2xx
+        return res.data;
+      } catch (error: any) {
+        // Axios error handling
+        let errorMsg = "An error occurred while fetching user credentials.";
+        if (error.response) {
+          // Server responded with a status other than 2xx
+          const { status, data } = error.response;
+          if (data && typeof data === "object" && data.message) {
+            errorMsg = data.message;
+          } else if (typeof data === "string") {
+            errorMsg = data;
+          } else {
+            errorMsg = `Error: ${status}`;
+          }
+        } else if (error.message) {
+          errorMsg = error.message;
         }
-      ).then((res) => res.json());  
+        console.error("Error fetching user creds:", errorMsg);
+        throw new Error(errorMsg);
+      }
     },
   });
+
+  console.log("err", error);
+
 
 
   // Only check for equation match in handleEqual, not during number input
@@ -204,6 +231,7 @@ export const useCalculator = () => {
     pinInput,
     isLoading,
     isError,
-    error
+    error,
+    refetch
   };
 };
