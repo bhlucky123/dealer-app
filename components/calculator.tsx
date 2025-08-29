@@ -39,7 +39,7 @@ const Calculator = () => {
       <View className="flex-row mb-4">
         <TouchableOpacity
           className="flex-1 bg-gray-700 rounded-full p-6 items-center justify-center mr-2"
-          onPress={() => refetch()}
+          onPress={handleClear}
         >
           <Text className="text-white text-2xl font-bold">C</Text>
         </TouchableOpacity>
