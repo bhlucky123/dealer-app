@@ -69,6 +69,8 @@ const LastSaleReportScreen = () => {
         enabled: !!selectedDraw?.id,
     });
 
+    console.log('data', data);
+
 
 
     // Determine if we should show the total footer
@@ -101,12 +103,12 @@ const LastSaleReportScreen = () => {
                 ) : (
                     <>
                         {/* {data?.result?.length ? ( */}
-                            <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden">
-                                <FlatList
-                                    data={data?.result || []}
-                                    keyExtractor={(item, index) => item?.bill_number?.toString() || index?.toString() }
-                                    ListHeaderComponent={() => (
-                                        <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
+                        <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden">
+                            <FlatList
+                                data={data?.results?.data || []}
+                                keyExtractor={(item, index) => item?.bill_number?.toString() || index?.toString()}
+                                ListHeaderComponent={() => (
+                                    <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
                                         <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">Date</Text>
                                         {
                                             user?.user_type !== 'AGENT' && (
@@ -116,9 +118,9 @@ const LastSaleReportScreen = () => {
                                         <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">{user?.user_type === 'AGENT' ? 'D. Amt' : 'Amt'}</Text>
                                         <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">C. Amt</Text>
                                     </View>
-                                    )}
-                                    renderItem={({ item, index }) => (
-                                        <View className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                                )}
+                                renderItem={({ item, index }) => (
+                                    <View className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                                         <View className="flex-row px-4 py-3 items-center border-b border-gray-100">
                                             <View className="flex-[1.1] flex-col justify-center">
                                                 <Text className="text-[10px] text-gray-800 font-medium">{formatDateDDMMYYYY(new Date(item.date_time))}</Text>
@@ -135,16 +137,16 @@ const LastSaleReportScreen = () => {
                                                             ellipsizeMode="tail"
                                                             style={{ minWidth: 0 }}
                                                         >
-                                                            {item.dealer.username}
+                                                            {item?.booked_by?.username}
                                                         </Text>
-                                                        {item?.agent?.username && (
+                                                        {item?.booked_by?.user_type && (
                                                             <Text
                                                                 className="text-xs text-center text-green-600"
                                                                 numberOfLines={1}
                                                                 ellipsizeMode="tail"
                                                                 style={{ minWidth: 0 }}
                                                             >
-                                                                {item.agent.username}
+                                                                {item.booked_by.user_type}
                                                             </Text>
                                                         )}
                                                     </View>
@@ -182,18 +184,18 @@ const LastSaleReportScreen = () => {
                                             />
                                         )}
                                     </View>
-                                    )}
-                                    ListEmptyComponent={
-                                        <View className="flex-1 justify-center items-center py-16">
-                                            <Text className="text-gray-500 text-base">
-                                                No sales data for current filters.
-                                            </Text>
-                                        </View>
-                                    }
-                                // Optional: Add a small footer if you want a visual break at the end of the list
-                                // ListFooterComponent={() => <View className="h-4 bg-gray-50"></View>}
-                                />
-                            </View>
+                                )}
+                                ListEmptyComponent={
+                                    <View className="flex-1 justify-center items-center py-16">
+                                        <Text className="text-gray-500 text-base">
+                                            No sales data for current filters.
+                                        </Text>
+                                    </View>
+                                }
+                            // Optional: Add a small footer if you want a visual break at the end of the list
+                            // ListFooterComponent={() => <View className="h-4 bg-gray-50"></View>}
+                            />
+                        </View>
                         {/* ) : (
                             <View className="flex-1 justify-center items-center">
                                 <Text className="text-gray-500">No sales data available.</Text>
@@ -211,13 +213,13 @@ const LastSaleReportScreen = () => {
                             <Text className="flex-1 text-sm"> </Text>
                             <Text className="flex-1 text-sm"> </Text>
                             <Text className="flex-1 text-sm text-center font-semibold text-gray-700">
-                                {data?.total_bill_count || 0} {/* Ensure 0 if null/undefined */}
+                                {data?.results?.total_bill_count || 0} {/* Ensure 0 if null/undefined */}
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-violet-700">
-                                {amountHandler(Number(data?.total_dealer_amount || 0))}
+                                {amountHandler(Number(data?.results?.total_dealer_amount || 0))}
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">
-                                {amountHandler(Number(data?.total_customer_amount || 0))}
+                                {amountHandler(Number(data?.results?.total_customer_amount || 0))}
                             </Text>
                         </View>
                     </View>

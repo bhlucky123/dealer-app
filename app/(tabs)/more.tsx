@@ -8,6 +8,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   Switch,
@@ -254,6 +255,123 @@ const BankDetailsBlock = React.memo(
   }
 );
 
+// --- Admin Username/Password Update Component ---
+function AdminCredentialsBlock() {
+  const { user } = useAuthStore();
+  const [username, setUsername] = useState(user?.username ?? "");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const { mutate, isPending } = useMutation({
+    mutationFn: async (payload: { username: string; password: string }) => {
+      return api.put("/user/user-password/", payload);
+    },
+    onSuccess: () => {
+      ToastAndroid.show("Admin credentials updated", ToastAndroid.SHORT);
+      setPassword("");
+      setError(null);
+    },
+    onError: (err: any) => {
+      setError(
+        err?.response?.data?.detail ||
+        err?.response?.data?.message ||
+        "Failed to update credentials"
+      );
+    },
+  });
+
+  const handleUpdate = () => {
+    if (!username.trim()) {
+      setError("Username is required.");
+      return;
+    }
+    setError(null);
+    mutate({ username: username.trim(), password: password });
+  };
+
+  return (
+    <View style={{
+      backgroundColor: "#fff",
+      borderRadius: 18,
+      padding: 18,
+      marginBottom: 18,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      elevation: 2,
+      borderWidth: 1,
+      borderColor: "#e5e7eb",
+      width: "100%",
+      alignItems: "center",
+      gap: 10,
+    }}>
+      <Text style={{ fontSize: 17, fontWeight: "bold", color: "#2563eb", marginBottom: 10, letterSpacing: 0.5, alignItems: 'flex-start' }}>
+        Update Username & Password
+      </Text>
+      <TextInput
+        placeholder="Username"
+        placeholderTextColor="#9ca3af"
+        value={username}
+        onChangeText={setUsername}
+        autoCapitalize="none"
+        style={{
+          backgroundColor: "#f3f4f6",
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: "#cbd5e1",
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          fontSize: 16,
+          marginBottom: 8,
+          width: "100%",
+        }}
+      />
+      <TextInput
+        placeholder="Password"
+        placeholderTextColor="#9ca3af"
+        value={password}
+        onChangeText={setPassword}
+        // secureTextEntry
+        style={{
+          backgroundColor: "#f3f4f6",
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: "#cbd5e1",
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          fontSize: 16,
+          marginBottom: 8,
+          width: "100%",
+          color: '#000'
+        }}
+      />
+      {error && (
+        <Text style={{ color: "#dc2626", fontSize: 13, marginBottom: 6 }}>{error}</Text>
+      )}
+      <Pressable
+        style={{
+          backgroundColor: "#2563eb",
+          borderRadius: 8,
+          paddingVertical: 12,
+          alignItems: "center",
+          width: "100%",
+          marginTop: 4,
+        }}
+        android_ripple={{ color: "#1e40af" }}
+        onPress={handleUpdate}
+        disabled={isPending}
+      >
+        {isPending ? (
+          <ActivityIndicator color="#fff" size="small" />
+        ) : (
+          <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 15 }}>Update</Text>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
 // --- Main Screen Component ---
 export default function MoreTab() {
   const { setApplicationStatus, application_status, user } = useAuthStore();
@@ -428,14 +546,17 @@ export default function MoreTab() {
     }
     if (user?.user_type === "ADMIN") {
       return (
-        <BankDetailsBlock
-          label="My Bank Details"
-          type="admin"
-          details={bankDetailsData?.admin_bank_details}
-          canEdit
-          canAdd
-          refetch={refetchBankDetails}
-        />
+        <>
+          <BankDetailsBlock
+            label="My Bank Details"
+            type="admin"
+            details={bankDetailsData?.admin_bank_details}
+            canEdit
+            canAdd
+            refetch={refetchBankDetails}
+          />
+          <AdminCredentialsBlock />
+        </>
       );
     }
     if (user?.user_type === "DEALER") {

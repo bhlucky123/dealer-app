@@ -7,7 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as FileSystem from 'expo-file-system';
 import { printToFileAsync } from 'expo-print';
 import { shareAsync } from "expo-sharing";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -20,6 +20,8 @@ import {
 import { Dropdown } from "react-native-element-dropdown";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Agent } from "./(tabs)/agent";
+
+const PAGE_SIZE = 10;
 
 const getToday = () => {
     const now = new Date();
@@ -50,6 +52,33 @@ const formatDateYYYYMMDD = (date?: Date | null) => {
     return `${year}${month}${day}`;
 };
 
+// Helper to get a unique key for a bill (for FlatList)
+// Ensures uniqueness by using both id and bill_number if available, else falls back to a composite key
+const getBillKey = (item: any) => {
+    if (item.id !== undefined && item.id !== null && item.bill_number !== undefined && item.bill_number !== null) {
+        return `id_${item.id}_bill_${item.bill_number}`;
+    }
+    if (item.id !== undefined && item.id !== null) return `id_${item.id}`;
+    if (item.bill_number !== undefined && item.bill_number !== null) return `bill_${item.bill_number}`;
+    if (item.date_time) return `dt_${item.date_time}_${Math.random()}`;
+    return Math.random().toString(36).slice(2);
+};
+
+// Helper to get a unique key for a booking detail (for FlatList)
+const getBookingDetailKey = (d: any, parentBill: any, idx: number) => {
+    if (d.id !== undefined && d.id !== null && parentBill && parentBill.id !== undefined && parentBill.id !== null) {
+        return `bdid_${d.id}_pbid_${parentBill.id}`;
+    }
+    if (d.id !== undefined && d.id !== null) return `bdid_${d.id}`;
+    if (parentBill && parentBill.bill_number !== undefined && parentBill.bill_number !== null) {
+        return `bill_${parentBill.bill_number}_idx_${idx}`;
+    }
+    if (parentBill && parentBill.id !== undefined && parentBill.id !== null) {
+        return `billid_${parentBill.id}_idx_${idx}`;
+    }
+    return `rand_${Math.random().toString(36).slice(2)}_${idx}`;
+};
+
 const SalesReportScreen = () => {
     const { selectedDraw } = useDrawStore();
     const [search, setSearch] = useState("");
@@ -60,7 +89,11 @@ const SalesReportScreen = () => {
     const [fullView, setFullView] = useState(false);
     const [allGame, setAllGame] = useState(false);
     const [selectedFilter, setSelectedFilter] = useState("");
-    const [printing, setPrinting] = useState(false); // <-- Add loading state for printing
+    const [printing, setPrinting] = useState(false);
+
+    // Pagination state
+    const [page, setPage] = useState(0);
+    const [isFetchingMore, setIsFetchingMore] = useState(false);
 
     const { user } = useAuthStore();
     const queryClient = useQueryClient();
@@ -81,15 +114,155 @@ const SalesReportScreen = () => {
         initialData: user?.user_type === "ADMIN" ? cachedDealers : undefined,
     });
 
-    const buildQuery = () => {
-
+    // Build query string for API
+    const buildQuery = useCallback((offset = 0, limit = PAGE_SIZE) => {
         const params: Record<string, string> = {};
-        // if (search) params["search"] = search; // Remove search from backend
+
         if (fromDate) params["date_time__gte"] = fromDate.toISOString();
         if (toDate) params["date_time__lte"] = toDate.toISOString();
-        // Always request full_view to get booking_details for the PDF
-        params["full_view"] = "true";
+        if(fullView) params["full_view"] = "true";
         if (selectedDraw?.id && !allGame) params["draw_session__draw__id"] = String(selectedDraw.id);
+
+        if (user?.user_type === "ADMIN" && selectedFilter) {
+            params["booked_dealer__id"] = selectedFilter;
+        }
+        if (user?.user_type === "DEALER" && selectedFilter) {
+            params["booked_agent__id"] = selectedFilter;
+        }
+        params["offset"] = String(offset);
+        params["limit"] = String(limit);
+
+        return Object.keys(params)
+            .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
+            .join("&");
+    }, [fromDate, toDate, selectedDraw, allGame, user?.user_type, selectedFilter]);
+
+    // Store all loaded pages' data
+    const [allData, setAllData] = useState<any[]>([]);
+    const [totalCount, setTotalCount] = useState<number>(0);
+    const [totalBillCount, setTotalBillCount] = useState<number>(0);
+    const [totalDealerAmount, setTotalDealerAmount] = useState<number>(0);
+    const [totalAgentAmount, setTotalAgentAmount] = useState<number>(0);
+    const [totalCustomerAmount, setTotalCustomerAmount] = useState<number>(0);
+
+    // Reset pagination and data when filters change
+    const resetPagination = () => {
+        setPage(0);
+        setAllData([]);
+        setTotalCount(0);
+        setTotalBillCount(0);
+        setTotalDealerAmount(0);
+        setTotalAgentAmount(0);
+        setTotalCustomerAmount(0);
+    };
+
+    // Reset on filter change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const filterDeps = [fromDate, toDate, selectedDraw?.id, allGame, user?.user_type, selectedFilter];
+    // Reset when any filter changes
+    useMemo(() => {
+        resetPagination();
+        // eslint-disable-next-line
+    }, filterDeps);
+
+    // Fetch paginated data
+    const {
+        data,
+        isLoading,
+        error,
+        refetch,
+        isFetching,
+    } = useQuery({
+        queryKey: ["/draw-booking/sales-report/", buildQuery(page * PAGE_SIZE, PAGE_SIZE)],
+        queryFn: async () => {
+            const res = await api.get(`/draw-booking/sales-report/?${buildQuery(page * PAGE_SIZE, PAGE_SIZE)}`);
+            return res.data;
+        },
+        enabled: !!selectedDraw?.id,
+    });
+
+    // Handle query result side effects (mimic onSuccess)
+    useMemo(() => {
+
+        if (!data) return;
+        if (page === 0) {
+            // On first page, just set the data
+            setAllData(data.results?.data || []);
+        } else {
+            // On subsequent pages, merge new data and ensure uniqueness by key
+            setAllData((prev) => {
+                const prevMap = new Map<string, any>();
+                prev.forEach(item => {
+                    prevMap.set(getBillKey(item), item);
+                });
+                (data.results?.data || []).forEach(item => {
+                    prevMap.set(getBillKey(item), item); // This will overwrite duplicates
+                });
+                return Array.from(prevMap.values());
+            });
+        }
+        setTotalCount(data.count || 0);
+        setTotalBillCount(data.results?.total_bill_count ?? data.total_bill_count ?? 0);
+        setTotalDealerAmount(data.results?.total_dealer_amount ?? data.total_dealer_amount ?? 0);
+        setTotalAgentAmount(data.results?.total_agent_amount ?? data.total_agent_amount ?? 0);
+        setTotalCustomerAmount(data.results?.total_customer_amount ?? data.total_customer_amount ?? 0);
+        // eslint-disable-next-line
+    }, [data]);
+
+    // FlatList data: always use allData, but apply search filter on client
+    const filteredResult = useMemo(() => {
+        if (!allData || allData.length === 0) return [];
+        if (!search) return allData;
+        return allData.filter((item: any) =>
+            item.bill_number?.toString().toLowerCase().includes(search.toLowerCase())
+        );
+    }, [allData, search]);
+
+    const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && (allData.length > 0);
+
+    // Pagination: load more handler
+    const handleLoadMore = async () => {
+        if (isFetchingMore || isLoading) return;
+        if ((page + 1) * PAGE_SIZE >= totalCount) return;
+        setIsFetchingMore(true);
+        try {
+            const nextPage = page + 1;
+            const res = await api.get(`/draw-booking/sales-report/?${buildQuery(nextPage * PAGE_SIZE, PAGE_SIZE)}`);
+            const newData = res.data.results?.data || [];
+
+            setAllData(prev => {
+                // Use a Map to ensure uniqueness by getBillKey
+                const prevMap = new Map<string, any>();
+                prev.forEach(item => {
+                    prevMap.set(getBillKey(item), item);
+                });
+                newData.forEach(item => {
+                    prevMap.set(getBillKey(item), item); // Overwrite if duplicate key
+                });
+                return Array.from(prevMap.values());
+            });
+
+            setPage(nextPage);
+            setTotalCount(res.data.count || 0);
+            setTotalBillCount(res.data.results?.total_bill_count ?? res.data.total_bill_count ?? totalBillCount);
+            setTotalDealerAmount(res.data.results?.total_dealer_amount ?? res.data.total_dealer_amount ?? totalDealerAmount);
+            setTotalAgentAmount(res.data.results?.total_agent_amount ?? res.data.total_agent_amount ?? totalAgentAmount);
+            setTotalCustomerAmount(res.data.results?.total_customer_amount ?? res.data.total_customer_amount ?? totalCustomerAmount);
+        } catch (err) {
+            // Optionally handle error
+        } finally {
+            setIsFetchingMore(false);
+        }
+    };
+
+
+    const printBuildQuery = useCallback(() => {
+        const params: Record<string, string> = {};
+
+        if (fromDate) params["date_time__gte"] = fromDate.toISOString();
+        if (toDate) params["date_time__lte"] = toDate.toISOString();
+        params["full_view"] = "true";
+        if (selectedDraw?.id) params["draw_session__draw__id"] = String(selectedDraw.id);
 
         if (user?.user_type === "ADMIN" && selectedFilter) {
             params["booked_dealer__id"] = selectedFilter;
@@ -101,58 +274,23 @@ const SalesReportScreen = () => {
         return Object.keys(params)
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
             .join("&");
-    };
-
-    const { data, isLoading, error } = useQuery({
-        queryKey: ["/draw-booking/sales-report/", buildQuery()],
-        queryFn: async () => {
-            const res = await api.get(`/draw-booking/sales-report/?${buildQuery()}`);
-            return res.data;
-        },
-        enabled: !!selectedDraw?.id,
-    });
-
-    // Frontend search filter
-    const filteredResult = useMemo(() => {
-        if (!data?.results?.data) return [];
-        if (!search) return data?.results?.data;
-        // Only filter by bill_number (as per placeholder)
-        return data.results?.data.filter((item: any) =>
-            item.bill_number?.toString().toLowerCase().includes(search.toLowerCase())
-        );
-    }, [data, search]);
-
-    // Calculate totals for filtered data
-    const filteredTotals = useMemo(() => {
-        if (!filteredResult.length) {
-            return {
-                total_bill_count: 0,
-                total_dealer_amount: 0,
-                total_customer_amount: 0,
-            };
-        }
-        return filteredResult.reduce(
-            (acc: any, item: any) => {
-                acc.total_bill_count += item.bill_count || 0;
-                acc.total_dealer_amount += item.dealer_amount || 0;
-                acc.total_customer_amount += item.customer_amount || 0;
-                return acc;
-            },
-            {
-                total_bill_count: 0,
-                total_dealer_amount: 0,
-                total_customer_amount: 0,
-            }
-        );
-    }, [filteredResult]);
-
-    const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && data;
-
+    }, [fromDate, toDate, selectedDraw, user?.user_type, selectedFilter]);
+    // PDF generation: use allData (all loaded pages) if no search, else filteredResult
     const generatePdf = async () => {
         setPrinting(true);
         try {
-            // Use filteredResult for PDF if search is applied, else use all data
-            const pdfData = search ? filteredResult : (data?.result || []);
+            const query = printBuildQuery();
+            const res = await api.get(`/draw-booking/sales-report/?${query}`);
+            let allResults = res.data.results?.data || [];
+
+            // If search is applied, filter client-side
+            let pdfData = allResults;
+            // if (search) {
+            //     pdfData = allResults.filter((item: any) =>
+            //         item.bill_number?.toString().toLowerCase().includes(search.toLowerCase())
+            //     );
+            // }
+
             if (!pdfData || pdfData.length === 0) {
                 alert("No data available to generate PDF.");
                 setPrinting(false);
@@ -164,11 +302,7 @@ const SalesReportScreen = () => {
                 bill.booking_details ? bill.booking_details.map((detail: any) => `
                     <tr>
                         ${(user?.user_type === "ADMIN" || user?.user_type === "DEALER") ?
-                        `<td>${bill?.dealer?.username
-                            ? `${bill.dealer.username} (${bill.dealer.user_type || ''})`
-                            : bill?.agent?.username
-                                ? `${bill.agent.username} (${bill.agent.user_type || ''})`
-                                : 'N/A'
+                        `<td>${bill?.booked_by?.username || 'N/A'
                         }</td>` : ""
                     }
                         <td>${bill.bill_number || ''}</td>
@@ -179,9 +313,8 @@ const SalesReportScreen = () => {
                 `).join('') : ''
             ).join('');
 
-            const totalAmount = search
-                ? filteredTotals.total_customer_amount.toFixed(0)
-                : (data?.total_customer_amount ? data.total_customer_amount.toFixed(2) : "0");
+            // Calculate total amount from the fetched data
+            const totalAmount = res?.data?.results?.total_customer_amount || 0
 
             const now = new Date();
             const formattedDate = formatDateDDMMYYYY(now);
@@ -282,12 +415,12 @@ const SalesReportScreen = () => {
 
             const file = await printToFileAsync({
                 html: html,
-                base64: false, // ✅ Important fix
+                base64: false,
                 width: 595,
                 height: 842,
             });
 
-            const newPdfUri = `${FileSystem.cacheDirectory}${safePdfFileName}`; // ✅ Removed trailing space
+            const newPdfUri = `${FileSystem.cacheDirectory}${safePdfFileName}`;
             let finalPdfUri = file.uri;
 
             try {
@@ -315,6 +448,9 @@ const SalesReportScreen = () => {
             setPrinting(false);
         }
     };
+
+    // Determine if there are more items to load
+    const hasMore = (page + 1) * PAGE_SIZE < totalCount;
 
     return (
         <SafeAreaView className="flex-1 bg-white">
@@ -529,7 +665,7 @@ const SalesReportScreen = () => {
                         <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden mt-4">
                             <FlatList
                                 data={filteredResult || []}
-                                keyExtractor={(item) => item.bill_number.toString()}
+                                keyExtractor={getBillKey}
                                 ListHeaderComponent={() => (
                                     <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
                                         <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">Date</Text>
@@ -560,16 +696,16 @@ const SalesReportScreen = () => {
                                                             ellipsizeMode="tail"
                                                             style={{ minWidth: 0 }}
                                                         >
-                                                            {item.dealer.username}
+                                                            {item.booked_by?.username}
                                                         </Text>
-                                                        {item?.agent?.username && (
+                                                        {item?.booked_by?.user_type && (
                                                             <Text
                                                                 className="text-xs text-center text-green-600"
                                                                 numberOfLines={1}
                                                                 ellipsizeMode="tail"
                                                                 style={{ minWidth: 0 }}
                                                             >
-                                                                {item.agent.username}
+                                                                {item.booked_by.user_type}
                                                             </Text>
                                                         )}
                                                     </View>
@@ -584,8 +720,8 @@ const SalesReportScreen = () => {
                                         {fullView && Array.isArray(item.booking_details) && item.booking_details.length > 0 && (
                                             <FlatList
                                                 data={item?.booking_details || []}
-                                                keyExtractor={(d) => d.id?.toString?.() ?? Math.random().toString()}
-                                                renderItem={({ item: d }) => (
+                                                keyExtractor={(d, idx) => getBookingDetailKey(d, item, idx)}
+                                                renderItem={({ item: d, index: dIdx }) => (
                                                     <View className="flex-row px-4 py-2 bg-amber-50/20 border-b border-amber-100 last:border-b-0">
                                                         {
                                                             user?.user_type !== 'AGENT' &&
@@ -613,6 +749,36 @@ const SalesReportScreen = () => {
                                         <Text className="text-gray-500 text-base">No sales data for current filters.</Text>
                                     </View>
                                 }
+                                // Remove infinite scroll
+                                // onEndReached={handleLoadMore}
+                                // onEndReachedThreshold={0.5}
+                                ListFooterComponent={
+                                    <>
+                                        {isFetchingMore && (
+                                            <View className="py-4 items-center">
+                                                <ActivityIndicator size="small" color="#7c3aed" />
+                                            </View>
+                                        )}
+                                        {!isFetchingMore && hasMore && (
+                                            <View className="py-4 items-center">
+                                                <TouchableOpacity
+                                                    onPress={handleLoadMore}
+                                                    className="bg-violet-600 px-6 py-2 rounded-lg"
+                                                    disabled={isFetchingMore}
+                                                    style={isFetchingMore ? { opacity: 0.7 } : undefined}
+                                                >
+                                                    <Text className="text-white font-bold">Load More</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        )}
+                                    </>
+                                }
+                                refreshing={isFetching}
+                                onRefresh={() => {
+                                    setPage(0);
+                                    // setAllData([]);
+                                    refetch();
+                                }}
                             />
                         </View>
                     </>
@@ -625,17 +791,13 @@ const SalesReportScreen = () => {
                             <Text className="flex-1 text-sm"> </Text>
                             <Text className="flex-1 text-sm"> </Text>
                             <Text className="flex-1 text-sm text-center font-semibold text-gray-700">
-                                {search ? filteredTotals.total_bill_count : (data?.total_bill_count || 0)}
+                                {totalBillCount || 0}
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-violet-700">
-                                ₹{search
-                                    ? amountHandler(Number(filteredTotals.total_dealer_amount))
-                                    : amountHandler(Number(data?.total_dealer_amount?.toFixed(0) || 0))}
+                                ₹{amountHandler(Number(totalDealerAmount?.toFixed(0) || 0))}
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">
-                                ₹{search
-                                    ? amountHandler(Number(filteredTotals.total_customer_amount))
-                                    : amountHandler(Number(data?.total_customer_amount?.toFixed(0) || 0))}
+                                ₹{amountHandler(Number(totalCustomerAmount?.toFixed(0) || 0))}
                             </Text>
                         </View>
                     </View>
