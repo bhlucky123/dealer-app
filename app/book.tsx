@@ -1164,22 +1164,93 @@ const BookingScreen: React.FC = () => {
       // Regex for WhatsApp metadata prefix
       const waPrefixRegex = /^\[\d{1,2}\/\d{1,2}(?:\/\d{2,4})?,\s*\d{1,2}:\d{2}(?:\s*[APMapm\.]*)?\]\s*[^:]*:/;
 
-      // Regex for "Abc 0 5" style (legacy, keep for compatibility)
+      // --- VALID SUBTYPES BY NUMBER LENGTH ---
+      const validSubTypesByLength: { [len: number]: string[] } = {
+        1: ["A", "B", "C"],
+        2: ["AB", "AC", "BC"],
+        3: ["SUPER", "BOX", "SET", "BOTH"],
+      };
+
+      // Helper: Validate if subType is allowed for number length
+      function isValidSubtypeForNumber(number: string, subType: string) {
+        const len = number.length;
+        const st = (subType || "").toUpperCase();
+        if (!validSubTypesByLength[len]) return false;
+        // For 3-digit, allow "BOTH" as well (for input, but not as booking type)
+        if (len === 3 && st === "BOTH") return true;
+        return validSubTypesByLength[len].includes(st);
+      }
+
+      // Helper: Add booking with fallback subType and validation
+      function pushBooking(number: string, count: number, subType?: string) {
+        if (!number || isNaN(Number(number)) || !count || isNaN(Number(count)) || Number(count) <= 0) return false;
+        let nlen = number.length;
+        let st = (subType || "").toUpperCase();
+
+        // Default subType logic
+        if (!st) {
+          if (nlen === 1) st = "A";
+          else if (nlen === 2) st = "AB";
+          else st = "SUPER";
+        }
+
+        // Validate subType for number length
+        if (!isValidSubtypeForNumber(number, st)) return false;
+
+        bookings.push({ number, count: Number(count), subType: st });
+        return true;
+      }
+
+      // Helper: Add both SUPER and BOX for dual count (only for 3-digit)
+      function pushDualBooking(number: string, count1: number, count2: number) {
+        if (number.length !== 3) return false;
+        let ok1 = pushBooking(number, count1, "SUPER");
+        let ok2 = pushBooking(number, count2, "BOX");
+        return ok1 && ok2;
+      }
+
+      // Regexes for various formats
+      // 1. WhatsApp prefix
+      // 2. "Abc 0 5" style (legacy)
       const abcRegex = /^\s*Abc\s+(\d+)\s+(\d+)\s*$/i;
-      // Regex for "304  10" style (number, 2+ spaces, count)
+      // 3. "304  10" style (number, 2+ spaces, count)
       const superSpaceRegex = /^\s*(\d{1,3})\s{2,}(\d+)\s*$/;
-      // Regex for "123=5", "123+5", "123/5", "123.5", "123-5", "123:5", "123#5", "123&5", "123*5"
-      const superSymbolRegex = /^\s*(\d{3})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s*$/;
-      // Regex for "054 2" (3-digit number, 1 space, count)
+      // 4. "054 2" (3-digit number, 1 space, count)
       const threeDigitSpaceRegex = /^\s*(\d{3})\s+(\d+)\s*$/;
-      // Regex for "number [subType] count"
+      // 5. "number [subType] count"
       const normalMatchRegex = /^\s*(\d{1,3})\s+([A-Za-z]+)?\s*(\d+)\s*$/;
+      // 6. "123=5", "123+5", "123/5", "123.5", "123-5", "123:5", "123#5", "123&5", "123*5"
+      const superSymbolRegex = /^\s*(\d{1,3})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s*$/;
+      // 7. "041-1.2", "041-1*2", "041-1/2", "041-1:2", "041-1,2", "041-1=2", "041-1+2", etc.
+      // Accepts any non-digit, non-space, non-letter as separator between number and counts
+      // Also supports "123=3=3", "145+2+2", "156:3-5", "165+5:6"
+      const dualCountRegex = /^\s*(\d{1,3})\s*[-=+\/\.\#\&\*:,]\s*(\d+)[^0-9]+(\d+)\s*$/;
+      // 8. "036,2" or "036, 2" or "036-2" or "036.2" or "036/2" or "036:2" or "036*2"
+      const commaOrSymbolRegex = /^\s*(\d{1,3})\s*[,=+\-:\/\.\#\&\*]\s*(\d+)\s*$/;
+      // 9. "AB.24.2" or "BC.41.2" (subtype.number.count)
+      const subtypeDotNumberDotCount = /^\s*([A-Za-z]+)[\.\-]([0-9]{1,3})[\.\-](\d+)\s*$/;
+      // 10. "100.2.2" (number.count1.count2)
+      const numberDotCountDotCount = /^\s*(\d{1,3})[\.\-](\d+)[\.\-](\d+)\s*$/;
+      // 11. "021*2" (number*count)
+      const numberStarCount = /^\s*(\d{1,3})\s*\*\s*(\d+)\s*$/;
+      // 12. "312.6" (number.count)
+      const numberDotCount = /^\s*(\d{1,3})\s*[\.\-]\s*(\d+)\s*$/;
+      // 13. "123-5 box", "123=5 set", "123-5 super", "123-5 both"
+      const numberSymbolCountSubtype = /^\s*(\d{1,3})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s+([A-Za-z]+)\s*$/;
+      // 14. "56 AC=5", "34 AB:5", "45 BC-5", "6 A=10", "8 B=15", "7 C #15"
+      const numberSubtypeSymbolCount = /^\s*(\d{1,3})\s*([A-Za-z]+)\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s*$/;
+      // 15. "A 8 20", "A 9 20"
+      const subtypeNumberCount = /^\s*([A-Za-z]+)\s+(\d{1,3})\s+(\d+)\s*$/;
+      // 16. "Dear 6", "Kerala 3" (ignore, not a booking)
+      const ignoreLineRegex = /^\s*[A-Za-z ]+\d+\s*$/;
+      // 17. "709-5,077-6,078-5,..." (comma separated bookings in one line)
+      const multiBookingLineRegex = /(\d{1,3})\s*[-=+\*\/\.\#\&:,]\s*(\d+)/g;
 
       for (const origLine of lines) {
         let line = origLine;
         let waPrefix = "";
 
-        // If line starts with WhatsApp prefix, extract and remove it
+        // WhatsApp prefix
         const waMatch = line.match(waPrefixRegex);
         if (waMatch) {
           waPrefix = waMatch[0];
@@ -1192,73 +1263,188 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // 1. "Abc 0 5" style (legacy)
-        let m = line.match(abcRegex);
-        if (m) {
-          const number = m[1];
-          const count = Number(m[2]);
-          if (!isNaN(Number(number)) && !isNaN(count) && count > 0) {
-            bookings.push({ number, count, subType: "A" });
-            bookings.push({ number, count, subType: "B" });
-            bookings.push({ number, count, subType: "C" });
-          } else {
+        // 0. Ignore lines like "Dear 6", "Kerala 3"
+        if (ignoreLineRegex.test(line)) continue;
+
+        // 1. Multi-booking line: "709-5,077-6,078-5,..."
+        let multiMatch = [...line.matchAll(multiBookingLineRegex)];
+        if (multiMatch.length > 1) {
+          let anyOk = false;
+          for (let m of multiMatch) {
+            if (pushBooking(m[1], m[2])) anyOk = true;
+          }
+          if (!anyOk) {
             if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
             failedLines.push(origLine);
           }
           continue;
         }
 
-        // 2. "304  10" style (number, 2+ spaces, count)
+        // 2. Dual count: "041-1.2", "041-1*2", "041-1/2", "123=3=3", "145+2+2", "156:3-5", "165+5:6"
+        let m = line.match(dualCountRegex);
+        if (m) {
+          if (!pushDualBooking(m[1], m[2], m[3])) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // 3. "Abc 0 5" style (legacy)
+        m = line.match(abcRegex);
+        if (m) {
+          let ok = pushBooking(m[1], m[2], "A") && pushBooking(m[1], m[2], "B") && pushBooking(m[1], m[2], "C");
+          if (!ok) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // 4. "304  10" style (number, 2+ spaces, count)
         m = line.match(superSpaceRegex);
         if (m) {
-          const number = m[1];
-          const count = Number(m[2]);
-          if (!isNaN(Number(number)) && !isNaN(count) && count > 0) {
-            bookings.push({ number, count, subType: "SUPER" });
-          } else {
+          if (!pushBooking(m[1], m[2])) {
             if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
             failedLines.push(origLine);
           }
           continue;
         }
 
-        // 3. "123=5", "123+5", "123/5", "123.5", "123-5", "123:5", "123#5", "123&5", "123*5"
-        m = line.match(superSymbolRegex);
-        if (m) {
-          const number = m[1];
-          const count = Number(m[3]);
-          if (!isNaN(Number(number)) && !isNaN(count) && count > 0) {
-            bookings.push({ number, count, subType: "SUPER" });
-          } else {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // 4. "054 2" (3-digit number, 1 space, count) - treat as SUPER
+        // 5. "054 2" (3-digit number, 1 space, count)
         m = line.match(threeDigitSpaceRegex);
         if (m) {
-          const number = m[1];
-          const count = Number(m[2]);
-          if (!isNaN(Number(number)) && !isNaN(count) && count > 0) {
-            bookings.push({ number, count, subType: "SUPER" });
-          } else {
+          if (!pushBooking(m[1], m[2])) {
             if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
             failedLines.push(origLine);
           }
           continue;
         }
 
-        // 5. Try normal parser for other formats
+        // 6. "number [subType] count"
         m = line.match(normalMatchRegex);
         if (m) {
-          const number = m[1];
-          const subType = (m[2] || "SUPER").toUpperCase();
-          const count = Number(m[3]);
-          if (!isNaN(Number(number)) && !isNaN(count) && count > 0) {
-            bookings.push({ number, count, subType });
+          if (!pushBooking(m[1], m[3], m[2])) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // 7. "123=5", "123+5", "123/5", "123.5", "123-5", "123:5", "123#5", "123&5", "123*5"
+        m = line.match(superSymbolRegex);
+        if (m) {
+          if (!pushBooking(m[1], m[3])) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // 8. "036,2" or "036, 2" or "036-2" or "036.2" or "036/2" or "036:2" or "036*2"
+        m = line.match(commaOrSymbolRegex);
+        if (m) {
+          if (!pushBooking(m[1], m[2])) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // 9. "AB.24.2" or "BC.41.2" (subtype.number.count)
+        m = line.match(subtypeDotNumberDotCount);
+        if (m) {
+          if (!pushBooking(m[2], m[3], m[1])) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // 10. "100.2.2" (number.count1.count2)
+        m = line.match(numberDotCountDotCount);
+        if (m) {
+          let ok = pushBooking(m[1], m[2], "SUPER") && pushBooking(m[1], m[3], "BOX");
+          if (!ok) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // 11. "021*2"
+        m = line.match(numberStarCount);
+        if (m) {
+          if (!pushBooking(m[1], m[2])) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // 12. "312.6" (number.count)
+        m = line.match(numberDotCount);
+        if (m) {
+          if (!pushBooking(m[1], m[2])) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // 13. "123-5 box", "123=5 set", "123-5 super", "123-5 both"
+        m = line.match(numberSymbolCountSubtype);
+        if (m) {
+          let subType = m[4].toUpperCase();
+          if (subType === "SET") {
+            // Add all 6 permutations as SUPER, only for 3-digit
+            if (m[1].length === 3) {
+              const perms = Array.from(new Set([
+                m[1][0] + m[1][1] + m[1][2],
+                m[1][0] + m[1][2] + m[1][1],
+                m[1][1] + m[1][0] + m[1][2],
+                m[1][1] + m[1][2] + m[1][0],
+                m[1][2] + m[1][0] + m[1][1],
+                m[1][2] + m[1][1] + m[1][0],
+              ]));
+              for (let perm of perms) pushBooking(perm, m[3], "SUPER");
+            } else {
+              // Not valid for non-3-digit
+              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+              failedLines.push(origLine);
+            }
+          } else if (subType === "BOTH") {
+            // Only for 3-digit
+            if (m[1].length === 3) {
+              pushBooking(m[1], m[3], "SUPER");
+              pushBooking(m[1], m[3], "BOX");
+            } else {
+              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+              failedLines.push(origLine);
+            }
           } else {
+            if (!pushBooking(m[1], m[3], subType)) {
+              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+              failedLines.push(origLine);
+            }
+          }
+          continue;
+        }
+
+        // 14. "56 AC=5", "34 AB:5", "45 BC-5", "6 A=10", "8 B=15", "7 C #15"
+        m = line.match(numberSubtypeSymbolCount);
+        if (m) {
+          if (!pushBooking(m[1], m[4], m[2])) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // 15. "A 8 20", "A 9 20"
+        m = line.match(subtypeNumberCount);
+        if (m) {
+          if (!pushBooking(m[2], m[3], m[1])) {
             if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
             failedLines.push(origLine);
           }
@@ -1830,13 +2016,29 @@ const BookingScreen: React.FC = () => {
           <View>
             <Text className="font-semibold text-xs">D.AMOUNT</Text>
             <Text className="font-semibold text-xs text-center mt-1">
-              ₹ {totals.d_amount}
+              {(() => {
+                const val = Number(totals.d_amount);
+                const hasDecimal = !Number.isInteger(val);
+                if (hasDecimal) {
+                  const dec = val.toFixed(2).split(".")[1];
+                  return `. ${dec}`;
+                }
+                return "";
+              })()}
             </Text>
           </View>
           <View>
             <Text className="font-semibold text-xs">C.AMOUNT</Text>
             <Text className="font-semibold text-xs text-center mt-1">
-              ₹ {totals.c_amount}
+              {(() => {
+                const val = Number(totals.c_amount);
+                const hasDecimal = !Number.isInteger(val);
+                if (hasDecimal) {
+                  const dec = val.toFixed(2).split(".")[1];
+                  return `. ${dec}`;
+                }
+                return "";
+              })()}
             </Text>
           </View>
           <TouchableOpacity
