@@ -7,7 +7,7 @@ interface Config {
 
 export const config: Config = {
   apiBaseUrl: "https://3dlnbe-production.up.railway.app",
-  // userType: "ADMIN",
+  userType: "ADMIN",
   // userType: "DEALER",
-  userType: "AGENT",
+  // userType: "AGENT",
 };

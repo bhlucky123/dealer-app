@@ -463,12 +463,10 @@ const BookingScreen: React.FC = () => {
             });
           } else {
             const actualCount = subType === "BOX" ? bCountVal : countVal;
-            console.log("on else", actualCount);
             if (actualCount > 0) newEntries.push(createEntry(paddedNum, actualCount, subType, undefined, bookingType));
           }
         }
 
-        console.log("newEntries", newEntries);
 
 
         setBookingDetails((prev) => [...newEntries, ...prev]);
@@ -898,7 +896,240 @@ const BookingScreen: React.FC = () => {
     setDrawSession(num.toString());
   };
 
-  // --- REWRITE handlePastBookings to show failed lines in a modal and fix 1/2 digit paste ---
+  const parseClipboardBookings = (clipboardText: string) => {
+    // Remove WhatsApp metadata lines
+    clipboardText = clipboardText.replace(
+      /^\[\d{1,2}\/\d{1,2},\s*\d{1,2}:\d{2}\s*(am|pm)?\]\s*[\+\d\s\-()]+:/gim,
+      ""
+    );
+
+    // Split by newlines, commas, semicolons, or multiple spaces (but not inside numbers)
+    let rawLines = clipboardText
+      .split(/[\n;,]+/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    // Further split lines that have multiple items separated by spaces or commas
+    let lines: string[] = [];
+    for (let l of rawLines) {
+      // If line contains multiple items separated by spaces, commas, or tabs, split
+      // But don't split if it's a single booking like "123=5 set"
+      // Split on 2+ spaces, or comma, or semicolon
+      let parts = l.split(/(?<![A-Za-z])\s{2,}|(?<![A-Za-z0-9])[,;](?![A-Za-z0-9])/).map(s => s.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        lines.push(...parts);
+      } else {
+        // Also split on single spaces if there are multiple bookings in one line, e.g. "700-5 701-33 707-12"
+        let multi = l.match(/^(\d{1,3}[\s\/\-=\+:\.#*&]{1,3}\d{1,3}(?:\s+[a-zA-Z]+)?)(?:\s+(\d{1,3}[\s\/\-=\+:\.#*&]{1,3}\d{1,3}(?:\s+[a-zA-Z]+)?))+$/);
+        if (multi) {
+          let more = l.split(/\s+(?=\d{1,3}[\s\/\-=\+:\.#*&]{1,3}\d{1,3})/).map(s => s.trim()).filter(Boolean);
+          lines.push(...more);
+        } else {
+          lines.push(l);
+        }
+      }
+    }
+
+    const bookings: { number: string; count: number; subType: string }[] = [];
+    const failedLines: string[] = [];
+
+    // Helper: generate all 6 permutations of a 3-digit number
+    const generatePermutations = (num: string): string[] => {
+      if (num.length !== 3) return [];
+      const digits = num.split("");
+      const perms = new Set<string>();
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          if (j === i) continue;
+          for (let k = 0; k < 3; k++) {
+            if (k === i || k === j) continue;
+            perms.add(digits[i] + digits[j] + digits[k]);
+          }
+        }
+      }
+      return Array.from(perms);
+    };
+
+    // Helper: check subtype/number length validity
+    function isValidSubtype(number: string, subType: string) {
+      if (number.length === 1) return ["A", "B", "C"].includes(subType);
+      if (number.length === 2) return ["AB", "AC", "BC"].includes(subType);
+      if (number.length === 3) return ["SUPER", "BOX", "SET", "BOTH"].includes(subType);
+      return false;
+    }
+
+    // Helper: parse a single booking line
+    function parseLine(line: string) {
+      let l = line.replace(/\s+/g, " ").trim();
+
+      // Remove WhatsApp metadata if present
+      l = l.replace(/^\[\d{1,2}\/\d{1,2},\s*\d{1,2}:\d{2}\s*(am|pm)?\]\s*[\+\d\s\-()]+:/i, "").trim();
+
+      // Accept AB.24.2, AB:24:2, AB-24-2, AB 24 2, etc.
+      let matchSubtypePrefix = l.match(/^([A-Z]{1,3})[\.\:\-\s]+(\d{1,3})(?:[\.\:\-\s]+(\d{1,3}))?$/i);
+      if (matchSubtypePrefix) {
+        let subType = matchSubtypePrefix[1].toUpperCase();
+        let number = matchSubtypePrefix[2];
+        let count = matchSubtypePrefix[3] ? parseInt(matchSubtypePrefix[3]) : 5;
+        if (isNaN(count)) count = 5;
+        return { number, count, subType };
+      }
+
+      // Accept 56 AC=5, 34 AB:5, 45 BC-5, 6 A=10, 8 B=15, 7 C #15
+      let matchNumberSubtypeCount = l.match(/^(\d{1,3})\s*([A-Z]{1,3})?[\s\/\-=\+:\.#*&]{1,3}(\d{1,3})\s*([A-Z]{1,3})?$/i);
+      if (matchNumberSubtypeCount) {
+        let number = matchNumberSubtypeCount[1];
+        let subType = (matchNumberSubtypeCount[2] || matchNumberSubtypeCount[4] || "").toUpperCase();
+        let count = parseInt(matchNumberSubtypeCount[3]);
+        if (isNaN(count)) count = 5;
+        // If subtype not present, infer by number length
+        if (!subType) {
+          if (number.length === 1) subType = "A";
+          else if (number.length === 2) subType = "AB";
+          else if (number.length === 3) subType = "SUPER";
+        }
+        return { number, count, subType };
+      }
+
+      // Accept 123=5=3, 124+2+2, 132.5.4, 356,5,5 (multiple counts)
+      let matchMultiCount = l.match(/^(\d{3})[\s\/\-=\+:\.#*&]{1,3}(\d{1,3})[\s\/\-=\+:\.#*&]{1,3}(\d{1,3})(?:\s*([A-Z]{1,3}))?$/i);
+      if (matchMultiCount) {
+        let number = matchMultiCount[1];
+        let count1 = parseInt(matchMultiCount[2]);
+        let count2 = parseInt(matchMultiCount[3]);
+        let subType = (matchMultiCount[4] || "").toUpperCase();
+        if (!subType) subType = "SUPER";
+        return { number, count: [count1, count2], subType };
+      }
+
+      // Accept 552/20, 959/30 box, 123=5 set, 123=5 both, 552/20, 959/30 box
+      let matchNumberCountSubtype = l.match(/^(\d{1,3})[\s\/\-=\+:\.#*&]{1,3}(\d{1,3})(?:\s*([A-Z]{1,5}))?$/i);
+      if (matchNumberCountSubtype) {
+        let number = matchNumberCountSubtype[1];
+        let count = parseInt(matchNumberCountSubtype[2]);
+        let subType = (matchNumberCountSubtype[3] || "").toUpperCase();
+        if (!subType) {
+          if (number.length === 1) subType = "A";
+          else if (number.length === 2) subType = "AB";
+          else if (number.length === 3) subType = "SUPER";
+        }
+        return { number, count, subType };
+      }
+
+      // Accept 123 box, 123 set, 123 both
+      let matchNumberSubtype = l.match(/^(\d{3})\s*([A-Z]{3,5})$/i);
+      if (matchNumberSubtype) {
+        let number = matchNumberSubtype[1];
+        let subType = matchNumberSubtype[2].toUpperCase();
+        let count = 5;
+        return { number, count, subType };
+      }
+
+      // Accept just a number (default count 5, subType by length)
+      let matchJustNumber = l.match(/^(\d{1,3})$/);
+      if (matchJustNumber) {
+        let number = matchJustNumber[1];
+        let count = 5;
+        let subType = "";
+        if (number.length === 1) subType = "A";
+        else if (number.length === 2) subType = "AB";
+        else if (number.length === 3) subType = "SUPER";
+        return { number, count, subType };
+      }
+
+      // Fallback: try to extract number, count, subtype in any order
+      let matchAny = l.match(/(\d{1,3})[\s\/\-=\+:\.#*&]{1,3}(\d{1,3})(?:\s*([A-Z]{1,5}))?/i);
+      if (matchAny) {
+        let number = matchAny[1];
+        let count = parseInt(matchAny[2]);
+        let subType = (matchAny[3] || "").toUpperCase();
+        if (!subType) {
+          if (number.length === 1) subType = "A";
+          else if (number.length === 2) subType = "AB";
+          else if (number.length === 3) subType = "SUPER";
+        }
+        return { number, count, subType };
+      }
+
+      // If nothing matched, return null
+      return null;
+    }
+
+    for (let line of lines) {
+      if (!line || !line.trim()) continue;
+      let parsed = parseLine(line);
+
+      // Handle multi-count (e.g. 123=5=3)
+      if (parsed && Array.isArray(parsed.count) && parsed.count.length === 2) {
+        let { number, count, subType } = parsed;
+        let [count1, count2] = count;
+        // Only for 3-digit numbers
+        if (number.length === 3) {
+          // SUPER
+          if (isValidSubtype(number, "SUPER") && count1 > 0) {
+            bookings.push({ number, count: count1, subType: "SUPER" });
+          }
+          // BOX
+          if (isValidSubtype(number, "BOX") && count2 > 0) {
+            bookings.push({ number, count: count2, subType: "BOX" });
+          }
+        } else {
+          failedLines.push(line);
+        }
+        continue;
+      }
+
+      if (!parsed) {
+        failedLines.push(line);
+        continue;
+      }
+
+      let { number, count, subType } = parsed;
+
+      // Validate number and count
+      if (
+        !number ||
+        isNaN(Number(number)) ||
+        !count ||
+        isNaN(Number(count)) ||
+        Number(count) <= 0
+      ) {
+        failedLines.push(line);
+        continue;
+      }
+
+      // Normalize subtype
+      subType = (subType || "").toUpperCase();
+
+      // Special: SET (3-digit only)
+      if (subType === "SET" && number.length === 3) {
+        let perms = generatePermutations(number);
+        for (let perm of perms) {
+          bookings.push({ number: perm, count: Number(count), subType: "SUPER" });
+        }
+        continue;
+      }
+
+      // Special: BOTH (3-digit only)
+      if (subType === "BOTH" && number.length === 3) {
+        bookings.push({ number, count: Number(count), subType: "SUPER" });
+        bookings.push({ number, count: Number(count), subType: "BOX" });
+        continue;
+      }
+
+      // Validate subtype/number length
+      if (!isValidSubtype(number, subType)) {
+        failedLines.push(line);
+        continue;
+      }
+
+      // Acceptable: add booking
+      bookings.push({ number, count: Number(count), subType });
+    }
+
+    return { bookings, failedLines };
+  };
+
   const handlePastBookings = async () => {
     try {
       let clipboardText: string = "";
@@ -923,199 +1154,134 @@ const BookingScreen: React.FC = () => {
         return;
       }
 
-      const lines = clipboardText
-        .split(/[\n,;]+/)
-        .map((l) => l.trim())
-        .filter(Boolean);
+      // Split into lines and trim
+      const lines = clipboardText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-      // Helper: parse a single line into {number, count, subType}
-      function parseLine(line: string) {
-        let l = line.replace(/\s+/g, " ").trim();
-
-        // Try to extract subType (box/set/ab/ac/bc/a/b/c/all/super/both)
-        let subType = "";
-        let subTypeMatch = l.match(/\b(box|set|super|both|ab|ac|bc|a|b|c|all)\b/i);
-        if (subTypeMatch) {
-          subType = subTypeMatch[1].toUpperCase();
-          l = l.replace(subTypeMatch[0], "").trim();
-        }
-
-        // Find number and count
-        // Accept separators: /, -, =, +, :, #, &, *, ., .., space
-        let match = l.match(
-          /^([0-9]{1,3})\s*([\/\-=\+:#&\*\.]{1,2})\s*([0-9]{1,3})$/i
-        );
-        if (!match) {
-          // Try with space separator
-          match = l.match(/^([0-9]{1,3})\s+([0-9]{1,3})$/);
-        }
-        if (!match) {
-          // Try with number only (single digit, default count 5)
-          match = l.match(/^([0-9]{1,3})$/);
-          if (match) {
-            let number = match[1];
-            // If not specified, for 3-digit: SUPER, 2-digit: AB, 1-digit: A
-            if (number.length === 3) {
-              return {
-                number,
-                count: 5,
-                subType: "SUPER",
-              };
-            } else if (number.length === 2) {
-              return {
-                number,
-                count: 5,
-                subType: "AB",
-              };
-            } else if (number.length === 1) {
-              return {
-                number,
-                count: 5,
-                subType: "A",
-              };
-            }
-          }
-          return null;
-        }
-
-        let number = match[1];
-        let count = parseInt(match[3] || match[2] || "5");
-        if (isNaN(count)) count = 5;
-
-        // If subType is not set, infer from separator
-        if (!subType) {
-          if (match[2]) {
-            const sep = match[2].replace(/\s/g, "");
-            // For *, #: use SUPER for 3-digit, AB for 2-digit, A for 1-digit
-            if (sep === "*" || sep === "#") {
-              if (number.length === 3) subType = "SUPER";
-              else if (number.length === 2) subType = "AB";
-              else if (number.length === 1) subType = "A";
-            }
-            else if (sep === "=" || sep === "+" || sep === ":" || sep === "-" || sep === "/" || sep === "&" || sep === "." || sep === "..") {
-              if (number.length === 3) subType = "SUPER";
-              else if (number.length === 2) subType = "AB";
-              else if (number.length === 1) subType = "A";
-            }
-          }
-        }
-
-        // If subType is still not set, default for 3-digit is SUPER, for 2-digit is AB, for 1-digit is A
-        if (!subType) {
-          if (number.length === 3) subType = "SUPER";
-          else if (number.length === 2) subType = "AB";
-          else if (number.length === 1) subType = "A";
-        }
-
-        // Special: if subType is BOTH, treat as both SUPER and BOX
-        if (subType === "BOTH") {
-          return { number, count, subType: "BOTH" };
-        }
-
-        // Map AB/AC/BC/A/B/C/ALL to their respective subTypes
-        if (
-          ["AB", "AC", "BC", "A", "B", "C", "ALL"].includes(subType)
-        ) {
-          return { number, count, subType };
-        }
-
-        // For BOX/SUPER/SET
-        if (["BOX", "SUPER", "SET"].includes(subType)) {
-          // Only allow BOX for 3-digit, otherwise force to SUPER/AB/A
-          if (subType === "BOX") {
-            if (number.length === 3) {
-              return { number, count, subType: "BOX" };
-            } else if (number.length === 2) {
-              return { number, count, subType: "AB" };
-            } else if (number.length === 1) {
-              return { number, count, subType: "A" };
-            }
-          }
-          // For SET, we want to return a special marker to handle all 3-digit combinations
-          if (subType === "SET" && number.length === 3) {
-            return { number, count, subType: "SET" };
-          }
-          return { number, count, subType: subType === "BOX" ? "SUPER" : subType };
-        }
-
-        // Fallback
-        if (number.length === 3) return { number, count, subType: "SUPER" };
-        if (number.length === 2) return { number, count, subType: "AB" };
-        if (number.length === 1) return { number, count, subType: "A" };
-        return { number, count, subType: "SUPER" };
-      }
-
-      let added = 0;
+      // Prepare to collect bookings and failed lines
+      let bookings: { number: string; count: number; subType: string }[] = [];
       let failedLines: string[] = [];
 
-      for (let line of lines) {
-        const parsed = parseLine(line);
+      // Regex for WhatsApp metadata prefix
+      const waPrefixRegex = /^\[\d{1,2}\/\d{1,2}(?:\/\d{2,4})?,\s*\d{1,2}:\d{2}(?:\s*[APMapm\.]*)?\]\s*[^:]*:/;
 
-        // If parseLine failed, add to failedLines and continue
-        if (!parsed) {
-          failedLines.push(line);
+      // Regex for "Abc 0 5" style (legacy, keep for compatibility)
+      const abcRegex = /^\s*Abc\s+(\d+)\s+(\d+)\s*$/i;
+      // Regex for "304  10" style (number, 2+ spaces, count)
+      const superSpaceRegex = /^\s*(\d{1,3})\s{2,}(\d+)\s*$/;
+      // Regex for "123=5", "123+5", "123/5", "123.5", "123-5", "123:5", "123#5", "123&5", "123*5"
+      const superSymbolRegex = /^\s*(\d{3})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s*$/;
+      // Regex for "054 2" (3-digit number, 1 space, count)
+      const threeDigitSpaceRegex = /^\s*(\d{3})\s+(\d+)\s*$/;
+      // Regex for "number [subType] count"
+      const normalMatchRegex = /^\s*(\d{1,3})\s+([A-Za-z]+)?\s*(\d+)\s*$/;
+
+      for (const origLine of lines) {
+        let line = origLine;
+        let waPrefix = "";
+
+        // If line starts with WhatsApp prefix, extract and remove it
+        const waMatch = line.match(waPrefixRegex);
+        if (waMatch) {
+          waPrefix = waMatch[0];
+          line = line.slice(waPrefix.length).trim();
+        }
+
+        // If after removing prefix, line is empty, just add the prefix to failedLines and continue
+        if (line.length === 0) {
+          if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
           continue;
         }
 
-        // Validate number and count are valid numbers before adding
-        if (
-          !isValidNumberString(parsed.number) ||
-          !isValidPositiveNumber(parsed.count) ||
-          !isValidNumber(parsed)
-        ) {
-          failedLines.push(line);
+        // 1. "Abc 0 5" style (legacy)
+        let m = line.match(abcRegex);
+        if (m) {
+          const number = m[1];
+          const count = Number(m[2]);
+          if (!isNaN(Number(number)) && !isNaN(count) && count > 0) {
+            bookings.push({ number, count, subType: "A" });
+            bookings.push({ number, count, subType: "B" });
+            bookings.push({ number, count, subType: "C" });
+          } else {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
           continue;
         }
 
+        // 2. "304  10" style (number, 2+ spaces, count)
+        m = line.match(superSpaceRegex);
+        if (m) {
+          const number = m[1];
+          const count = Number(m[2]);
+          if (!isNaN(Number(number)) && !isNaN(count) && count > 0) {
+            bookings.push({ number, count, subType: "SUPER" });
+          } else {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // 3. "123=5", "123+5", "123/5", "123.5", "123-5", "123:5", "123#5", "123&5", "123*5"
+        m = line.match(superSymbolRegex);
+        if (m) {
+          const number = m[1];
+          const count = Number(m[3]);
+          if (!isNaN(Number(number)) && !isNaN(count) && count > 0) {
+            bookings.push({ number, count, subType: "SUPER" });
+          } else {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // 4. "054 2" (3-digit number, 1 space, count) - treat as SUPER
+        m = line.match(threeDigitSpaceRegex);
+        if (m) {
+          const number = m[1];
+          const count = Number(m[2]);
+          if (!isNaN(Number(number)) && !isNaN(count) && count > 0) {
+            bookings.push({ number, count, subType: "SUPER" });
+          } else {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // 5. Try normal parser for other formats
+        m = line.match(normalMatchRegex);
+        if (m) {
+          const number = m[1];
+          const subType = (m[2] || "SUPER").toUpperCase();
+          const count = Number(m[3]);
+          if (!isNaN(Number(number)) && !isNaN(count) && count > 0) {
+            bookings.push({ number, count, subType });
+          } else {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // If still not matched, add WhatsApp prefix (if any) and the line to failedLines
+        if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+        if (line.length > 0) failedLines.push(origLine);
+      }
+
+      // Add bookings
+      let added = 0;
+      for (const booking of bookings) {
         // Determine drawSession based on number length
         let session = drawSession;
-        if (parsed.number.length === 1) session = "1";
-        else if (parsed.number.length === 2) session = "2";
-        else if (parsed.number.length === 3) session = "3";
-
-        // Set drawSession if different
+        if (booking.number.length === 1) session = "1";
+        else if (booking.number.length === 2) session = "2";
+        else if (booking.number.length === 3) session = "3";
         if (drawSession !== session) setDrawSession(session);
 
-        // For triple digit, if subType is BOTH, add both
-        if (session === "3" && parsed.subType === "BOTH") {
-          // Only add if count and bCount > 0
-          if (parsed.count > 0) addBooking("BOTH", parsed.number, parsed.count, parsed.count);
-          added += 2;
-        }
-        // For triple digit, if subType is SET, add all 6 permutations as SUPER
-        else if (session === "3" && parsed.subType === "SET") {
-          // Generate all unique permutations of the 3 digits
-          const digits = parsed.number.split("");
-          const perms = new Set();
-          for (let i = 0; i < 3; i++) {
-            for (let j = 0; j < 3; j++) {
-              if (j === i) continue;
-              for (let k = 0; k < 3; k++) {
-                if (k === i || k === j) continue;
-                perms.add(digits[i] + digits[j] + digits[k]);
-              }
-            }
-          }
-          let countAdded = 0;
-          perms.forEach((perm) => {
-            addBooking("SUPER", perm, parsed.count, parsed.count);
-            countAdded++;
-          });
-          added += countAdded;
-        }
-        // For triple digit, if subType is BOX, add as BOX
-        else if (session === "3" && parsed.subType === "BOX") {
-          if (parsed.count > 0) {
-            addBooking("BOX", parsed.number, parsed.count, parsed.count);
-            added += 1;
-          }
-        }
-        // For all other cases
-        else {
-          // Only add if count > 0
-          if (parsed.count > 0) addBooking(parsed.subType, parsed.number, parsed.count, parsed.count);
-          added += 1;
-        }
+        addBooking(booking.subType, booking.number, booking.count, booking.count);
+        added++;
       }
 
       if (added === 0) {
@@ -1124,7 +1290,6 @@ const BookingScreen: React.FC = () => {
         ToastAndroid.show(`Added ${added} booking${added > 1 ? "s" : ""} from clipboard.`, ToastAndroid.SHORT);
       }
 
-      // If there are failed lines, show them in a modal
       if (failedLines.length > 0) {
         setFailedPasteLines(failedLines);
         setFailedPasteModalVisible(true);
@@ -1133,6 +1298,179 @@ const BookingScreen: React.FC = () => {
       Alert.alert("Clipboard Error", "Could not read clipboard.");
     }
   }
+
+  // 🔑 Utility: Generate all 6 permutations of a 3-digit number
+
+
+  // const handlePastBookings = async () => {
+  //   try {
+  //     let clipboardText: string = "";
+  //     if (Platform.OS === "web") {
+  //       clipboardText = await navigator.clipboard.readText();
+  //     } else if (RNClipboard?.Clipboard && RNClipboard.Clipboard.getString) {
+  //       clipboardText = await RNClipboard.Clipboard.getString();
+  //     } else if ((global as any).Clipboard && (global as any).Clipboard.getString) {
+  //       clipboardText = await (global as any).Clipboard.getString();
+  //     } else {
+  //       try {
+  //         const { getString } = require("@react-native-clipboard/clipboard");
+  //         clipboardText = await getString();
+  //       } catch (e) {
+  //         ToastAndroid.show("Could not read clipboard.", ToastAndroid.SHORT);
+  //         return;
+  //       }
+  //     }
+  
+  //     if (!clipboardText || !clipboardText.trim()) {
+  //       ToastAndroid.show("Clipboard is empty.", ToastAndroid.SHORT);
+  //       return;
+  //     }
+  
+  //     // Split by new lines first
+  //     const rawLines = clipboardText.split(/[\n]+/).map((l) => l.trim()).filter(Boolean);
+  
+  //     // Utility: Generate all 6 permutations of a 3-digit number
+  //     const generatePermutations = (num: string): string[] => {
+  //       if (num.length !== 3) return [];
+  //       const digits = num.split("");
+  //       const perms = new Set<string>();
+  //       for (let i = 0; i < 3; i++) {
+  //         for (let j = 0; j < 3; j++) {
+  //           if (j === i) continue;
+  //           for (let k = 0; k < 3; k++) {
+  //             if (k === i || k === j) continue;
+  //             perms.add(digits[i] + digits[j] + digits[k]);
+  //           }
+  //         }
+  //       }
+  //       return Array.from(perms);
+  //     };
+  
+  //     // Helper: parse a single booking item into {number, count, subType}
+  //     function parseLine(line: string) {
+  //       let l = line.replace(/\s+/g, " ").trim();
+  //       if (!l) return null;
+  
+  //       // First pattern: subtype + number + count (AB.24.2)
+  //       let match = l.match(/^([A-Z]{1,3})[\.\:\-\s]+([0-9]{1,3})(?:[\.\:\-\s]+([0-9]{1,3}))?$/i);
+  //       if (match) {
+  //         let subType = match[1].toUpperCase();
+  //         let number = match[2];
+  //         let count = match[3] ? parseInt(match[3]) : 5;
+  //         if (isNaN(count)) count = 5;
+  //         return { number, count, subType };
+  //       }
+  
+  //       // Extract explicit subtype if present (e.g., BOX 123 5)
+  //       let subType = "";
+  //       let subTypeMatch = l.match(/\b(box|set|super|both|ab|ac|bc|a|b|c|all)\b/i);
+  //       if (subTypeMatch) {
+  //         subType = subTypeMatch[1].toUpperCase();
+  //         l = l.replace(subTypeMatch[0], "").trim();
+  //       }
+  
+  //       // Number + count (e.g., 24 2, 123 10)
+  //       let match2 = l.match(/^([0-9]{1,3})[\s\.\:\-]+([0-9]{1,3})$/);
+  //       if (match2) {
+  //         let number = match2[1];
+  //         let count = parseInt(match2[2]);
+  //         if (isNaN(count)) count = 5;
+  //         if (!subType) {
+  //           if (number.length === 3) subType = "SUPER";
+  //           else if (number.length === 2) subType = "AB";
+  //           else if (number.length === 1) subType = "A";
+  //         }
+  //         return { number, count, subType };
+  //       }
+  
+  //       // Just a number (default count 5, subtype inferred)
+  //       let match3 = l.match(/^([0-9]{1,3})$/);
+  //       if (match3) {
+  //         let number = match3[1];
+  //         let count = 5;
+  //         if (!subType) {
+  //           if (number.length === 3) subType = "SUPER";
+  //           else if (number.length === 2) subType = "AB";
+  //           else if (number.length === 1) subType = "A";
+  //         }
+  //         return { number, count, subType };
+  //       }
+  
+  //       return null;
+  //     }
+  
+  //     let added = 0;
+  //     let failedLines: string[] = [];
+  
+  //     // Process each line, allowing multiple bookings per line
+  //     for (let raw of rawLines) {
+  //       // Allow separators like comma/semicolon/space inside each line
+  //       const parts = raw.split(/[,;]+/).map((p) => p.trim()).filter(Boolean);
+  
+  //       for (let part of parts) {
+  //         const parsed = parseLine(part);
+  
+  //         if (!parsed) {
+  //           failedLines.push(part);
+  //           continue;
+  //         }
+  
+  //         if (
+  //           !isValidNumberString(parsed.number) ||
+  //           !isValidPositiveNumber(parsed.count) ||
+  //           !isValidNumber(parsed)
+  //         ) {
+  //           failedLines.push(part);
+  //           continue;
+  //         }
+  
+  //         // Determine session by number length
+  //         let session = drawSession;
+  //         if (parsed.number.length === 1) session = "1";
+  //         else if (parsed.number.length === 2) session = "2";
+  //         else if (parsed.number.length === 3) session = "3";
+  //         if (drawSession !== session) setDrawSession(session);
+  
+  //         // Handle special subTypes
+  //         if (session === "3" && parsed.subType === "BOTH") {
+  //           if (parsed.count > 0) addBooking("BOTH", parsed.number, parsed.count, parsed.count);
+  //           added += 2;
+  //         } else if (session === "3" && parsed.subType === "SET") {
+  //           const perms = generatePermutations(parsed.number);
+  //           perms.forEach((perm) => {
+  //             addBooking("SUPER", perm, parsed.count, parsed.count);
+  //             added++;
+  //           });
+  //         } else if (session === "3" && parsed.subType === "BOX") {
+  //           if (parsed.count > 0) {
+  //             addBooking("BOX", parsed.number, parsed.count, parsed.count);
+  //             added++;
+  //           }
+  //         } else {
+  //           if (parsed.count > 0) {
+  //             addBooking(parsed.subType, parsed.number, parsed.count, parsed.count);
+  //             added++;
+  //           }
+  //         }
+  //       }
+  //     }
+  
+  //     if (added === 0) {
+  //       ToastAndroid.show("No valid bookings found in clipboard.", ToastAndroid.SHORT);
+  //     } else {
+  //       ToastAndroid.show(`Added ${added} booking${added > 1 ? "s" : ""} from clipboard.`, ToastAndroid.SHORT);
+  //     }
+  
+  //     if (failedLines.length > 0) {
+  //       setFailedPasteLines(failedLines);
+  //       setFailedPasteModalVisible(true);
+  //     }
+  //   } catch (err) {
+  //     Alert.alert("Clipboard Error", "Could not read clipboard.");
+  //   }
+  // };
+  
+
 
   const handleBackClick = () => {
     setSelectedDraw(null)
