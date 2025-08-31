@@ -6,7 +6,7 @@ import api from "@/utils/axios";
 import { formatDateDDMMYYYY } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertCircle, AlertTriangle, Ban, Calendar, Pencil, Plus, X } from "lucide-react-native";
+import { AlertCircle, AlertTriangle, Ban, Calendar, Clock, Pencil, Plus, X } from "lucide-react-native";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
@@ -35,6 +35,7 @@ export type DrawResult = {
     third_prize: string;
     fourth_prize: string;
     fifth_prize: string;
+    draw_time: string; // eg: "15:05:00",
     complementary_prizes: string[];
 };
 
@@ -91,6 +92,22 @@ function canEditResult(published_at: string | undefined | null) {
     return now.getTime() - publishedDate.getTime() < 2 * 60 * 60 * 1000;
 }
 
+// Helper to format time as HH:mm (from "15:05:00" or "15:05")
+function formatDrawTime(time: string | undefined | null): string {
+    if (!time) return "";
+    // Accepts "HH:mm:ss" or "HH:mm"
+    const match = time.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (match) {
+        let hour = parseInt(match[1], 10);
+        const minute = match[2];
+        const ampm = hour >= 12 ? "PM" : "AM";
+        hour = hour % 12;
+        if (hour === 0) hour = 12;
+        return `${hour}:${minute} ${ampm}`;
+    }
+    return time;
+}
+
 const ResultPage: React.FC = () => {
     const { createDrawResult, updateDrawResult, createDrawResultIsPending, updateDrawResultIsPending } = useDraw();
     const { selectedDraw } = useDrawStore();
@@ -126,9 +143,7 @@ const ResultPage: React.FC = () => {
         enabled: !!selectedDraw?.id,
     });
 
-
     console.log("rawData", rawData);
-
 
     // Handle skipped state
     const isSkipped = !!rawData && typeof rawData === "object" && !Array.isArray(rawData) && (rawData as any).skipped === true;
@@ -503,9 +518,19 @@ const ResultPage: React.FC = () => {
                 </View>
             )}
 
-            {/* Prize table */}
+            {/* Prize table and draw time */}
             {!isLoading && data && (
                 <View className="mx-4 mt-6 border border-gray-300 rounded-lg overflow-hidden">
+                    {/* Draw time row */}
+                    <View className="flex-row items-center bg-gray-100 border-b border-gray-300 px-3 py-2">
+                        <Clock size={22} color="#2563eb" />
+                        <Text className="ml-2 text-[15px] font-semibold text-gray-700">
+                            Draw Time:
+                        </Text>
+                        <Text className="ml-2 text-[22px] font-mono font-extrabold text-gray-900">
+                            {formatDrawTime(data.draw_time)}
+                        </Text>
+                    </View>
                     {(
                         [
                             { label: "First Price", value: data.first_prize },
