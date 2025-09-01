@@ -3,14 +3,21 @@ import useDrawStore from "@/store/draw";
 import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
 import { formatDateDDMMYYYY } from "@/utils/date";
+import { Entypo, Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     FlatList,
+    Modal,
+    Pressable,
+    Switch,
     Text,
-    View
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -24,23 +31,56 @@ const getTommorow = () => {
     return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 };
 
+// Helper to get sub type options based on number
+function getSubTypeOptions(number: string) {
+    if (!number) return [];
+    const num = number.replace(/\D/g, "");
+    if (num.length === 3) {
+        return ["SUPER", "BOX"];
+    } else if (num.length === 2) {
+        return ["AB", "BC", "AC"];
+    } else if (num.length === 1) {
+        return ["A", "B", "C"];
+    }
+    return [];
+}
+
 const LastSaleReportScreen = () => {
     const { selectedDraw } = useDrawStore();
     const [fromDate, setFromDate] = useState<Date | null>(getToday());
     const [toDate, setToDate] = useState<Date | null>(getTommorow());
     const [showFromPicker, setShowFromPicker] = useState(false);
-    const [showToPicker, setShowToPicker] = useState(false); // Corrected this state variable name
+    const [showToPicker, setShowToPicker] = useState(false);
     const [fullView, setFullView] = useState(false);
 
-    const { user } = useAuthStore()
+    const { user } = useAuthStore();
 
+    // For edit/delete modal
+    const [editModalVisible, setEditModalVisible] = useState(false);
+    const [editDetail, setEditDetail] = useState<any>(null);
+    const [editLoading, setEditLoading] = useState(false);
+    const [deleteLoading, setDeleteLoading] = useState(false);
 
+    // Edit form state
+    const [editNumber, setEditNumber] = useState("");
+    const [editCount, setEditCount] = useState("");
+    const [editSubType, setEditSubType] = useState("");
+    const [editErrors, setEditErrors] = useState<{ number?: string; count?: string; subType?: string }>({});
+
+    // For action menu (3-dot) per booking detail
+    const [actionMenuVisible, setActionMenuVisible] = useState(false);
+    const [actionMenuDetail, setActionMenuDetail] = useState<any>(null);
+    const [actionMenuPosition, setActionMenuPosition] = useState<{ x: number; y: number } | null>(null);
+
+    // Store the number length and subType options at the time of opening the edit modal
+    const editNumberLengthRef = useRef<number>(0);
+    const editSubTypeOptionsRef = useRef<string[]>([]);
+
+    const queryClient = useQueryClient();
 
     const buildQuery = () => {
-        // Use an index signature to allow dynamic keys
         const params: Record<string, string> = {};
 
-        // Format date as yyyy-mm-dd
         const formatDateYYYYMMDD = (date: Date) => {
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -50,17 +90,14 @@ const LastSaleReportScreen = () => {
         if (fromDate) params["date_time__gte"] = formatDateYYYYMMDD(fromDate);
         if (toDate) params["date_time__lte"] = formatDateYYYYMMDD(toDate);
         if (fullView) params["full_view"] = "true";
-        // if (user?.user_type === "AGENT") params["booked_agent__id"] = user.id?.toString();
         if (selectedDraw?.id) params["draw_session__draw__id"] = String(selectedDraw.id);
 
-
-        // Convert params object to query string
         return Object.keys(params)
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
             .join("&");
     };
 
-    const { data, isLoading, error } = useQuery({
+    const { data, isLoading, error, refetch } = useQuery({
         queryKey: ["/draw-booking/sales-report/", buildQuery()],
         queryFn: async () => {
             const res = await api.get(`/draw-booking/sales-report/?${buildQuery()}`);
@@ -69,20 +106,194 @@ const LastSaleReportScreen = () => {
         enabled: !!selectedDraw?.id,
     });
 
-    console.log('data', data);
+    // Open edit modal for a booking detail
+    const openEditModal = (detail: any) => {
+        setEditDetail(detail);
+        const numberStr = detail.number?.toString() || "";
+        setEditNumber(numberStr);
+        setEditCount(detail.count?.toString() || "");
+        setEditSubType(detail.sub_type || "");
+        setEditErrors({});
+        // Store the number length and subType options at the time of opening
+        editNumberLengthRef.current = numberStr.length;
+        editSubTypeOptionsRef.current = getSubTypeOptions(numberStr);
+        setEditModalVisible(true);
+    };
 
+    // Validate number and count
+    const validateEditForm = () => {
+        let errors: { number?: string; count?: string; subType?: string } = {};
+        const number = editNumber.trim();
+        const count = editCount.trim();
+        const subType = editSubType.trim();
 
+        // Number validation: must be digits, and must have the same length as when modal opened
+        if (!number) {
+            errors.number = "Number is required";
+        } else if (!/^\d+$/.test(number)) {
+            errors.number = "Number must be digits only";
+        } else if (number.length !== editNumberLengthRef.current) {
+            errors.number = `Number must be ${editNumberLengthRef.current} digit${editNumberLengthRef.current > 1 ? "s" : ""}`;
+        }
+
+        // Count validation: must be positive integer
+        if (!count) {
+            errors.count = "Count is required";
+        } else if (!/^\d+$/.test(count) || parseInt(count, 10) <= 0) {
+            errors.count = "Count must be a positive integer";
+        }
+
+        // SubType validation: must be one of the allowed options (from when modal opened)
+        const options = editSubTypeOptionsRef.current;
+        if (options.length > 0 && !options.includes(subType)) {
+            errors.subType = "Select a valid sub type";
+        }
+
+        setEditErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
+    // Handle edit submit
+    const handleEditSubmit = async () => {
+        if (!editDetail?.id) return;
+        if (!validateEditForm()) return;
+        setEditLoading(true);
+        try {
+            await api.patch(`/draw-booking/booking-detail-manage/${editDetail.id}/`, {
+                number: editNumber,
+                count: Number(editCount),
+                sub_type: editSubType,
+            });
+            setEditModalVisible(false);
+            setEditDetail(null);
+            setEditLoading(false);
+            // Refetch sales report
+            queryClient.invalidateQueries({ queryKey: ["/draw-booking/sales-report/"] });
+            refetch();
+        } catch (err: any) {
+            setEditLoading(false);
+            Alert.alert("Edit Failed", "Could not update booking detail.");
+        }
+    };
+
+    // Handle delete
+    const handleDelete = async () => {
+        if (!editDetail?.id) return;
+        Alert.alert(
+            "Delete Booking Detail",
+            "Are you sure you want to delete this booking detail?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        setDeleteLoading(true);
+                        try {
+                            await api.delete(`/draw-booking/booking-detail-manage/${editDetail.id}/`);
+                            setEditModalVisible(false);
+                            setEditDetail(null);
+                            setDeleteLoading(false);
+                            queryClient.invalidateQueries({ queryKey: ["/draw-booking/sales-report/"] });
+                            refetch();
+                        } catch (err: any) {
+                            setDeleteLoading(false);
+                            Alert.alert("Delete Failed", "Could not delete booking detail.");
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    // Open action menu for a booking detail (3-dot)
+    const openActionMenu = (detail: any, event: any) => {
+        setActionMenuDetail(detail);
+        setActionMenuVisible(true);
+    };
+
+    // Close action menu
+    const closeActionMenu = () => {
+        setActionMenuVisible(false);
+        setActionMenuDetail(null);
+        setActionMenuPosition(null);
+    };
+
+    // When selecting Edit from action menu
+    const handleActionEdit = () => {
+        if (actionMenuDetail) {
+            openEditModal(actionMenuDetail);
+        }
+        closeActionMenu();
+    };
+
+    // When selecting Delete from action menu
+    const handleActionDelete = () => {
+        if (actionMenuDetail) {
+            setEditDetail(actionMenuDetail);
+            closeActionMenu();
+            Alert.alert(
+                "Delete Booking Detail",
+                "Are you sure you want to delete this booking detail?",
+                [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                        text: "Delete",
+                        style: "destructive",
+                        onPress: async () => {
+                            setDeleteLoading(true);
+                            try {
+                                await api.delete(`/draw-booking/booking-detail-manage/${actionMenuDetail.id}/`);
+                                setEditModalVisible(false);
+                                setEditDetail(null);
+                                setDeleteLoading(false);
+                                queryClient.invalidateQueries({ queryKey: ["/draw-booking/sales-report/"] });
+                                refetch();
+                            } catch (err: any) {
+                                setDeleteLoading(false);
+                                Alert.alert("Delete Failed", "Could not delete booking detail.");
+                            }
+                        }
+                    }
+                ]
+            );
+        }
+    };
 
     // Determine if we should show the total footer
-    // It should show if data is successfully loaded (not loading, no error) and a draw is selected
     const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && data;
+
+    // Memoize sub type options for edit modal (should NOT change as user types, only when modal opens)
+    const subTypeOptions = useMemo(() => {
+        return editSubTypeOptionsRef.current;
+    }, [editModalVisible]); // Only update when modal opens/closes
+
+    // If subType is not valid for the number, reset it (only when modal opens)
+    if (
+        editModalVisible &&
+        editSubType &&
+        subTypeOptions.length > 0 &&
+        !subTypeOptions.includes(editSubType)
+    ) {
+        setEditSubType(subTypeOptions[0]);
+    }
 
     return (
         <SafeAreaView className="flex-1 bg-white">
             <View className="flex-1 p-4">
 
+                {/* --- Full View Switch --- */}
+                <View className="flex-row items-center mb-3">
+                    <Switch
+                        value={fullView}
+                        onValueChange={setFullView}
+                        thumbColor={fullView ? "#7c3aed" : "#ccc"}
+                        trackColor={{ false: "#d1d5db", true: "#c7d2fe" }}
+                    />
+                    <Text className="ml-2 text-base text-gray-700 font-medium">Full View</Text>
+                </View>
+
                 {/* --- Main Content Area --- */}
-                {/* Conditional rendering for status messages or the report table */}
                 {!selectedDraw?.id ? (
                     <View className="flex-1 justify-center items-center">
                         <Text className="text-base text-gray-500">
@@ -102,7 +313,6 @@ const LastSaleReportScreen = () => {
                     </View>
                 ) : (
                     <>
-                        {/* {data?.result?.length ? ( */}
                         <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden">
                             <FlatList
                                 data={data?.results?.data || []}
@@ -117,6 +327,7 @@ const LastSaleReportScreen = () => {
                                         <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Cnt</Text>
                                         <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">{user?.user_type === 'AGENT' ? 'D. Amt' : 'Amt'}</Text>
                                         <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">C. Amt</Text>
+                                        <Text className="w-3 text-xs font-semibold text-right text-gray-600 uppercase"></Text>
                                     </View>
                                 )}
                                 renderItem={({ item, index }) => (
@@ -156,6 +367,7 @@ const LastSaleReportScreen = () => {
                                             <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_count}</Text>
                                             <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{amountHandler(Number(user?.user_type === 'AGENT' ? item.agent_amount : item.dealer_amount))}</Text>
                                             <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{amountHandler(Number(item.customer_amount))}</Text>
+                                            <Text className="flex-[0.1] text-sm text-right text-emerald-700 font-semibold"></Text>
                                         </View>
 
                                         {fullView && Array.isArray(item.booking_details) && item.booking_details.length > 0 && (
@@ -163,17 +375,24 @@ const LastSaleReportScreen = () => {
                                                 data={item?.booking_details || []}
                                                 keyExtractor={(d) => d.id?.toString?.() ?? Math.random().toString()}
                                                 renderItem={({ item: d }) => (
-                                                    <View className="flex-row px-4 py-2 bg-amber-50/20 border-b border-amber-100 last:border-b-0">
+                                                    <View className="flex-row ps-3 py-2  bg-amber-50/20 border-b border-amber-100 last:border-b-0 items-center">
                                                         {
                                                             user?.user_type !== 'AGENT' &&
                                                             <Text className="flex-[1.2] text-[10px] text-center text-gray-600"></Text>
                                                         }
                                                         <Text className="flex-[1.1] text-[10px] text-gray-600">{d.sub_type} {d.number}</Text>
                                                         <Text className="flex-1 text-[10px] text-center text-gray-600">₹{amountHandler(Number(d.amount))}</Text>
-
                                                         <Text className="flex-1 text-[10px] text-center text-gray-600">{d.count}</Text>
                                                         <Text className="flex-1 text-[10px] text-right text-violet-600">₹{amountHandler(Number(user?.user_type === 'AGENT' ? d.agent_amount : d.dealer_amount))}</Text>
                                                         <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{amountHandler(Number(d.customer_amount))}</Text>
+                                                        {/* 3-dot action menu */}
+                                                        <View className="ms-2 ">
+                                                            <Pressable
+                                                                onPress={(e) => openActionMenu(d, e)}
+                                                            >
+                                                                <Entypo name="dots-three-vertical" size={16} color="#7c3aed" />
+                                                            </Pressable>
+                                                        </View>
                                                     </View>
                                                 )}
                                                 initialNumToRender={5}
@@ -192,16 +411,8 @@ const LastSaleReportScreen = () => {
                                         </Text>
                                     </View>
                                 }
-                            // Optional: Add a small footer if you want a visual break at the end of the list
-                            // ListFooterComponent={() => <View className="h-4 bg-gray-50"></View>}
                             />
                         </View>
-                        {/* ) : (
-                            <View className="flex-1 justify-center items-center">
-                                <Text className="text-gray-500">No sales data available.</Text>
-                            </View>
-                        )} */}
-
                     </>
                 )}
 
@@ -213,7 +424,7 @@ const LastSaleReportScreen = () => {
                             <Text className="flex-1 text-sm"> </Text>
                             <Text className="flex-1 text-sm"> </Text>
                             <Text className="flex-1 text-sm text-center font-semibold text-gray-700">
-                                {data?.results?.total_bill_count || 0} {/* Ensure 0 if null/undefined */}
+                                {data?.results?.total_bill_count || 0}
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-violet-700">
                                 {amountHandler(Number(data?.results?.total_dealer_amount || 0))}
@@ -224,6 +435,163 @@ const LastSaleReportScreen = () => {
                         </View>
                     </View>
                 )}
+
+                {/* --- Action Menu Modal (3-dot) --- */}
+                <Modal
+                    visible={actionMenuVisible}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={closeActionMenu}
+                >
+                    <Pressable
+                        style={{
+                            flex: 1,
+                            backgroundColor: "rgba(0,0,0,0.2)",
+                            justifyContent: "center",
+                            alignItems: "center",
+                        }}
+                        onPress={closeActionMenu}
+                    >
+                        <View
+                            style={{
+                                backgroundColor: "#fff",
+                                borderRadius: 12,
+                                minWidth: 180,
+                                paddingVertical: 8,
+                                elevation: 6,
+                                shadowColor: "#000",
+                                shadowOpacity: 0.1,
+                                shadowRadius: 8,
+                                shadowOffset: { width: 0, height: 2 },
+                            }}
+                        >
+                            <TouchableOpacity
+                                onPress={handleActionEdit}
+                                style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    paddingVertical: 12,
+                                    paddingHorizontal: 20,
+                                }}
+                            >
+                                <Ionicons name="create-outline" size={18} color="#7c3aed" style={{ marginRight: 10 }} />
+                                <Text style={{ fontSize: 16, color: "#222" }}>Edit</Text>
+                            </TouchableOpacity>
+                            <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 10 }} />
+                            <TouchableOpacity
+                                onPress={handleActionDelete}
+                                style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    paddingVertical: 12,
+                                    paddingHorizontal: 20,
+                                }}
+                            >
+                                <Ionicons name="trash-outline" size={18} color="#ef4444" style={{ marginRight: 10 }} />
+                                <Text style={{ fontSize: 16, color: "#ef4444" }}>Delete</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Modal>
+
+                {/* --- Edit Modal for Booking Detail --- */}
+                <Modal
+                    visible={editModalVisible}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setEditModalVisible(false)}
+                >
+                    <View className="flex-1 justify-center items-center bg-black/40 px-4">
+                        <View className="bg-white p-6 rounded-2xl w-full max-w-md shadow-lg">
+                            <Text className="text-xl font-bold mb-4 text-center text-violet-800">
+                                Edit Booking Detail
+                            </Text>
+                            <View className="mb-3">
+                                <Text className="mb-1 font-semibold text-gray-700">Number</Text>
+                                <TextInput
+                                    placeholder="Number"
+                                    keyboardType="numeric"
+                                    value={editNumber}
+                                    onChangeText={text => {
+                                        // Only allow digits, but do not change subType options or number length
+                                        setEditNumber(text.replace(/[^0-9]/g, ""));
+                                    }}
+                                    className="border border-gray-300 px-4 py-2 rounded-lg bg-gray-50 text-base"
+                                    autoFocus
+                                    returnKeyType="next"
+                                    placeholderTextColor="#9ca3af"
+                                    maxLength={editNumberLengthRef.current || 3}
+                                />
+                                {editErrors.number ? (
+                                    <Text className="text-xs text-red-500 mt-1">{editErrors.number}</Text>
+                                ) : null}
+                                {editNumber && editNumber.length !== editNumberLengthRef.current && (
+                                    <Text className="text-xs text-yellow-600 mt-1">
+                                        Number must be {editNumberLengthRef.current} digit{editNumberLengthRef.current > 1 ? "s" : ""}
+                                    </Text>
+                                )}
+                            </View>
+                            <View className="mb-3">
+                                <Text className="mb-1 font-semibold text-gray-700">Count</Text>
+                                <TextInput
+                                    placeholder="Count"
+                                    keyboardType="numeric"
+                                    value={editCount}
+                                    onChangeText={text => setEditCount(text.replace(/[^0-9]/g, ""))}
+                                    className="border border-gray-300 px-4 py-2 rounded-lg bg-gray-50 text-base"
+                                    returnKeyType="next"
+                                    placeholderTextColor="#9ca3af"
+                                />
+                                {editErrors.count ? (
+                                    <Text className="text-xs text-red-500 mt-1">{editErrors.count}</Text>
+                                ) : null}
+                            </View>
+                            <View className="mb-3">
+                                <Text className="mb-1 font-semibold text-gray-700">Sub Type</Text>
+                                {subTypeOptions.length > 0 ? (
+                                    <View className="flex-row flex-wrap gap-2">
+                                        {subTypeOptions.map(option => (
+                                            <TouchableOpacity
+                                                key={option}
+                                                onPress={() => setEditSubType(option)}
+                                                className={`px-3 py-1 rounded-lg border ${editSubType === option ? "bg-violet-700 border-violet-700" : "bg-gray-100 border-gray-300"}`}
+                                                style={{ marginRight: 8, marginBottom: 8 }}
+                                            >
+                                                <Text className={editSubType === option ? "text-white font-semibold" : "text-gray-700 font-semibold"}>
+                                                    {option}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                ) : (
+                                    <Text className="text-gray-400 text-sm">Enter a valid number to select sub type</Text>
+                                )}
+                                {editErrors.subType ? (
+                                    <Text className="text-xs text-red-500 mt-1">{editErrors.subType}</Text>
+                                ) : null}
+                            </View>
+                            <View className="flex-row justify-between mt-4">
+                                <TouchableOpacity
+                                    onPress={handleEditSubmit}
+                                    className="bg-violet-700 rounded px-4 py-2 flex-1 mr-2"
+                                    disabled={editLoading}
+                                    style={{ opacity: editLoading ? 0.7 : 1 }}
+                                >
+                                    <Text className="text-white text-center font-bold text-base">
+                                        {editLoading ? "Saving..." : "Save"}
+                                    </Text>
+                                </TouchableOpacity>
+                                {/* The delete button is not shown here, as delete is now in the 3-dot menu */}
+                            </View>
+                            <TouchableOpacity
+                                onPress={() => setEditModalVisible(false)}
+                                className="mt-4"
+                            >
+                                <Text className="text-center text-gray-500 underline">Cancel</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </Modal>
 
                 {/* --- Date Pickers --- */}
                 {showFromPicker && (
