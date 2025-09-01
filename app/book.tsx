@@ -1235,6 +1235,8 @@ const BookingScreen: React.FC = () => {
       const numberStarCount = /^\s*(\d{1,3})\s*\*\s*(\d+)\s*$/;
       // 12. "312.6" (number.count)
       const numberDotCount = /^\s*(\d{1,3})\s*[\.\-]\s*(\d+)\s*$/;
+      // 12a. "608..50" (number..count) - custom for this request
+      const numberDoubleDotCount = /^\s*(\d{1,3})\s*\.\.\s*(\d+)\s*$/;
       // 13. "123-5 box", "123=5 set", "123-5 super", "123-5 both"
       const numberSymbolCountSubtype = /^\s*(\d{1,3})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s+([A-Za-z]+)\s*$/;
       // 14. "56 AC=5", "34 AB:5", "45 BC-5", "6 A=10", "8 B=15", "7 C #15"
@@ -1284,6 +1286,16 @@ const BookingScreen: React.FC = () => {
         let m = line.match(dualCountRegex);
         if (m) {
           if (!pushDualBooking(m[1], m[2], m[3])) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // 2a. "608..50" (number..count) - custom for this request
+        m = line.match(numberDoubleDotCount);
+        if (m) {
+          if (!pushBooking(m[1], m[2])) {
             if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
             failedLines.push(origLine);
           }
@@ -2018,12 +2030,13 @@ const BookingScreen: React.FC = () => {
             <Text className="font-semibold text-xs text-center mt-1">
               {(() => {
                 const val = Number(totals.d_amount);
-                const hasDecimal = !Number.isInteger(val);
-                if (hasDecimal) {
-                  const dec = val.toFixed(2).split(".")[1];
-                  return `. ${dec}`;
+                const dec = val.toFixed(2).split(".")[1];
+                if (!Number.isInteger(val)) {
+                  // Show value with decimal (2 digits) if decimal exists
+                  return `${val.toFixed(2)}`;
                 }
-                return "";
+                // Show integer value only
+                return `${val}`;
               })()}
             </Text>
           </View>
@@ -2032,12 +2045,13 @@ const BookingScreen: React.FC = () => {
             <Text className="font-semibold text-xs text-center mt-1">
               {(() => {
                 const val = Number(totals.c_amount);
-                const hasDecimal = !Number.isInteger(val);
-                if (hasDecimal) {
-                  const dec = val.toFixed(2).split(".")[1];
-                  return `. ${dec}`;
+                const dec = val.toFixed(2).split(".")[1];
+                if (!Number.isInteger(val)) {
+                  // Show value with decimal (2 digits) if decimal exists
+                  return `${val.toFixed(2)}`;
                 }
-                return "";
+                // Show integer value only
+                return `${val}`;
               })()}
             </Text>
           </View>
