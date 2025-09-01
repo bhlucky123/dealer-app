@@ -61,11 +61,16 @@ const LastSaleReportScreen = () => {
     const [editLoading, setEditLoading] = useState(false);
     const [deleteLoading, setDeleteLoading] = useState(false);
 
+    // For booking delete modal
+    const [deleteBookingModalVisible, setDeleteBookingModalVisible] = useState(false);
+    const [deleteBookingItem, setDeleteBookingItem] = useState<any>(null);
+    const [deleteBookingLoading, setDeleteBookingLoading] = useState(false);
+
     // Edit form state
     const [editNumber, setEditNumber] = useState("");
     const [editCount, setEditCount] = useState("");
     const [editSubType, setEditSubType] = useState("");
-    const [editErrors, setEditErrors] = useState<{ number?: string; count?: string; subType?: string }>({});
+    const [editErrors, setEditErrors] = useState<{ number?: string; count?: string; subType?: string; non_field?: string }>({});
 
     // For action menu (3-dot) per booking detail
     const [actionMenuVisible, setActionMenuVisible] = useState(false);
@@ -77,7 +82,6 @@ const LastSaleReportScreen = () => {
     const editSubTypeOptionsRef = useRef<string[]>([]);
 
     const queryClient = useQueryClient();
-
     const buildQuery = () => {
         const params: Record<string, string> = {};
 
@@ -97,7 +101,7 @@ const LastSaleReportScreen = () => {
             .join("&");
     };
 
-    const { data, isLoading, error, refetch } = useQuery({
+    const { data, isLoading, isFetching, error, refetch } = useQuery({
         queryKey: ["/draw-booking/sales-report/", buildQuery()],
         queryFn: async () => {
             const res = await api.get(`/draw-booking/sales-report/?${buildQuery()}`);
@@ -122,7 +126,7 @@ const LastSaleReportScreen = () => {
 
     // Validate number and count
     const validateEditForm = () => {
-        let errors: { number?: string; count?: string; subType?: string } = {};
+        let errors: { number?: string; count?: string; subType?: string; non_field?: string } = {};
         const number = editNumber.trim();
         const count = editCount.trim();
         const subType = editSubType.trim();
@@ -141,6 +145,11 @@ const LastSaleReportScreen = () => {
             errors.count = "Count is required";
         } else if (!/^\d+$/.test(count) || parseInt(count, 10) <= 0) {
             errors.count = "Count must be a positive integer";
+        } else {
+            // Additional validation: if number is single digit, count must be >= 5
+            if (number.length === 1 && parseInt(count, 10) < 5) {
+                errors.count = "For single digit number, count must be at least 5";
+            }
         }
 
         // SubType validation: must be one of the allowed options (from when modal opened)
@@ -172,11 +181,52 @@ const LastSaleReportScreen = () => {
             refetch();
         } catch (err: any) {
             setEditLoading(false);
-            Alert.alert("Edit Failed", "Could not update booking detail.");
+            console.log("err", err);
+
+            // Try to extract error messages from API response
+            let errorMsg = "Could not update booking detail.";
+            let newErrors: { number?: string; count?: string; subType?: string; non_field?: string } = {};
+
+            // The error is returned directly as the error object, not under err.response.data
+            // Example: { message: { non_field_errors: [...] }, status: 400 }
+            const data = err?.message ? err : (typeof err === "object" ? err : null);
+
+            if (data?.message) {
+                // Handle non_field_errors
+                if (data.message.non_field_errors && Array.isArray(data.message.non_field_errors) && data.message.non_field_errors.length > 0) {
+                    newErrors.non_field = data.message.non_field_errors.join(" ");
+                    errorMsg = data.message.non_field_errors.join(" ");
+                }
+                // Handle count errors
+                if (data.message.count && Array.isArray(data.message.count) && data.message.count.length > 0) {
+                    newErrors.count = data.message.count.join(" ");
+                    errorMsg = data.message.count.join(" ");
+                }
+                // Handle number errors
+                if (data.message.number && Array.isArray(data.message.number) && data.message.number.length > 0) {
+                    newErrors.number = data.message.number.join(" ");
+                    errorMsg = data.message.number.join(" ");
+                }
+                // Handle sub_type errors
+                if (data.message.sub_type && Array.isArray(data.message.sub_type) && data.message.sub_type.length > 0) {
+                    newErrors.subType = data.message.sub_type.join(" ");
+                    errorMsg = data.message.sub_type.join(" ");
+                }
+            } else if (err?.message) {
+                // Fallback for network or unexpected errors
+                errorMsg = typeof err.message === "string" ? err.message : errorMsg;
+            }
+
+            setEditErrors(prev => ({ ...prev, ...newErrors }));
+
+            // Show alert for non_field or unknown errors
+            if (newErrors.non_field || (!newErrors.count && !newErrors.number && !newErrors.subType)) {
+                Alert.alert("Edit Failed", errorMsg);
+            }
         }
     };
 
-    // Handle delete
+    // Handle delete booking detail
     const handleDelete = async () => {
         if (!editDetail?.id) return;
         Alert.alert(
@@ -204,6 +254,27 @@ const LastSaleReportScreen = () => {
                 }
             ]
         );
+    };
+
+    // Handle delete booking (entire booking, not just detail)
+    const handleDeleteBooking = async () => {
+
+        if (!deleteBookingItem?.bill_number) return;
+        setDeleteBookingLoading(true);
+        try {
+            await api.delete(`/draw-booking/delete/${deleteBookingItem.bill_number}/`);
+
+
+            setDeleteBookingModalVisible(false);
+            setDeleteBookingItem(null);
+            setDeleteBookingLoading(false);
+            queryClient.invalidateQueries({ queryKey: ["/draw-booking/sales-report/"] });
+            refetch();
+        } catch (err: any) {
+
+            setDeleteBookingLoading(false);
+            Alert.alert("Delete Failed", "Could not delete booking.");
+        }
     };
 
     // Open action menu for a booking detail (3-dot)
@@ -260,6 +331,14 @@ const LastSaleReportScreen = () => {
         }
     };
 
+    // Open delete booking modal
+    const openDeleteBookingModal = (booking: any) => {
+        console.log("booking", booking);
+
+        setDeleteBookingItem(booking);
+        setDeleteBookingModalVisible(true);
+    };
+
     // Determine if we should show the total footer
     const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && data;
 
@@ -278,9 +357,34 @@ const LastSaleReportScreen = () => {
         setEditSubType(subTypeOptions[0]);
     }
 
+    // --- Proper loading overlay while fetching data ---
+    // Show a full-screen loading overlay when fetching data (not just initial load)
+    const showLoadingOverlay = !!selectedDraw?.id && (isLoading || isFetching);
+
     return (
         <SafeAreaView className="flex-1 bg-white">
             <View className="flex-1 p-4">
+
+                {/* --- Loading Overlay --- */}
+                {showLoadingOverlay && (
+                    <View
+                        style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            zIndex: 100,
+                            backgroundColor: "rgba(255,255,255,0.7)",
+                            justifyContent: "center",
+                            alignItems: "center",
+                        }}
+                        pointerEvents="auto"
+                    >
+                        <ActivityIndicator size="large" color="#7c3aed" />
+                        <Text className="mt-3 text-gray-600">Loading sales data...</Text>
+                    </View>
+                )}
 
                 {/* --- Full View Switch --- */}
                 <View className="flex-row items-center mb-3">
@@ -299,11 +403,6 @@ const LastSaleReportScreen = () => {
                         <Text className="text-base text-gray-500">
                             No draw selected. Please choose one.
                         </Text>
-                    </View>
-                ) : isLoading ? (
-                    <View className="flex-1 justify-center items-center">
-                        <ActivityIndicator size="large" color="#7c3aed" />
-                        <Text className="mt-3 text-gray-600">Loading sales data...</Text>
                     </View>
                 ) : error ? (
                     <View className="flex-1 bg-red-50 border border-red-200 px-4 py-3 rounded-lg justify-center items-center">
@@ -327,12 +426,14 @@ const LastSaleReportScreen = () => {
                                         <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Cnt</Text>
                                         <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">{user?.user_type === 'AGENT' ? 'D. Amt' : 'Amt'}</Text>
                                         <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">C. Amt</Text>
-                                        <Text className="w-3 text-xs font-semibold text-right text-gray-600 uppercase"></Text>
+                                        {/* <Text className="w-3 text-xs font-semibold text-right text-gray-600 uppercase"></Text> */}
+                                        {/* Booking delete column header */}
+                                        <Text className="w-1 text-xs font-semibold text-right text-gray-600 uppercase"></Text>
                                     </View>
                                 )}
                                 renderItem={({ item, index }) => (
                                     <View className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                                        <View className="flex-row px-4 py-3 items-center border-b border-gray-100">
+                                        <View className="flex-row ps-3 pe-2 py-3 items-center border-b border-gray-100">
                                             <View className="flex-[1.1] flex-col justify-center">
                                                 <Text className="text-[10px] text-gray-800 font-medium">{formatDateDDMMYYYY(new Date(item.date_time))}</Text>
                                                 <Text className="text-[9px] text-gray-500 mt-0.5">
@@ -368,6 +469,18 @@ const LastSaleReportScreen = () => {
                                             <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{amountHandler(Number(user?.user_type === 'AGENT' ? item.agent_amount : item.dealer_amount))}</Text>
                                             <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{amountHandler(Number(item.customer_amount))}</Text>
                                             <Text className="flex-[0.1] text-sm text-right text-emerald-700 font-semibold"></Text>
+                                            {/* Booking delete button */}
+                                            {
+                                                user?.user_type !== "ADMIN" &&
+                                                <View className="w-4 items-end">
+                                                    <Pressable
+                                                        onPress={() => openDeleteBookingModal(item)}
+                                                        hitSlop={10}
+                                                    >
+                                                        <Ionicons name="trash-outline" size={17} color="#ef4444" />
+                                                    </Pressable>
+                                                </View>
+                                            }
                                         </View>
 
                                         {fullView && Array.isArray(item.booking_details) && item.booking_details.length > 0 && (
@@ -375,7 +488,7 @@ const LastSaleReportScreen = () => {
                                                 data={item?.booking_details || []}
                                                 keyExtractor={(d) => d.id?.toString?.() ?? Math.random().toString()}
                                                 renderItem={({ item: d }) => (
-                                                    <View className="flex-row ps-3 py-2  bg-amber-50/20 border-b border-amber-100 last:border-b-0 items-center">
+                                                    <View className={`flex-row ps-3 py-2 ${user?.user_type === "ADMIN" && 'pe-3'}  bg-amber-50/20 border-b border-amber-100 last:border-b-0 items-center`}>
                                                         {
                                                             user?.user_type !== 'AGENT' &&
                                                             <Text className="flex-[1.2] text-[10px] text-center text-gray-600"></Text>
@@ -386,13 +499,16 @@ const LastSaleReportScreen = () => {
                                                         <Text className="flex-1 text-[10px] text-right text-violet-600">₹{amountHandler(Number(user?.user_type === 'AGENT' ? d.agent_amount : d.dealer_amount))}</Text>
                                                         <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{amountHandler(Number(d.customer_amount))}</Text>
                                                         {/* 3-dot action menu */}
-                                                        <View className="ms-2 ">
-                                                            <Pressable
-                                                                onPress={(e) => openActionMenu(d, e)}
-                                                            >
-                                                                <Entypo name="dots-three-vertical" size={16} color="#7c3aed" />
-                                                            </Pressable>
-                                                        </View>
+                                                        {
+                                                            user?.user_type !== "ADMIN" &&
+                                                            <View className="ms-2 ">
+                                                                <Pressable
+                                                                    onPress={(e) => openActionMenu(d, e)}
+                                                                >
+                                                                    <Entypo name="dots-three-vertical" size={16} color="#7c3aed" />
+                                                                </Pressable>
+                                                            </View>
+                                                        }
                                                     </View>
                                                 )}
                                                 initialNumToRender={5}
@@ -427,10 +543,10 @@ const LastSaleReportScreen = () => {
                                 {data?.results?.total_bill_count || 0}
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-violet-700">
-                                {amountHandler(Number(data?.results?.total_dealer_amount || 0))}
+                                ₹{amountHandler(Number(data?.results?.total_dealer_amount || 0))}
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">
-                                {amountHandler(Number(data?.results?.total_customer_amount || 0))}
+                                ₹{amountHandler(Number(data?.results?.total_customer_amount || 0))}
                             </Text>
                         </View>
                     </View>
@@ -494,6 +610,46 @@ const LastSaleReportScreen = () => {
                     </Pressable>
                 </Modal>
 
+                {/* --- Delete Booking Modal --- */}
+                <Modal
+                    visible={deleteBookingModalVisible}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setDeleteBookingModalVisible(false)}
+                >
+                    <View className="flex-1 justify-center items-center bg-black/40 px-4">
+                        <View className="bg-white p-6 rounded-2xl w-full max-w-md shadow-lg">
+                            <Text className="text-xl font-bold mb-4 text-center text-red-700">
+                                Delete Booking
+                            </Text>
+                            <Text className="text-base text-gray-700 mb-6 text-center">
+                                Are you sure you want to delete this booking? This will remove all booking details under this bill.
+                            </Text>
+                            <View className="flex-row justify-between mt-4">
+                                <TouchableOpacity
+                                    onPress={handleDeleteBooking}
+                                    className="bg-red-600 rounded px-4 py-2 flex-1 mr-2"
+                                    disabled={deleteBookingLoading}
+                                    style={{ opacity: deleteBookingLoading ? 0.7 : 1 }}
+                                >
+                                    <Text className="text-white text-center font-bold text-base">
+                                        {deleteBookingLoading ? "Deleting..." : "Delete"}
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={() => setDeleteBookingModalVisible(false)}
+                                    className="bg-gray-200 rounded px-4 py-2 flex-1 ml-2"
+                                    disabled={deleteBookingLoading}
+                                >
+                                    <Text className="text-gray-700 text-center font-bold text-base">
+                                        Cancel
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
+
                 {/* --- Edit Modal for Booking Detail --- */}
                 <Modal
                     visible={editModalVisible}
@@ -506,6 +662,10 @@ const LastSaleReportScreen = () => {
                             <Text className="text-xl font-bold mb-4 text-center text-violet-800">
                                 Edit Booking Detail
                             </Text>
+                            {/* Show non-field error if present */}
+                            {editErrors.non_field ? (
+                                <Text className="text-xs text-red-500 mb-2 text-center">{editErrors.non_field}</Text>
+                            ) : null}
                             <View className="mb-3">
                                 <Text className="mb-1 font-semibold text-gray-700">Number</Text>
                                 <TextInput
@@ -545,6 +705,12 @@ const LastSaleReportScreen = () => {
                                 {editErrors.count ? (
                                     <Text className="text-xs text-red-500 mt-1">{editErrors.count}</Text>
                                 ) : null}
+                                {/* Show warning if single digit number and count < 5 */}
+                                {editNumber && editNumber.length === 1 && editCount && /^\d+$/.test(editCount) && parseInt(editCount, 10) < 5 && (
+                                    <Text className="text-xs text-yellow-600 mt-1">
+                                        For single digit number, count must be at least 5
+                                    </Text>
+                                )}
                             </View>
                             <View className="mb-3">
                                 <Text className="mb-1 font-semibold text-gray-700">Sub Type</Text>
