@@ -120,7 +120,7 @@ const SalesReportScreen = () => {
 
         if (fromDate) params["date_time__gte"] = fromDate.toISOString();
         if (toDate) params["date_time__lte"] = toDate.toISOString();
-        if(fullView) params["full_view"] = "true";
+        if (fullView) params["full_view"] = "true";
         if (selectedDraw?.id && !allGame) params["draw_session__draw__id"] = String(selectedDraw.id);
 
         if (user?.user_type === "ADMIN" && selectedFilter) {
@@ -135,7 +135,7 @@ const SalesReportScreen = () => {
         return Object.keys(params)
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
             .join("&");
-    }, [fromDate, toDate, selectedDraw, allGame, user?.user_type, selectedFilter]);
+    }, [fromDate, toDate, selectedDraw, allGame, user?.user_type, selectedFilter, fullView]);
 
     // Store all loaded pages' data
     const [allData, setAllData] = useState<any[]>([]);
@@ -285,6 +285,7 @@ const SalesReportScreen = () => {
 
             // If search is applied, filter client-side
             let pdfData = allResults;
+            
             // if (search) {
             //     pdfData = allResults.filter((item: any) =>
             //         item.bill_number?.toString().toLowerCase().includes(search.toLowerCase())
