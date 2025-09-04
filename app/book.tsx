@@ -402,7 +402,6 @@ const BookingScreen: React.FC = () => {
         return;
       }
 
-      console.log("selectedRange", selectedRange, "isMixedMode", isMixedMode);
 
 
       // ---------- Range Booking ----------
@@ -896,239 +895,7 @@ const BookingScreen: React.FC = () => {
     setDrawSession(num.toString());
   };
 
-  const parseClipboardBookings = (clipboardText: string) => {
-    // Remove WhatsApp metadata lines
-    clipboardText = clipboardText.replace(
-      /^\[\d{1,2}\/\d{1,2},\s*\d{1,2}:\d{2}\s*(am|pm)?\]\s*[\+\d\s\-()]+:/gim,
-      ""
-    );
 
-    // Split by newlines, commas, semicolons, or multiple spaces (but not inside numbers)
-    let rawLines = clipboardText
-      .split(/[\n;,]+/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-
-    // Further split lines that have multiple items separated by spaces or commas
-    let lines: string[] = [];
-    for (let l of rawLines) {
-      // If line contains multiple items separated by spaces, commas, or tabs, split
-      // But don't split if it's a single booking like "123=5 set"
-      // Split on 2+ spaces, or comma, or semicolon
-      let parts = l.split(/(?<![A-Za-z])\s{2,}|(?<![A-Za-z0-9])[,;](?![A-Za-z0-9])/).map(s => s.trim()).filter(Boolean);
-      if (parts.length > 1) {
-        lines.push(...parts);
-      } else {
-        // Also split on single spaces if there are multiple bookings in one line, e.g. "700-5 701-33 707-12"
-        let multi = l.match(/^(\d{1,3}[\s\/\-=\+:\.#*&]{1,3}\d{1,3}(?:\s+[a-zA-Z]+)?)(?:\s+(\d{1,3}[\s\/\-=\+:\.#*&]{1,3}\d{1,3}(?:\s+[a-zA-Z]+)?))+$/);
-        if (multi) {
-          let more = l.split(/\s+(?=\d{1,3}[\s\/\-=\+:\.#*&]{1,3}\d{1,3})/).map(s => s.trim()).filter(Boolean);
-          lines.push(...more);
-        } else {
-          lines.push(l);
-        }
-      }
-    }
-
-    const bookings: { number: string; count: number; subType: string }[] = [];
-    const failedLines: string[] = [];
-
-    // Helper: generate all 6 permutations of a 3-digit number
-    const generatePermutations = (num: string): string[] => {
-      if (num.length !== 3) return [];
-      const digits = num.split("");
-      const perms = new Set<string>();
-      for (let i = 0; i < 3; i++) {
-        for (let j = 0; j < 3; j++) {
-          if (j === i) continue;
-          for (let k = 0; k < 3; k++) {
-            if (k === i || k === j) continue;
-            perms.add(digits[i] + digits[j] + digits[k]);
-          }
-        }
-      }
-      return Array.from(perms);
-    };
-
-    // Helper: check subtype/number length validity
-    function isValidSubtype(number: string, subType: string) {
-      if (number.length === 1) return ["A", "B", "C"].includes(subType);
-      if (number.length === 2) return ["AB", "AC", "BC"].includes(subType);
-      if (number.length === 3) return ["SUPER", "BOX", "SET", "BOTH"].includes(subType);
-      return false;
-    }
-
-    // Helper: parse a single booking line
-    function parseLine(line: string) {
-      let l = line.replace(/\s+/g, " ").trim();
-
-      // Remove WhatsApp metadata if present
-      l = l.replace(/^\[\d{1,2}\/\d{1,2},\s*\d{1,2}:\d{2}\s*(am|pm)?\]\s*[\+\d\s\-()]+:/i, "").trim();
-
-      // Accept AB.24.2, AB:24:2, AB-24-2, AB 24 2, etc.
-      let matchSubtypePrefix = l.match(/^([A-Z]{1,3})[\.\:\-\s]+(\d{1,3})(?:[\.\:\-\s]+(\d{1,3}))?$/i);
-      if (matchSubtypePrefix) {
-        let subType = matchSubtypePrefix[1].toUpperCase();
-        let number = matchSubtypePrefix[2];
-        let count = matchSubtypePrefix[3] ? parseInt(matchSubtypePrefix[3]) : 5;
-        if (isNaN(count)) count = 5;
-        return { number, count, subType };
-      }
-
-      // Accept 56 AC=5, 34 AB:5, 45 BC-5, 6 A=10, 8 B=15, 7 C #15
-      let matchNumberSubtypeCount = l.match(/^(\d{1,3})\s*([A-Z]{1,3})?[\s\/\-=\+:\.#*&]{1,3}(\d{1,3})\s*([A-Z]{1,3})?$/i);
-      if (matchNumberSubtypeCount) {
-        let number = matchNumberSubtypeCount[1];
-        let subType = (matchNumberSubtypeCount[2] || matchNumberSubtypeCount[4] || "").toUpperCase();
-        let count = parseInt(matchNumberSubtypeCount[3]);
-        if (isNaN(count)) count = 5;
-        // If subtype not present, infer by number length
-        if (!subType) {
-          if (number.length === 1) subType = "A";
-          else if (number.length === 2) subType = "AB";
-          else if (number.length === 3) subType = "SUPER";
-        }
-        return { number, count, subType };
-      }
-
-      // Accept 123=5=3, 124+2+2, 132.5.4, 356,5,5 (multiple counts)
-      let matchMultiCount = l.match(/^(\d{3})[\s\/\-=\+:\.#*&]{1,3}(\d{1,3})[\s\/\-=\+:\.#*&]{1,3}(\d{1,3})(?:\s*([A-Z]{1,3}))?$/i);
-      if (matchMultiCount) {
-        let number = matchMultiCount[1];
-        let count1 = parseInt(matchMultiCount[2]);
-        let count2 = parseInt(matchMultiCount[3]);
-        let subType = (matchMultiCount[4] || "").toUpperCase();
-        if (!subType) subType = "SUPER";
-        return { number, count: [count1, count2], subType };
-      }
-
-      // Accept 552/20, 959/30 box, 123=5 set, 123=5 both, 552/20, 959/30 box
-      let matchNumberCountSubtype = l.match(/^(\d{1,3})[\s\/\-=\+:\.#*&]{1,3}(\d{1,3})(?:\s*([A-Z]{1,5}))?$/i);
-      if (matchNumberCountSubtype) {
-        let number = matchNumberCountSubtype[1];
-        let count = parseInt(matchNumberCountSubtype[2]);
-        let subType = (matchNumberCountSubtype[3] || "").toUpperCase();
-        if (!subType) {
-          if (number.length === 1) subType = "A";
-          else if (number.length === 2) subType = "AB";
-          else if (number.length === 3) subType = "SUPER";
-        }
-        return { number, count, subType };
-      }
-
-      // Accept 123 box, 123 set, 123 both
-      let matchNumberSubtype = l.match(/^(\d{3})\s*([A-Z]{3,5})$/i);
-      if (matchNumberSubtype) {
-        let number = matchNumberSubtype[1];
-        let subType = matchNumberSubtype[2].toUpperCase();
-        let count = 5;
-        return { number, count, subType };
-      }
-
-      // Accept just a number (default count 5, subType by length)
-      let matchJustNumber = l.match(/^(\d{1,3})$/);
-      if (matchJustNumber) {
-        let number = matchJustNumber[1];
-        let count = 5;
-        let subType = "";
-        if (number.length === 1) subType = "A";
-        else if (number.length === 2) subType = "AB";
-        else if (number.length === 3) subType = "SUPER";
-        return { number, count, subType };
-      }
-
-      // Fallback: try to extract number, count, subtype in any order
-      let matchAny = l.match(/(\d{1,3})[\s\/\-=\+:\.#*&]{1,3}(\d{1,3})(?:\s*([A-Z]{1,5}))?/i);
-      if (matchAny) {
-        let number = matchAny[1];
-        let count = parseInt(matchAny[2]);
-        let subType = (matchAny[3] || "").toUpperCase();
-        if (!subType) {
-          if (number.length === 1) subType = "A";
-          else if (number.length === 2) subType = "AB";
-          else if (number.length === 3) subType = "SUPER";
-        }
-        return { number, count, subType };
-      }
-
-      // If nothing matched, return null
-      return null;
-    }
-
-    for (let line of lines) {
-      if (!line || !line.trim()) continue;
-      let parsed = parseLine(line);
-
-      // Handle multi-count (e.g. 123=5=3)
-      if (parsed && Array.isArray(parsed.count) && parsed.count.length === 2) {
-        let { number, count, subType } = parsed;
-        let [count1, count2] = count;
-        // Only for 3-digit numbers
-        if (number.length === 3) {
-          // SUPER
-          if (isValidSubtype(number, "SUPER") && count1 > 0) {
-            bookings.push({ number, count: count1, subType: "SUPER" });
-          }
-          // BOX
-          if (isValidSubtype(number, "BOX") && count2 > 0) {
-            bookings.push({ number, count: count2, subType: "BOX" });
-          }
-        } else {
-          failedLines.push(line);
-        }
-        continue;
-      }
-
-      if (!parsed) {
-        failedLines.push(line);
-        continue;
-      }
-
-      let { number, count, subType } = parsed;
-
-      // Validate number and count
-      if (
-        !number ||
-        isNaN(Number(number)) ||
-        !count ||
-        isNaN(Number(count)) ||
-        Number(count) <= 0
-      ) {
-        failedLines.push(line);
-        continue;
-      }
-
-      // Normalize subtype
-      subType = (subType || "").toUpperCase();
-
-      // Special: SET (3-digit only)
-      if (subType === "SET" && number.length === 3) {
-        let perms = generatePermutations(number);
-        for (let perm of perms) {
-          bookings.push({ number: perm, count: Number(count), subType: "SUPER" });
-        }
-        continue;
-      }
-
-      // Special: BOTH (3-digit only)
-      if (subType === "BOTH" && number.length === 3) {
-        bookings.push({ number, count: Number(count), subType: "SUPER" });
-        bookings.push({ number, count: Number(count), subType: "BOX" });
-        continue;
-      }
-
-      // Validate subtype/number length
-      if (!isValidSubtype(number, subType)) {
-        failedLines.push(line);
-        continue;
-      }
-
-      // Acceptable: add booking
-      bookings.push({ number, count: Number(count), subType });
-    }
-
-    return { bookings, failedLines };
-  };
 
   const handlePastBookings = async () => {
     try {
@@ -1248,6 +1015,15 @@ const BookingScreen: React.FC = () => {
       // 17. "709-5,077-6,078-5,..." (comma separated bookings in one line)
       const multiBookingLineRegex = /(\d{1,3})\s*[-=+\*\/\.\#\&:,]\s*(\d+)/g;
 
+      // --- NEW: Regex for "Set 524.1" style ---
+      const setWordNumberDotCount = /^\s*Set\s+(\d{3})\.(\d+)\s*$/i;
+
+      // --- NEW: Regex for "770,,1" style (number,,count) ---
+      const numberDoubleCommaCount = /^\s*(\d{1,3})\s*,{2,}\s*(\d+)\s*$/;
+
+      // --- NEW: Regex for "Abc-8-5" style (add 3 single digit bookings: A 8 5, B 8 5, C 8 5) ---
+      const abcDashNumberDashCount = /^\s*Abc\s*-\s*(\d+)\s*-\s*(\d+)\s*$/i;
+
       for (const origLine of lines) {
         let line = origLine;
         let waPrefix = "";
@@ -1268,6 +1044,50 @@ const BookingScreen: React.FC = () => {
         // 0. Ignore lines like "Dear 6", "Kerala 3"
         if (ignoreLineRegex.test(line)) continue;
 
+        // --- NEW: "Abc-8-5" style ---
+        let m = line.match(abcDashNumberDashCount);
+        if (m) {
+          let ok = pushBooking(m[1], m[2], "A") && pushBooking(m[1], m[2], "B") && pushBooking(m[1], m[2], "C");
+          if (!ok) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // --- NEW: "Set 524.1" style ---
+        m = line.match(setWordNumberDotCount);
+        if (m) {
+          // Add all 6 permutations as SUPER, only for 3-digit
+          const num = m[1];
+          const count = m[2];
+          if (num.length === 3) {
+            const perms = Array.from(new Set([
+              num[0] + num[1] + num[2],
+              num[0] + num[2] + num[1],
+              num[1] + num[0] + num[2],
+              num[1] + num[2] + num[0],
+              num[2] + num[0] + num[1],
+              num[2] + num[1] + num[0],
+            ]));
+            for (let perm of perms) pushBooking(perm, count, "SUPER");
+          } else {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // --- NEW: "770,,1" style (number,,count) ---
+        m = line.match(numberDoubleCommaCount);
+        if (m) {
+          if (!pushBooking(m[1], m[2])) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
         // 1. Multi-booking line: "709-5,077-6,078-5,..."
         let multiMatch = [...line.matchAll(multiBookingLineRegex)];
         if (multiMatch.length > 1) {
@@ -1283,7 +1103,7 @@ const BookingScreen: React.FC = () => {
         }
 
         // 2. Dual count: "041-1.2", "041-1*2", "041-1/2", "123=3=3", "145+2+2", "156:3-5", "165+5:6"
-        let m = line.match(dualCountRegex);
+        m = line.match(dualCountRegex);
         if (m) {
           if (!pushDualBooking(m[1], m[2], m[3])) {
             if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
