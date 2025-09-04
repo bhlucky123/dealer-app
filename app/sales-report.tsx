@@ -285,7 +285,7 @@ const SalesReportScreen = () => {
 
             // If search is applied, filter client-side
             let pdfData = allResults;
-            
+
             // if (search) {
             //     pdfData = allResults.filter((item: any) =>
             //         item.bill_number?.toString().toLowerCase().includes(search.toLowerCase())
@@ -504,7 +504,10 @@ const SalesReportScreen = () => {
                                 labelField="label"
                                 valueField="value"
                                 value={selectedFilter}
-                                onChange={item => setSelectedFilter(item.value)}
+                                onChange={item => {
+                                    console.log("val", item);
+                                    setSelectedFilter(item.value)
+                                }}
                                 placeholder="Select Dealer"
                                 style={{
                                     borderColor: "#9ca3af",
@@ -555,7 +558,10 @@ const SalesReportScreen = () => {
                                 labelField="label"
                                 valueField="value"
                                 value={selectedFilter}
-                                onChange={item => setSelectedFilter(item.value)}
+                                onChange={item => {
+                                    console.log("val", item);
+                                    setSelectedFilter(item.value)
+                                }}
                                 placeholder="Select Agent"
                                 style={{
                                     borderColor: "#9ca3af",
