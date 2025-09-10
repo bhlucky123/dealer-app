@@ -121,6 +121,7 @@ const SalesReportScreen = () => {
         if (fromDate) params["date_time__gte"] = fromDate.toISOString();
         if (toDate) params["date_time__lte"] = toDate.toISOString();
         if (fullView) params["full_view"] = "true";
+        if (search) params["search"] = search;
         if (selectedDraw?.id && !allGame) params["draw_session__draw__id"] = String(selectedDraw.id);
 
         if (user?.user_type === "ADMIN" && selectedFilter) {
@@ -135,7 +136,7 @@ const SalesReportScreen = () => {
         return Object.keys(params)
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
             .join("&");
-    }, [fromDate, toDate, selectedDraw, allGame, user?.user_type, selectedFilter, fullView]);
+    }, [fromDate, toDate, selectedDraw, allGame, user?.user_type, selectedFilter, fullView, search]);
 
     // Store all loaded pages' data
     const [allData, setAllData] = useState<any[]>([]);
@@ -210,13 +211,15 @@ const SalesReportScreen = () => {
     }, [data]);
 
     // FlatList data: always use allData, but apply search filter on client
-    const filteredResult = useMemo(() => {
-        if (!allData || allData.length === 0) return [];
-        if (!search) return allData;
-        return allData.filter((item: any) =>
-            item.bill_number?.toString().toLowerCase().includes(search.toLowerCase())
-        );
-    }, [allData, search]);
+    // const filteredResult = useMemo(() => {
+    //     if (!allData || allData.length === 0) return [];
+    //     if (!search) return allData;
+    //     return allData.filter((item: any) =>
+    //         item.bill_number?.toString().toLowerCase().includes(search.toLowerCase())
+    //     );
+    // }, [allData, search]);
+
+    const filteredResult = allData;
 
     const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && (allData.length > 0);
 
@@ -318,7 +321,7 @@ const SalesReportScreen = () => {
             const totalAmount = res?.data?.results?.total_customer_amount || 0
 
             const now = new Date();
-            const formattedDate = formatDateDDMMYYYY(now);
+            const formattedDate = formatDateDDMMYYYY(fromDate);
             const formattedTime = now.toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit',
@@ -391,7 +394,7 @@ const SalesReportScreen = () => {
           <body>
             <div class="header">
               <h1>${selectedDraw?.name || ""}</h1>
-              <p>${formattedDate} ${formattedTime}</p>
+              <p>${formattedDate}</p>
             </div>
             <table>
               <thead>
@@ -459,7 +462,7 @@ const SalesReportScreen = () => {
                 {/* Filters */}
                 <View className="gap-3">
                     <TextInput
-                        placeholder="Search by Bill No."
+                        placeholder="Search..."
                         value={search}
                         keyboardType="numeric"
                         onChangeText={setSearch}

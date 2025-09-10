@@ -303,6 +303,15 @@ const BookingScreen: React.FC = () => {
         const bookingType = getBookingTypeByLength(num.length);
         const isSingle = bookingType === "single_digit";
         const isDouble = bookingType === "double_digit";
+        // --- Double digit strict validation ---
+        if (
+          (subType === "ALL" || subType === "AB" || subType === "BC" || subType === "AC") &&
+          getBookingType() === "double_digit" &&
+          num.length !== 2
+        ) {
+          invalids.push(num);
+          return;
+        }
         // Validate count
         if (!isValidPositiveNumber(count)) {
           invalids.push(num);
@@ -356,7 +365,6 @@ const BookingScreen: React.FC = () => {
 
       console.log("invalids", invalids);
 
-
       if (invalids.length > 0) {
         Alert.alert(
           "Invalid input",
@@ -402,7 +410,15 @@ const BookingScreen: React.FC = () => {
         return;
       }
 
-
+      // --- Double digit strict validation for UI input ---
+      if (
+        (subType === "ALL" || subType === "AB" || subType === "BC" || subType === "AC") &&
+        getBookingType() === "double_digit" &&
+        num.length !== 2
+      ) {
+        invalids.push(num);
+        return;
+      }
 
       // ---------- Range Booking ----------
       if (selectedRange === "Range" && !isMixedMode) {
@@ -430,8 +446,6 @@ const BookingScreen: React.FC = () => {
         console.log("subType", subType);
         console.log("isDouble", isDouble, "isSingle", isSingle);
 
-
-
         if (isNaN(start) || isNaN(end) || start > end) {
           Alert.alert(
             "Invalid Range",
@@ -444,6 +458,14 @@ const BookingScreen: React.FC = () => {
 
         for (let i = start; i <= end; i++) {
           const paddedNum = i.toString().padStart(digitsRequired, "0");
+          // Double digit strict validation for range
+          if (
+            (subType === "ALL" || subType === "AB" || subType === "BC" || subType === "AC") &&
+            getBookingType() === "double_digit" &&
+            paddedNum.length !== 2
+          ) {
+            continue;
+          }
           if (subType === "BOTH") {
             if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, "SUPER", undefined, bookingType));
             if (bCountVal > 0) newEntries.push(createEntry(paddedNum, bCountVal, "BOX", undefined, bookingType));
@@ -465,8 +487,6 @@ const BookingScreen: React.FC = () => {
             if (actualCount > 0) newEntries.push(createEntry(paddedNum, actualCount, subType, undefined, bookingType));
           }
         }
-
-
 
         setBookingDetails((prev) => [...newEntries, ...prev]);
         clearInputs();
@@ -494,7 +514,6 @@ const BookingScreen: React.FC = () => {
         return;
       }
       console.log("invalids2", invalids);
-
 
       // Validate countInput is a valid number
       if (!isValidNumberString(countInput) || !isValidPositiveNumber(countInput)) {
@@ -730,7 +749,6 @@ const BookingScreen: React.FC = () => {
 
     console.log("invalids", invalids);
 
-
     if (invalids.length > 0) {
       if (isMixedMode) {
         Alert.alert(
@@ -745,6 +763,14 @@ const BookingScreen: React.FC = () => {
           Alert.alert(
             "Invalid input",
             `Number must be a 3-digit number.`
+          );
+        } else if (
+          (subType === "ALL" || subType === "AB" || subType === "BC" || subType === "AC") &&
+          getBookingType() === "double_digit"
+        ) {
+          Alert.alert(
+            "Invalid input",
+            `Number must be a 2-digit number.`
           );
         } else {
           Alert.alert(
@@ -1024,6 +1050,17 @@ const BookingScreen: React.FC = () => {
       // --- NEW: Regex for "Abc-8-5" style (add 3 single digit bookings: A 8 5, B 8 5, C 8 5) ---
       const abcDashNumberDashCount = /^\s*Abc\s*-\s*(\d+)\s*-\s*(\d+)\s*$/i;
 
+      // --- NEW: Regex for "Ab 45=100" and "Ab=45=100" and similar ---
+      // Matches: "Ab 45=100", "AB 45=100", "Ab=45=100", "AB=45=100"
+      // Group 1: subtype (Ab/AB), Group 2: number, Group 3: count
+      const abSpaceNumberEqCount = /^\s*([Aa][Bb])\s+(\d{1,3})\s*=\s*(\d+)\s*$/;
+      const abEqNumberEqCount = /^\s*([Aa][Bb])\s*=\s*(\d{1,3})\s*=\s*(\d+)\s*$/;
+
+      // --- NEW: Regex for "AB 45/100" and similar (subtype, number, symbol, count) ---
+      // Matches: "AB 45/100", "AB 45-100", "AB 45:100", etc.
+      // Group 1: subtype, Group 2: number, Group 3: symbol, Group 4: count
+      const subtypeNumberSymbolCount = /^\s*([A-Za-z]+)\s+(\d{1,3})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s*$/;
+
       for (const origLine of lines) {
         let line = origLine;
         let waPrefix = "";
@@ -1044,8 +1081,28 @@ const BookingScreen: React.FC = () => {
         // 0. Ignore lines like "Dear 6", "Kerala 3"
         if (ignoreLineRegex.test(line)) continue;
 
+        // --- NEW: "Ab 45=100" and "AB 45=100" style ---
+        let m = line.match(abSpaceNumberEqCount);
+        if (m) {
+          if (!pushBooking(m[2], m[3], m[1].toUpperCase())) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // --- NEW: "Ab=45=100" and "AB=45=100" style ---
+        m = line.match(abEqNumberEqCount);
+        if (m) {
+          if (!pushBooking(m[2], m[3], m[1].toUpperCase())) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
         // --- NEW: "Abc-8-5" style ---
-        let m = line.match(abcDashNumberDashCount);
+        m = line.match(abcDashNumberDashCount);
         if (m) {
           let ok = pushBooking(m[1], m[2], "A") && pushBooking(m[1], m[2], "B") && pushBooking(m[1], m[2], "C");
           if (!ok) {
@@ -1082,6 +1139,17 @@ const BookingScreen: React.FC = () => {
         m = line.match(numberDoubleCommaCount);
         if (m) {
           if (!pushBooking(m[1], m[2])) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // --- NEW: "AB 45/100" and similar (subtype, number, symbol, count) ---
+        m = line.match(subtypeNumberSymbolCount);
+        if (m) {
+          // m[1]: subtype, m[2]: number, m[4]: count
+          if (!pushBooking(m[2], m[4], m[1])) {
             if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
             failedLines.push(origLine);
           }

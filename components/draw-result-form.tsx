@@ -207,47 +207,45 @@ const DrawResultForm = ({ onSubmit, initialData,loading }: Props) => {
                         </TouchableOpacity>
                     </View>
                     <View className="mx-4 border border-gray-300 rounded-lg overflow-hidden mb-10">
-                        {Array.from({ length: Math.ceil(form.complementary_prizes.length / 3) }).map((_, r) => (
-                            <View key={r} className="flex-row border-b border-gray-200">
-                                {form.complementary_prizes.slice(r * 3, r * 3 + 3).map((val: string, cIdx: number) => {
-                                    const globalIdx = r * 3 + cIdx;
-                                    return (
-                                        <View
-                                            key={globalIdx}
-                                            className="flex-1 border-r border-gray-200 px-2 py-2 bg-white"
-                                            style={{ minWidth: 0 }}
-                                        >
-                                            <TextInput
-                                                ref={complementaryRefs[globalIdx]}
-                                                className="text-center text-[13px] font-mono font-bold text-gray-900 bg-gray-50 rounded-md border border-gray-300 px-2 py-1"
-                                                keyboardType="numeric"
-                                                placeholder={`Prize ${globalIdx + 1}`}
-                                                value={val}
-                                                onChangeText={(text) => handleComplementaryChange(globalIdx, text)}
-                                                maxLength={3}
-                                                returnKeyType={globalIdx < complementaryRefs.length - 1 ? "next" : "done"}
-                                                blurOnSubmit={globalIdx === complementaryRefs.length - 1}
-                                                onSubmitEditing={() => {
-                                                    if (globalIdx < complementaryRefs.length - 1) {
-                                                        complementaryRefs[globalIdx + 1].current?.focus();
-                                                    }
-                                                }}
-                                                placeholderTextColor="#9ca3af"
-                                            />
-                                        </View>
-                                    );
-                                })}
-                                {/* Fill empty cells if needed */}
-                                {new Array(3 - form.complementary_prizes.slice(r * 3, r * 3 + 3).length)
-                                    .fill("")
-                                    .map((_, i) => (
-                                        <View
-                                            key={`empty-${i}`}
-                                            className="flex-1 border-r border-gray-200 px-2 py-2 bg-white"
-                                        />
-                                    ))}
-                            </View>
-                        ))}
+                        <View className="flex-row border-b border-gray-200">
+                            {Array.from({ length: 3 }).map((_, colIdx) => (
+                                <View key={`col-${colIdx}`} className="flex-1">
+                                    {Array.from({ length: Math.ceil(form.complementary_prizes.length / 3) }).map((_, rowIdx) => {
+                                        const idx = rowIdx + colIdx * Math.ceil(form.complementary_prizes.length / 3);
+                                        const val = form.complementary_prizes[idx] || "";
+                                        return (
+                                            <View
+                                                key={`prize-${colIdx}-${rowIdx}`}
+                                                className={`border-b border-gray-200 ${colIdx < 2 ? "border-r border-gray-200" : ""} px-2 py-2 bg-white`}
+                                                style={{ minWidth: 0 }}
+                                            >
+                                                {idx < form.complementary_prizes.length ? (
+                                                    <TextInput
+                                                        ref={complementaryRefs[idx]}
+                                                        className="text-center text-[13px] font-mono font-bold text-gray-900 bg-gray-50 rounded-md border border-gray-300 px-2 py-1"
+                                                        keyboardType="numeric"
+                                                        placeholder={`Prize ${idx + 1}`}
+                                                        value={val}
+                                                        onChangeText={(text) => handleComplementaryChange(idx, text)}
+                                                        maxLength={3}
+                                                        returnKeyType={idx < complementaryRefs.length - 1 ? "next" : "done"}
+                                                        blurOnSubmit={idx === complementaryRefs.length - 1}
+                                                        onSubmitEditing={() => {
+                                                            if (idx < complementaryRefs.length - 1) {
+                                                                complementaryRefs[idx + 1].current?.focus();
+                                                            }
+                                                        }}
+                                                        placeholderTextColor="#9ca3af"
+                                                    />
+                                                ) : (
+                                                    <View />
+                                                )}
+                                            </View>
+                                        );
+                                    })}
+                                </View>
+                            ))}
+                        </View>
                     </View>
                 </ScrollView>
                 {/* Submit button bar */}
