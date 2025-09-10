@@ -558,24 +558,25 @@ const ResultPage: React.FC = () => {
             {/* Complementary grid */}
             {!isLoading && data && (
                 <View className="mx-4 mt-6 mb-10 border border-gray-300 rounded-lg overflow-hidden">
-                    {Array.from({ length: Math.ceil(data.complementary_prizes.length / 3) }).map((_, r) => {
-                        const rowPrizes = data.complementary_prizes.slice(r * 3, r * 3 + 3);
-                        return (
-                            <View key={`row-${r}`} className="flex-row border-b border-gray-200">
-                                {rowPrizes.map((p, cIdx) => (
-                                    <Text
-                                        key={`prize-${r}-${cIdx}`}
-                                        className="flex-1 py-2 text-center text-[12px] font-mono border-r border-gray-200"
-                                    >
-                                        {p}
-                                    </Text>
-                                ))}
-                                {Array.from({ length: 3 - rowPrizes.length }).map((_, i) => (
-                                    <Text key={`empty-${r}-${i}`} className="flex-1 border-r border-gray-200" />
-                                ))}
+                    {/* Top-to-bottom grid, 3 columns */}
+                    <View className="flex-row border-b border-gray-200">
+                        {Array.from({ length: 3 }).map((_, colIdx) => (
+                            <View key={`col-${colIdx}`} className="flex-1">
+                                {Array.from({ length: Math.ceil(data.complementary_prizes.length / 3) }).map((_, rowIdx) => {
+                                    const idx = rowIdx + colIdx * Math.ceil(data.complementary_prizes.length / 3);
+                                    const prize = data.complementary_prizes[idx];
+                                    return (
+                                        <Text
+                                            key={`prize-${colIdx}-${rowIdx}`}
+                                            className={`py-2 text-center text-[12px] font-mono border-b border-gray-200 ${colIdx < 2 ? "border-r border-gray-200" : ""}`}
+                                        >
+                                            {prize || ""}
+                                        </Text>
+                                    );
+                                })}
                             </View>
-                        );
-                    })}
+                        ))}
+                    </View>
                 </View>
             )}
 
