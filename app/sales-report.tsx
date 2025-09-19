@@ -11,6 +11,7 @@ import { useCallback, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
+    Platform,
     Switch,
     Text,
     TextInput,
@@ -117,6 +118,9 @@ const SalesReportScreen = () => {
     // Build query string for API
     const buildQuery = useCallback((offset = 0, limit = PAGE_SIZE) => {
         const params: Record<string, string> = {};
+
+        console.log("fromDate", fromDate);
+        console.log("toDate", toDate);
 
         if (fromDate) params["date_time__gte"] = fromDate.toISOString();
         if (toDate) params["date_time__lte"] = toDate.toISOString();
@@ -818,7 +822,14 @@ const SalesReportScreen = () => {
                         mode="date"
                         value={fromDate || getToday()}
                         onChange={(event, date) => {
-                            if (date) setFromDate(new Date(date.getFullYear(), date.getMonth(), date.getDate()));
+                            if (date) {
+                                const selectedDate = new Date(date);
+                                // If on Android, adjust for timezone offset
+                                if (Platform.OS === "android") {
+                                    selectedDate.setMinutes(selectedDate.getMinutes() + selectedDate.getTimezoneOffset());
+                                }
+                                setFromDate(selectedDate);
+                            }
                             setShowFromPicker(false);
                         }}
                     />
@@ -828,7 +839,14 @@ const SalesReportScreen = () => {
                         mode="date"
                         value={toDate || getToday()}
                         onChange={(event, date) => {
-                            if (date) setToDate(new Date(date.getFullYear(), date.getMonth(), date.getDate()));
+                            if (date) {
+                                const selectedDate = new Date(date);
+                                // If on Android, adjust for timezone offset
+                                if (Platform.OS === "android") {
+                                    selectedDate.setMinutes(selectedDate.getMinutes() + selectedDate.getTimezoneOffset());
+                                }
+                                setToDate(selectedDate);
+                            }
                             setShowToPicker(false);
                         }}
                     />

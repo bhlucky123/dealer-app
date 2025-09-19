@@ -421,6 +421,7 @@ export default function MoreTab() {
     }
   });
 
+  // --- Prize Config for ADMIN ---
   const { data: prizeConfig, isLoading: isPrizeConfigLoading, refetch: refetchPrizeConfig } = useQuery<PrizeConfig>({
     queryKey: ["/administrator/prize-configuration", user?.id],
     queryFn: async () => {
@@ -441,6 +442,32 @@ export default function MoreTab() {
       ToastAndroid.show("Prize configuration updated", ToastAndroid.SHORT);
     },
     onError: () => setPrizeConfigError("Failed to update prize configuration"),
+  });
+
+  // --- Prize Config for DEALER ---
+  const { data: dealerPrizeConfig, isLoading: isDealerPrizeConfigLoading, refetch: refetchDealerPrizeConfig } = useQuery<PrizeConfig>({
+    queryKey: ["/dealer/prize-configuration", user?.id],
+    queryFn: async () => {
+      const res = await api.get(`/dealer/prize-configuration/${user?.id}/`);
+      return res.data as PrizeConfig;
+    },
+    enabled: user?.user_type === "DEALER",
+  });
+
+  const { mutate: dealerPrizeConfigMutation, isPending: isDealerPrizeConfigSaving } = useMutation({
+    mutationFn: async (payload: PrizeConfig) => {
+      return await api.patch(`/dealer/prize-configuration/${user?.id}/`, payload);
+    },
+    onSuccess: () => {
+      setIsEditingPrizeConfig(false);
+      setPrizeConfigError(null);
+      refetchDealerPrizeConfig();
+      ToastAndroid.show("Prize configuration updated", ToastAndroid.SHORT);
+    },
+    onError: (err) =>{
+      console.log("Failed to update prize configuration");
+      console.log(err);
+      setPrizeConfigError("Failed to update prize configuration")},
   });
 
   // --- Bank Details Query ---
@@ -498,6 +525,16 @@ export default function MoreTab() {
     enabled: false, // Only for fetching state, not for data
   });
 
+  // --- Dealer Prize Config Query Fetching State ---
+  const { isFetching: isFetchingDealerPrizeConfig } = useQuery<PrizeConfig>({
+    queryKey: ["/dealer/prize-configuration", user?.id],
+    queryFn: async () => {
+      const res = await api.get(`/dealer/prize-configuration/${user?.id}/`);
+      return res.data as PrizeConfig;
+    },
+    enabled: false, // Only for fetching state, not for data
+  });
+
   // --- Pull-to-refresh handler ---
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -505,6 +542,9 @@ export default function MoreTab() {
     const promises: Promise<any>[] = [];
     if (user?.user_type === "ADMIN") {
       promises.push(refetchPrizeConfig());
+    }
+    if (user?.user_type === "DEALER") {
+      promises.push(refetchDealerPrizeConfig());
     }
     promises.push(refetchBankDetails());
     if (user?.user_type === "AGENT" || user?.user_type === "DEALER") {
@@ -516,7 +556,7 @@ export default function MoreTab() {
       // ignore
     }
     setRefreshing(false);
-  }, [user?.user_type, refetchPrizeConfig, refetchBankDetails, refetchMyBalance]);
+  }, [user?.user_type, refetchPrizeConfig, refetchDealerPrizeConfig, refetchBankDetails, refetchMyBalance]);
 
   const handleToggle = (value: boolean) => {
     if (statusLoading) return;
@@ -596,130 +636,281 @@ export default function MoreTab() {
     return null;
   }
 
+  // --- Prize Config Section for ADMIN and DEALER ---
   function renderPrizeConfigSection() {
-    if (user?.user_type !== "ADMIN") return null;
-    if (isEditingPrizeConfig && prizeConfigForm) {
-      return (
-        <Card title="Edit Prize Configuration" key="prize-config-edit">
-          {PRIZE_CONFIG_FIELDS.map(({ key, label }) => (
-            <View key={key} style={{ marginBottom: 12 }}>
-              <Text style={{ color: "#22223b", fontSize: 15, marginBottom: 2 }}>{label}</Text>
-              <TextInput
-                value={prizeConfigForm[key]?.toString() ?? ""}
-                onChangeText={(val) => {
-                  setPrizeConfigForm((prev) =>
-                    prev ? { ...prev, [key]: Number(val.replace(/[^0-9]/g, "")) } : prev
-                  );
+    // ADMIN
+    if (user?.user_type === "ADMIN") {
+      if (isEditingPrizeConfig && prizeConfigForm) {
+        return (
+          <Card title="Edit Prize Configuration" key="prize-config-edit">
+            {PRIZE_CONFIG_FIELDS.map(({ key, label }) => (
+             <View key={key} style={{ marginBottom: 20, paddingBottom: 2 }}>
+                <Text style={{ color: "#22223b", fontSize: 15, marginBottom: 10 }}>{label}</Text>
+                <TextInput
+                  value={prizeConfigForm[key]?.toString() ?? ""}
+                  onChangeText={(val) => {
+                    setPrizeConfigForm((prev) =>
+                      prev ? { ...prev, [key]: Number(val.replace(/[^0-9]/g, "")) } : prev
+                    );
+                  }}
+                  keyboardType="numeric"
+                  style={{
+                    backgroundColor: "#f3f4f6",
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: "#cbd5e1",
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    fontSize: 16,
+                  }}
+                  placeholder={`Enter ${label}`}
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
+            ))}
+            {prizeConfigError && (
+              <Text style={{ color: "#dc2626", fontSize: 13, marginBottom: 6 }}>{prizeConfigError}</Text>
+            )}
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#2563eb",
+                  paddingVertical: 10,
+                  paddingHorizontal: 22,
+                  borderRadius: 8,
                 }}
-                keyboardType="numeric"
+                onPress={() => {
+                  if (
+                    !prizeConfigForm ||
+                    PRIZE_CONFIG_FIELDS.some(
+                      ({ key }) =>
+                        prizeConfigForm[key] === undefined ||
+                        prizeConfigForm[key] === null ||
+                        isNaN(Number(prizeConfigForm[key]))
+                    )
+                  ) {
+                    setPrizeConfigError("All fields are required and must be numbers");
+                    return;
+                  }
+                  setPrizeConfigError(null);
+                  prizeConfigMutation(prizeConfigForm);
+                }}
+                activeOpacity={0.85}
+                disabled={isPrizeConfigSaving}
+              >
+                {isPrizeConfigSaving ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 15 }}>Save</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
                 style={{
                   backgroundColor: "#f3f4f6",
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: "#cbd5e1",
-                  paddingHorizontal: 12,
                   paddingVertical: 10,
-                  fontSize: 16,
+                  paddingHorizontal: 22,
+                  borderRadius: 8,
                 }}
-                placeholder={`Enter ${label}`}
-                placeholderTextColor="#9ca3af"
-              />
+                onPress={() => {
+                  setIsEditingPrizeConfig(false);
+                  setPrizeConfigError(null);
+                }}
+                activeOpacity={0.85}
+                disabled={isPrizeConfigSaving}
+              >
+                <Text style={{ color: "#22223b", fontWeight: "bold", fontSize: 15 }}>Cancel</Text>
+              </TouchableOpacity>
             </View>
-          ))}
-          {prizeConfigError && (
-            <Text style={{ color: "#dc2626", fontSize: 13, marginBottom: 6 }}>{prizeConfigError}</Text>
+          </Card>
+        );
+      }
+      return (
+        <Card title="Prize Configuration" key="prize-config">
+          {isPrizeConfigLoading ? (
+            <ActivityIndicator color="#2563eb" size="small" />
+          ) : prizeConfig ? (
+            <>
+              {PRIZE_CONFIG_FIELDS.map(({ key, label }) => (
+                <View
+                  key={key}
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text style={{ color: "#22223b", fontSize: 15 }}>{label}</Text>
+                  <Text style={{ color: "#2563eb", fontWeight: "bold", fontSize: 15 }}>
+                    ₹ {prizeConfig[key]?.toLocaleString("en-IN")}
+                  </Text>
+                </View>
+              ))}
+              <TouchableOpacity
+                style={{
+                  marginTop: 10,
+                  backgroundColor: "#e0e7ef",
+                  paddingVertical: 10,
+                  borderRadius: 8,
+                  alignItems: "center",
+                }}
+                onPress={() => {
+                  setIsEditingPrizeConfig(true);
+                  setPrizeConfigForm(prizeConfig);
+                  setPrizeConfigError(null);
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={{ color: "#2563eb", fontWeight: "bold", fontSize: 15 }}>
+                  Edit Prize Configuration
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <Text style={{ color: "#9ca3af", fontSize: 15 }}>No prize configuration found.</Text>
           )}
-          <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
-            <TouchableOpacity
-              style={{
-                backgroundColor: "#2563eb",
-                paddingVertical: 10,
-                paddingHorizontal: 22,
-                borderRadius: 8,
-              }}
-              onPress={() => {
-                if (!prizeConfigForm || PRIZE_CONFIG_FIELDS.some(({ key }) => prizeConfigForm[key] === undefined || prizeConfigForm[key] === null || isNaN(Number(prizeConfigForm[key])))) {
-                  setPrizeConfigError("All fields are required and must be numbers");
-                  return;
-                }
-                setPrizeConfigError(null);
-                prizeConfigMutation(prizeConfigForm);
-              }}
-              activeOpacity={0.85}
-              disabled={isPrizeConfigSaving}
-            >
-              {isPrizeConfigSaving ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 15 }}>Save</Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{
-                backgroundColor: "#f3f4f6",
-                paddingVertical: 10,
-                paddingHorizontal: 22,
-                borderRadius: 8,
-              }}
-              onPress={() => {
-                setIsEditingPrizeConfig(false);
-                setPrizeConfigError(null);
-              }}
-              activeOpacity={0.85}
-              disabled={isPrizeConfigSaving}
-            >
-              <Text style={{ color: "#22223b", fontWeight: "bold", fontSize: 15 }}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
         </Card>
       );
     }
-    return (
-      <Card title="Prize Configuration" key="prize-config">
-        {isPrizeConfigLoading ? (
-          <ActivityIndicator color="#2563eb" size="small" />
-        ) : prizeConfig ? (
-          <>
+
+    // DEALER
+    if (user?.user_type === "DEALER") {
+      if (isEditingPrizeConfig && prizeConfigForm) {
+        return (
+          <Card title="Edit Prize Configuration" key="prize-config-edit">
             {PRIZE_CONFIG_FIELDS.map(({ key, label }) => (
-              <View
-                key={key}
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  marginBottom: 8,
-                }}
-              >
-                <Text style={{ color: "#22223b", fontSize: 15 }}>{label}</Text>
-                <Text style={{ color: "#2563eb", fontWeight: "bold", fontSize: 15 }}>
-                  ₹ {prizeConfig[key]?.toLocaleString("en-IN")}
-                </Text>
+              <View key={key} style={{ marginBottom: 20, paddingBottom: 2 }}>
+                <Text style={{ color: "#22223b", fontSize: 15, marginBottom: 10 }}>{label}</Text>
+                <TextInput
+                  value={prizeConfigForm[key]?.toString() ?? ""}
+                  onChangeText={(val) => {
+                    setPrizeConfigForm((prev) =>
+                      prev ? { ...prev, [key]: Number(val.replace(/[^0-9]/g, "")) } : prev
+                    );
+                  }}
+                  keyboardType="numeric"
+                  style={{
+                    backgroundColor: "#f3f4f6",
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: "#cbd5e1",
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    fontSize: 16,
+                  }}
+                  placeholder={`Enter ${label}`}
+                  placeholderTextColor="#9ca3af"
+                />
               </View>
             ))}
-            <TouchableOpacity
-              style={{
-                marginTop: 10,
-                backgroundColor: "#e0e7ef",
-                paddingVertical: 10,
-                borderRadius: 8,
-                alignItems: "center",
-              }}
-              onPress={() => {
-                setIsEditingPrizeConfig(true);
-                setPrizeConfigForm(prizeConfig);
-                setPrizeConfigError(null);
-              }}
-              activeOpacity={0.85}
-            >
-              <Text style={{ color: "#2563eb", fontWeight: "bold", fontSize: 15 }}>
-                Edit Prize Configuration
-              </Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <Text style={{ color: "#9ca3af", fontSize: 15 }}>No prize configuration found.</Text>
-        )}
-      </Card>
-    );
+            {prizeConfigError && (
+              <Text style={{ color: "#dc2626", fontSize: 13, marginBottom: 6 }}>{prizeConfigError}</Text>
+            )}
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#2563eb",
+                  paddingVertical: 10,
+                  paddingHorizontal: 22,
+                  borderRadius: 8,
+                }}
+                onPress={() => {
+                  if (
+                    !prizeConfigForm ||
+                    PRIZE_CONFIG_FIELDS.some(
+                      ({ key }) =>
+                        prizeConfigForm[key] === undefined ||
+                        prizeConfigForm[key] === null ||
+                        isNaN(Number(prizeConfigForm[key]))
+                    )
+                  ) {
+                    setPrizeConfigError("All fields are required and must be numbers");
+                    return;
+                  }
+                  setPrizeConfigError(null);
+                  console.log("prizeConfigForm", prizeConfigForm);
+                  
+                  dealerPrizeConfigMutation(prizeConfigForm);
+                }}
+                activeOpacity={0.85}
+                disabled={isDealerPrizeConfigSaving}
+              >
+                {isDealerPrizeConfigSaving ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 15 }}>Save</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#f3f4f6",
+                  paddingVertical: 10,
+                  paddingHorizontal: 22,
+                  borderRadius: 8,
+                }}
+                onPress={() => {
+                  setIsEditingPrizeConfig(false);
+                  setPrizeConfigError(null);
+                }}
+                activeOpacity={0.85}
+                disabled={isDealerPrizeConfigSaving}
+              >
+                <Text style={{ color: "#22223b", fontWeight: "bold", fontSize: 15 }}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </Card>
+        );
+      }
+      return (
+        <Card title="Prize Configuration" key="prize-config">
+          {isDealerPrizeConfigLoading ? (
+            <ActivityIndicator color="#2563eb" size="small" />
+          ) : dealerPrizeConfig ? (
+            <>
+              {PRIZE_CONFIG_FIELDS.map(({ key, label }) => (
+                <View
+                  key={key}
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text style={{ color: "#22223b", fontSize: 15 }}>{label}</Text>
+                  <Text style={{ color: "#2563eb", fontWeight: "bold", fontSize: 15 }}>
+                    ₹ {dealerPrizeConfig[key]?.toLocaleString("en-IN")}
+                  </Text>
+                </View>
+              ))}
+              <TouchableOpacity
+                style={{
+                  marginTop: 10,
+                  backgroundColor: "#e0e7ef",
+                  paddingVertical: 10,
+                  borderRadius: 8,
+                  alignItems: "center",
+                  marginBottom: 20 
+                }}
+                onPress={() => {
+                  setIsEditingPrizeConfig(true);
+                  setPrizeConfigForm(dealerPrizeConfig);
+                  setPrizeConfigError(null);
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={{ color: "#2563eb", fontWeight: "bold", fontSize: 15,}}>
+                  Edit Prize Configuration
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <Text style={{ color: "#9ca3af", fontSize: 15 }}>No prize configuration found.</Text>
+          )}
+        </Card>
+      );
+    }
+
+    // AGENT or others: no prize config
+    return null;
   }
 
   function renderMyBalanceSection() {
@@ -867,7 +1058,7 @@ export default function MoreTab() {
           alignItems: "center",
           flexGrow: 1,
           paddingTop: 50,
-          paddingBottom: 44,
+          paddingBottom: 64, // Increased bottom padding for more space
           paddingHorizontal: 10,
         }}
         keyboardShouldPersistTaps="handled"
@@ -885,6 +1076,7 @@ export default function MoreTab() {
             width: "100%",
             maxWidth: 420,
             alignItems: "center",
+            paddingBottom: 20, // Extra bottom padding for content
           }}
         >
           {renderMyBalanceSection()}
@@ -896,6 +1088,11 @@ export default function MoreTab() {
               {activeSection === "bank" && renderBankDetailsSection()}
               {activeSection === "prize" && renderPrizeConfigSection()}
               {activeSection === "toggle" && renderAdminToggleSection()}
+            </>
+          ) : user?.user_type === "DEALER" ? (
+            <>
+              {renderBankDetailsSection()}
+              {renderPrizeConfigSection()}
             </>
           ) : (
             renderBankDetailsSection()
