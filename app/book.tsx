@@ -1061,6 +1061,10 @@ const BookingScreen: React.FC = () => {
       // Group 1: subtype, Group 2: number, Group 3: symbol, Group 4: count
       const subtypeNumberSymbolCount = /^\s*([A-Za-z]+)\s+(\d{1,3})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s*$/;
 
+      // --- NEW: Regex for "A=4=10", "B=4=5", "C=4=5" ---
+      // Group 1: subtype (A/B/C), Group 2: number, Group 3: count
+      const singleLetterEqNumberEqCount = /^\s*([ABCabc])\s*=\s*(\d{1,3})\s*=\s*(\d+)\s*$/;
+
       for (const origLine of lines) {
         let line = origLine;
         let waPrefix = "";
@@ -1081,8 +1085,18 @@ const BookingScreen: React.FC = () => {
         // 0. Ignore lines like "Dear 6", "Kerala 3"
         if (ignoreLineRegex.test(line)) continue;
 
+        // --- NEW: "A=4=10", "B=4=5", "C=4=5" style ---
+        let m = line.match(singleLetterEqNumberEqCount);
+        if (m) {
+          if (!pushBooking(m[2], m[3], m[1].toUpperCase())) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
         // --- NEW: "Ab 45=100" and "AB 45=100" style ---
-        let m = line.match(abSpaceNumberEqCount);
+        m = line.match(abSpaceNumberEqCount);
         if (m) {
           if (!pushBooking(m[2], m[3], m[1].toUpperCase())) {
             if (waPrefix.length > 0) failedLines.push(waPrefix.trim());

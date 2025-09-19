@@ -106,6 +106,13 @@ const DrawResultForm = ({ onSubmit, initialData,loading }: Props) => {
                     }
                 }
             }
+            
+            // Sort the prizes from low to high (numerically)
+            expanded.sort((a, b) => parseInt(a) - parseInt(b));
+
+            console.log("expanded", expanded);
+            
+            
             // Only take the first 30
             expanded = expanded.slice(0, 30);
 
@@ -202,7 +209,7 @@ const DrawResultForm = ({ onSubmit, initialData,loading }: Props) => {
                                 shadowRadius: 2,
                             }}
                         >
-                            <Clipboard color="#16a34a" size={18} />
+                            <Clipboard color="#16a34a" size={18} /> 
                             <Text className="ml-1 text-green-700 text-xs font-semibold">Paste</Text>
                         </TouchableOpacity>
                     </View>

@@ -2,6 +2,7 @@ import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
+import { formatDateDDMMYYYY } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery } from "@tanstack/react-query";
 import { Calendar, Check } from "lucide-react-native";
@@ -42,9 +43,13 @@ const DailyReport = () => {
 
   const buildQuery = () => {
     const params: Record<string, any> = {};
+    console.log("fromDate", fromDate);
+    
     if (fromDate) params.date_time__gte = fromDate.toISOString();
     if (toDate) params.date_time__lte = toDate.toISOString();
     if (selectedDraw?.id && !allGames) params.draw_session__draw = selectedDraw.id;
+    console.log("buildQuery", params);
+    
     return params;
   };
 
@@ -59,7 +64,7 @@ const DailyReport = () => {
     enabled: !!selectedDraw?.id,
   });
 
-  console.log("data", data);
+  console.log("data daily report", data);
 
 
 
@@ -91,11 +96,11 @@ const DailyReport = () => {
         !isTotal &&
         <Text className="flex-1 text-xs text-center text-gray-800">{item.draw}</Text>
       }
-      <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(Number(item.total_amount))}</Text>
+      <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(Number(user?.user_type === "ADMIN" ? item.total_dealer_amount : item.total_amount))}</Text>
       {
         user?.user_type === "ADMIN" &&
         <><Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(item?.total_winning_prize || 0)}</Text>
-          <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler((item?.total_amount || 0) - (item?.total_winning_prize || 0) || 0)}</Text></>
+          <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler((user.user_type === "ADMIN" ? item?.total_dealer_amount || 0 : item?.total_amount || 0) - (item?.total_winning_prize || 0) || 0)}</Text></>
       }
     </View>
   );
@@ -112,11 +117,11 @@ const DailyReport = () => {
         {item.agent?.username || item.dealer?.username || "-"}
       </Text> */}
       {/* <Text className="flex-1 text-xs text-center text-gray-800">{item.draw}</Text> */}
-      <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(Number(item.total_amount))}</Text>
+      <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(Number(user?.user_type === "ADMIN" ? item.total_dealer_amount : item.total_amount))}</Text>
       {
         user?.user_type === "ADMIN" &&
         <><Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(item?.total_winning_prize || 0)}</Text>
-          <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler((item?.total_amount || 0) - (item?.total_winning_prize || 0) || 0)}</Text></>
+          <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler((user.user_type === "ADMIN" ? item?.total_dealer_amount || 0 : item?.total_amount || 0) - (item?.total_winning_prize || 0) || 0)}</Text></>
       }
     </View>
   );
@@ -144,7 +149,7 @@ const DailyReport = () => {
               style={{ elevation: 0 }}
             >
               <Text className="text-sm text-gray-600">
-                {fromDate ? fromDate.toLocaleDateString() : "FROM"}
+                {fromDate ? formatDateDDMMYYYY(fromDate) : "FROM"}
               </Text>
               <Calendar size={16} color="#6B7280" />
             </TouchableOpacity>
@@ -158,7 +163,7 @@ const DailyReport = () => {
               style={{ elevation: 0 }}
             >
               <Text className="text-sm text-gray-600">
-                {toDate ? toDate.toLocaleDateString() : "TO"}
+                {toDate ? formatDateDDMMYYYY(toDate) : "TO"}
               </Text>
               <Calendar size={16} color="#6B7280" />
             </TouchableOpacity>
@@ -243,7 +248,8 @@ const DailyReport = () => {
               renderSummaryRow(
                 data.summary.reduce(
                   (acc: any, cur: any) => ({
-                    total_amount: (acc.total_amount || 0) + cur.total_amount,
+                    total_amount: (user?.user_type === "ADMIN" ? acc.total_dealer_amount || 0 : acc.total_amount || 0) + (user?.user_type === "ADMIN" ? cur.total_dealer_amount || 0 : cur.total_amount || 0),
+                    total_dealer_amount: (user?.user_type === "ADMIN" ? acc.total_dealer_amount || 0 : acc.total_amount || 0) + (user?.user_type === "ADMIN" ? cur.total_dealer_amount || 0 : cur.total_amount || 0),
                     total_winning_prize: (acc.total_winning_prize || 0) + cur.total_winning_prize,
                     total_win: (acc.total_win || 0) + (cur.total_win || 0),
                   }),
@@ -262,7 +268,8 @@ const DailyReport = () => {
               renderDetailRow(
                 data.report.reduce(
                   (acc: any, cur: any) => ({
-                    total_amount: (acc.total_amount || 0) + cur.total_amount,
+                    total_amount: (user?.user_type === "ADMIN" ? acc.total_dealer_amount || 0 : acc.total_amount || 0) + (user?.user_type === "ADMIN" ? cur.total_dealer_amount || 0 : cur.total_amount || 0),
+                    total_dealer_amount: (user?.user_type === "ADMIN" ? acc.total_dealer_amount || 0 : acc.total_amount || 0) + (user?.user_type === "ADMIN" ? cur.total_dealer_amount || 0 : cur.total_amount || 0),
                     total_winning_prize: (acc.total_winning_prize || 0) + cur.total_winning_prize,
                     total_win: (acc.total_win || 0) + (cur.total_win || 0),
                   }),
@@ -281,7 +288,17 @@ const DailyReport = () => {
           mode="date"
           display={Platform.OS === "android" ? "default" : "spinner"}
           onChange={(_e, d) => {
-            if (d) setFromDate(d);
+            // Fix: On Android, the selected date is in UTC, so adjust to local date
+            if (d) {
+              const selectedDate = new Date(d);
+              // If on Android, adjust for timezone offset
+              if (Platform.OS === "android") {
+                selectedDate.setMinutes(selectedDate.getMinutes() + selectedDate.getTimezoneOffset());
+              }
+              console.log("selectedDate", selectedDate);
+              
+              setFromDate(selectedDate);
+            }
             setShowFromPicker(false);
           }}
         />
@@ -292,7 +309,16 @@ const DailyReport = () => {
           mode="date"
           display={Platform.OS === "android" ? "default" : "spinner"}
           onChange={(_e, d) => {
-            if (d) setToDate(d);
+            if (d) {
+              const selectedDate = new Date(d);
+              // If on Android, adjust for timezone offset
+              if (Platform.OS === "android") {
+                selectedDate.setMinutes(selectedDate.getMinutes() + selectedDate.getTimezoneOffset());
+              }
+              console.log("selectedDate To", selectedDate);
+              
+              setToDate(selectedDate);
+            }
             setShowToPicker(false);
           }}
         />

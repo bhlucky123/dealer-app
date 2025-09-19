@@ -15,10 +15,10 @@ export const amountHandler = (num: number): string => {
     // Use Math.floor to avoid rounding up to next unit
     if (num >= 10000000) {
         const val = Math.floor((num * 100) / 10000000) / 100; // 2 decimal places, no rounding up
-        return `${val}${val % 1 === 0 ? "" : ""} Cr`;
+        return `${val.toFixed(2)} Cr`;
     } else if (num >= 100000) {
         const val = Math.floor((num * 100) / 100000) / 100; // 2 decimal places, no rounding up
-        return `${val}${val % 1 === 0 ? "" : ""} L`;
+        return `${val.toFixed(2)} L`;
     } else if (num >= 1000) {
         // Add comma for thousands (Indian style: 12,345)
         return num.toLocaleString("en-IN");
