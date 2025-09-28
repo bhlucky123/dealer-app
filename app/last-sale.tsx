@@ -305,7 +305,7 @@ const LastSaleReportScreen = () => {
             closeActionMenu();
             Alert.alert(
                 "Delete Booking Detail",
-                "Are you sure you want to delete this booking detail?",
+                `Are you sure you want to delete booking "${actionMenuDetail.id}" detail?`,
                 [
                     { text: "Cancel", style: "cancel" },
                     {
@@ -470,8 +470,8 @@ const LastSaleReportScreen = () => {
                                             <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{amountHandler(Number(item.customer_amount))}</Text>
                                             <Text className="flex-[0.1] text-sm text-right text-emerald-700 font-semibold"></Text>
                                             {/* Booking delete button */}
-                                            {
-                                                user?.user_type !== "ADMIN" &&
+                                            {/* {
+                                                user?.user_type !== "ADMIN" && */}
                                                 <View className="w-4 items-end">
                                                     <Pressable
                                                         onPress={() => openDeleteBookingModal(item)}
@@ -480,7 +480,7 @@ const LastSaleReportScreen = () => {
                                                         <Ionicons name="trash-outline" size={17} color="#ef4444" />
                                                     </Pressable>
                                                 </View>
-                                            }
+                                            {/* } */}
                                         </View>
 
                                         {fullView && Array.isArray(item.booking_details) && item.booking_details.length > 0 && (
@@ -499,16 +499,16 @@ const LastSaleReportScreen = () => {
                                                         <Text className="flex-1 text-[10px] text-right text-violet-600">₹{amountHandler(Number(user?.user_type === 'AGENT' ? d.agent_amount : d.dealer_amount))}</Text>
                                                         <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{amountHandler(Number(d.customer_amount))}</Text>
                                                         {/* 3-dot action menu */}
-                                                        {
-                                                            user?.user_type !== "ADMIN" &&
-                                                            <View className="ms-2 ">
-                                                                <Pressable
-                                                                    onPress={(e) => openActionMenu(d, e)}
-                                                                >
-                                                                    <Entypo name="dots-three-vertical" size={16} color="#7c3aed" />
-                                                                </Pressable>
-                                                            </View>
-                                                        }
+                                                        {/* {
+                                                            user?.user_type !== "ADMIN" && */}
+                                                        <View className="ms-2 ">
+                                                            <Pressable
+                                                                onPress={(e) => openActionMenu(d, e)}
+                                                            >
+                                                                <Entypo name="dots-three-vertical" size={16} color="#7c3aed" />
+                                                            </Pressable>
+                                                        </View>
+                                                        {/* } */}
                                                     </View>
                                                 )}
                                                 initialNumToRender={5}
@@ -581,19 +581,27 @@ const LastSaleReportScreen = () => {
                                 shadowOffset: { width: 0, height: 2 },
                             }}
                         >
-                            <TouchableOpacity
-                                onPress={handleActionEdit}
-                                style={{
-                                    flexDirection: "row",
-                                    alignItems: "center",
-                                    paddingVertical: 12,
-                                    paddingHorizontal: 20,
-                                }}
-                            >
-                                <Ionicons name="create-outline" size={18} color="#7c3aed" style={{ marginRight: 10 }} />
-                                <Text style={{ fontSize: 16, color: "#222" }}>Edit</Text>
-                            </TouchableOpacity>
-                            <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 10 }} />
+                            {
+                                user?.user_type !== "ADMIN" && (
+                                    <TouchableOpacity
+                                        onPress={handleActionEdit}
+                                        style={{
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            paddingVertical: 12,
+                                            paddingHorizontal: 20,
+                                        }}
+                                    >
+                                        <Ionicons name="create-outline" size={18} color="#7c3aed" style={{ marginRight: 10 }} />
+                                        <Text style={{ fontSize: 16, color: "#222" }}>Edit</Text>
+                                    </TouchableOpacity>
+                                )
+                            }
+                            {
+                                user?.user_type !== "ADMIN" && (
+                                    <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 10 }} />
+                                )
+                            }
                             <TouchableOpacity
                                 onPress={handleActionDelete}
                                 style={{
@@ -623,7 +631,7 @@ const LastSaleReportScreen = () => {
                                 Delete Booking
                             </Text>
                             <Text className="text-base text-gray-700 mb-6 text-center">
-                                Are you sure you want to delete this booking? This will remove all booking details under this bill.
+                                Are you sure you want to delete booking "<Text style={{ color: "#ef4444", fontWeight: "bold" }}>{deleteBookingItem?.bill_number}</Text>" ? This will remove all booking details under this bill.
                             </Text>
                             <View className="flex-row justify-between mt-4">
                                 <TouchableOpacity

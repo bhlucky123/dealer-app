@@ -119,11 +119,12 @@ const SalesReportScreen = () => {
     const buildQuery = useCallback((offset = 0, limit = PAGE_SIZE) => {
         const params: Record<string, string> = {};
 
-        console.log("fromDate", fromDate);
-        console.log("toDate", toDate);
+        // console.log("fromDate", fromDate);
+        // console.log("toDate", toDate);
 
         if (fromDate) params["date_time__gte"] = fromDate.toISOString();
         if (toDate) params["date_time__lte"] = toDate.toISOString();
+        params["offset"] = String(offset);
         if (fullView) params["full_view"] = "true";
         if (search) params["search"] = search;
         if (selectedDraw?.id && !allGame) params["draw_session__draw__id"] = String(selectedDraw.id);
@@ -134,13 +135,17 @@ const SalesReportScreen = () => {
         if (user?.user_type === "DEALER" && selectedFilter) {
             params["booked_agent__id"] = selectedFilter;
         }
-        params["offset"] = String(offset);
         params["limit"] = String(limit);
 
         return Object.keys(params)
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
             .join("&");
     }, [fromDate, toDate, selectedDraw, allGame, user?.user_type, selectedFilter, fullView, search]);
+
+    const query = buildQuery();
+
+    console.log("query", query);
+
 
     // Store all loaded pages' data
     const [allData, setAllData] = useState<any[]>([]);
@@ -178,13 +183,18 @@ const SalesReportScreen = () => {
         refetch,
         isFetching,
     } = useQuery({
-        queryKey: ["/draw-booking/sales-report/", buildQuery(page * PAGE_SIZE, PAGE_SIZE)],
+        queryKey: ["/draw-booking/sales-report/", buildQuery()],
         queryFn: async () => {
-            const res = await api.get(`/draw-booking/sales-report/?${buildQuery(page * PAGE_SIZE, PAGE_SIZE)}`);
+            const res = await api.get(`/draw-booking/sales-report/?${buildQuery()}`);
             return res.data;
         },
         enabled: !!selectedDraw?.id,
+        // Prevent showing loading indicator when fetching more
+        keepPreviousData: true,
     });
+
+    // console.log("data", data);
+
 
     // Handle query result side effects (mimic onSuccess)
     useMemo(() => {
@@ -197,10 +207,10 @@ const SalesReportScreen = () => {
             // On subsequent pages, merge new data and ensure uniqueness by key
             setAllData((prev) => {
                 const prevMap = new Map<string, any>();
-                prev.forEach(item => {
+                prev.forEach((item: any) => {
                     prevMap.set(getBillKey(item), item);
                 });
-                (data.results?.data || []).forEach(item => {
+                (data.results?.data || []).forEach((item: any) => {
                     prevMap.set(getBillKey(item), item); // This will overwrite duplicates
                 });
                 return Array.from(prevMap.values());
@@ -240,10 +250,10 @@ const SalesReportScreen = () => {
             setAllData(prev => {
                 // Use a Map to ensure uniqueness by getBillKey
                 const prevMap = new Map<string, any>();
-                prev.forEach(item => {
+                prev.forEach((item: any) => {
                     prevMap.set(getBillKey(item), item);
                 });
-                newData.forEach(item => {
+                newData.forEach((item: any) => {
                     prevMap.set(getBillKey(item), item); // Overwrite if duplicate key
                 });
                 return Array.from(prevMap.values());
@@ -512,7 +522,7 @@ const SalesReportScreen = () => {
                                 valueField="value"
                                 value={selectedFilter}
                                 onChange={item => {
-                                    console.log("val", item);
+                                    // console.log("val", item);
                                     setSelectedFilter(item.value)
                                 }}
                                 placeholder="Select Dealer"
@@ -566,7 +576,7 @@ const SalesReportScreen = () => {
                                 valueField="value"
                                 value={selectedFilter}
                                 onChange={item => {
-                                    console.log("val", item);
+                                    // console.log("val", item);
                                     setSelectedFilter(item.value)
                                 }}
                                 placeholder="Select Agent"
@@ -632,7 +642,12 @@ const SalesReportScreen = () => {
                             <Text className="text-sm text-gray-700 font-medium mr-2">Full View</Text>
                             <Switch
                                 value={fullView}
-                                onValueChange={setFullView}
+                                onValueChange={(val)=> {
+                                    if(val){
+                                        setPage(0)
+                                    }
+                                    setFullView(val)
+                                }}
                                 trackColor={{ false: "#e5e7eb", true: "#a78bfa" }}
                                 thumbColor={fullView ? "#7c3aed" : "#f4f3f4"}
                                 ios_backgroundColor="#e5e7eb"
@@ -660,7 +675,7 @@ const SalesReportScreen = () => {
                             No draw selected. Please choose one.
                         </Text>
                     </View>
-                ) : isLoading ? (
+                ) : (isLoading && !isFetchingMore) ? (
                     <View className="flex-1 justify-center items-center">
                         <ActivityIndicator size="large" color="#7c3aed" />
                         <Text className="mt-3 text-gray-600">Loading sales data...</Text>
@@ -766,6 +781,7 @@ const SalesReportScreen = () => {
                                 // Remove infinite scroll
                                 // onEndReached={handleLoadMore}
                                 // onEndReachedThreshold={0.5}
+                                
                                 ListFooterComponent={
                                     <>
                                         {isFetchingMore && (

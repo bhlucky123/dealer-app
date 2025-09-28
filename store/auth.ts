@@ -9,6 +9,7 @@ interface User {
   commission: number;
   single_digit_number_commission: number;
   cap_amount: number;
+  superuser?: boolean
 }
 
 interface AuthState {
@@ -111,6 +112,7 @@ export const useAuthStore = create<AuthState>((set) => {
           user: {
             id: data.user_details?.user_id,
             user_type: config.userType,
+            superuser: data?.user_details?.superuser || false,
             ...data?.user_details
           },
           token: data.access,
