@@ -384,6 +384,9 @@ export default function MoreTab() {
   const [prizeConfigForm, setPrizeConfigForm] = useState<PrizeConfig | null>(null);
   const [prizeConfigError, setPrizeConfigError] = useState<string | null>(null);
 
+  // --- New: Per-field error state for dealer prize config ---
+  const [dealerPrizeFieldErrors, setDealerPrizeFieldErrors] = useState<Partial<Record<keyof PrizeConfig, string>>>({});
+
   // --- Refresh state for pull-to-refresh ---
   const [refreshing, setRefreshing] = useState(false);
 
@@ -461,13 +464,25 @@ export default function MoreTab() {
     onSuccess: () => {
       setIsEditingPrizeConfig(false);
       setPrizeConfigError(null);
+      setDealerPrizeFieldErrors({});
       refetchDealerPrizeConfig();
       ToastAndroid.show("Prize configuration updated", ToastAndroid.SHORT);
     },
-    onError: (err) =>{
-      console.log("Failed to update prize configuration");
-      console.log(err);
-      setPrizeConfigError("Failed to update prize configuration")},
+    onError: (err: any) => {
+      // If error is a field error dict, set per-field errors
+      if (err?.message && typeof err.message === "object") {
+        const fieldErrors: Partial<Record<keyof PrizeConfig, string>> = {};
+        for (const key in err.message) {
+          if (Object.prototype.hasOwnProperty.call(err.message, key)) {
+            fieldErrors[key as keyof PrizeConfig] = err.message[key];
+          }
+        }
+        setDealerPrizeFieldErrors(fieldErrors);
+        setPrizeConfigError("Please correct the errors above.");
+      } else {
+        setPrizeConfigError("Failed to update prize configuration");
+      }
+    },
   });
 
   // --- Bank Details Query ---
@@ -783,9 +798,16 @@ export default function MoreTab() {
                 <TextInput
                   value={prizeConfigForm[key]?.toString() ?? ""}
                   onChangeText={(val) => {
+                    // Remove non-numeric characters
+                    const numericVal = val.replace(/[^0-9]/g, "");
                     setPrizeConfigForm((prev) =>
-                      prev ? { ...prev, [key]: Number(val.replace(/[^0-9]/g, "")) } : prev
+                      prev ? { ...prev, [key]: Number(numericVal) } : prev
                     );
+                    // Clear error for this field on change
+                    setDealerPrizeFieldErrors((prev) => {
+                      const { [key]: omit, ...rest } = prev;
+                      return rest;
+                    });
                   }}
                   keyboardType="numeric"
                   style={{
@@ -800,6 +822,11 @@ export default function MoreTab() {
                   placeholder={`Enter ${label}`}
                   placeholderTextColor="#9ca3af"
                 />
+                {dealerPrizeFieldErrors[key] && (
+                  <Text style={{ color: "#dc2626", fontSize: 13, marginTop: 4 }}>
+                    {dealerPrizeFieldErrors[key]}
+                  </Text>
+                )}
               </View>
             ))}
             {prizeConfigError && (
@@ -814,6 +841,7 @@ export default function MoreTab() {
                   borderRadius: 8,
                 }}
                 onPress={() => {
+                  // Validate all fields
                   if (
                     !prizeConfigForm ||
                     PRIZE_CONFIG_FIELDS.some(
@@ -826,9 +854,10 @@ export default function MoreTab() {
                     setPrizeConfigError("All fields are required and must be numbers");
                     return;
                   }
+
                   setPrizeConfigError(null);
-                  console.log("prizeConfigForm", prizeConfigForm);
-                  
+                  setDealerPrizeFieldErrors({}); // Clear previous errors
+
                   dealerPrizeConfigMutation(prizeConfigForm);
                 }}
                 activeOpacity={0.85}
@@ -850,6 +879,7 @@ export default function MoreTab() {
                 onPress={() => {
                   setIsEditingPrizeConfig(false);
                   setPrizeConfigError(null);
+                  setDealerPrizeFieldErrors({});
                 }}
                 activeOpacity={0.85}
                 disabled={isDealerPrizeConfigSaving}
@@ -894,6 +924,7 @@ export default function MoreTab() {
                   setIsEditingPrizeConfig(true);
                   setPrizeConfigForm(dealerPrizeConfig);
                   setPrizeConfigError(null);
+                  setDealerPrizeFieldErrors({});
                 }}
                 activeOpacity={0.85}
               >
