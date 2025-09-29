@@ -11,7 +11,6 @@ import { useCallback, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
-    Platform,
     Switch,
     Text,
     TextInput,
@@ -24,19 +23,23 @@ import { Agent } from "./(tabs)/agent";
 
 const PAGE_SIZE = 10;
 
+// Always use local time for today (midnight)
 const getToday = () => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 };
 
-const getTommorow = () => {
+// Tomorrow at midnight (start of next day)
+const getTomorrow = () => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 };
 
+// Format date as DD/MM/YYYY in local time
 const formatDateDDMMYYYY = (date?: Date | null) => {
     if (!date) return "";
-    const d = new Date(date);
+    // Use local time
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const day = String(d.getDate()).padStart(2, "0");
     const month = String(d.getMonth() + 1).padStart(2, "0");
     const year = d.getFullYear();
@@ -46,7 +49,8 @@ const formatDateDDMMYYYY = (date?: Date | null) => {
 // Helper for filename: format as YYYYMMDD
 const formatDateYYYYMMDD = (date?: Date | null) => {
     if (!date) return "";
-    const d = new Date(date);
+    // Use local time
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
@@ -54,7 +58,6 @@ const formatDateYYYYMMDD = (date?: Date | null) => {
 };
 
 // Helper to get a unique key for a bill (for FlatList)
-// Ensures uniqueness by using both id and bill_number if available, else falls back to a composite key
 const getBillKey = (item: any) => {
     if (item.id !== undefined && item.id !== null && item.bill_number !== undefined && item.bill_number !== null) {
         return `id_${item.id}_bill_${item.bill_number}`;
@@ -83,8 +86,9 @@ const getBookingDetailKey = (d: any, parentBill: any, idx: number) => {
 const SalesReportScreen = () => {
     const { selectedDraw } = useDrawStore();
     const [search, setSearch] = useState("");
+    // Use local time for initial dates
     const [fromDate, setFromDate] = useState<Date | null>(getToday());
-    const [toDate, setToDate] = useState<Date | null>(getTommorow());
+    const [toDate, setToDate] = useState<Date | null>(getTomorrow());
     const [showFromPicker, setShowFromPicker] = useState(false);
     const [showToPicker, setShowToPicker] = useState(false);
     const [fullView, setFullView] = useState(false);
@@ -119,11 +123,23 @@ const SalesReportScreen = () => {
     const buildQuery = useCallback((offset = 0, limit = PAGE_SIZE) => {
         const params: Record<string, string> = {};
 
-        // console.log("fromDate", fromDate);
-        // console.log("toDate", toDate);
-
-        if (fromDate) params["date_time__gte"] = fromDate.toISOString();
-        if (toDate) params["date_time__lte"] = toDate.toISOString();
+        // Always use local time for date filters, and set time to start/end of day
+        if (fromDate) {
+            // Format as yyyy/mm/dd
+            const year = fromDate.getFullYear();
+            const month = String(fromDate.getMonth() + 1).padStart(2, "0");
+            const day = String(fromDate.getDate()).padStart(2, "0");
+            params["date_time__gte"] = `${year}-${month}-${day}`;
+        }
+        if (toDate) {
+            // Format as yyyy/mm/dd
+            const year = toDate.getFullYear();
+            const month = String(toDate.getMonth() + 1).padStart(2, "0");
+            const day = String(toDate.getDate()).padStart(2, "0");
+            params["date_time__lte"] = `${year}-${month}-${day}`;
+        }
+        console.log("params",params);
+        
         params["offset"] = String(offset);
         if (fullView) params["full_view"] = "true";
         if (search) params["search"] = search;
@@ -143,9 +159,6 @@ const SalesReportScreen = () => {
     }, [fromDate, toDate, selectedDraw, allGame, user?.user_type, selectedFilter, fullView, search]);
 
     const query = buildQuery();
-
-    console.log("query", query);
-
 
     // Store all loaded pages' data
     const [allData, setAllData] = useState<any[]>([]);
@@ -193,25 +206,19 @@ const SalesReportScreen = () => {
         keepPreviousData: true,
     });
 
-    // console.log("data", data);
-
-
     // Handle query result side effects (mimic onSuccess)
     useMemo(() => {
-
         if (!data) return;
         if (page === 0) {
-            // On first page, just set the data
             setAllData(data.results?.data || []);
         } else {
-            // On subsequent pages, merge new data and ensure uniqueness by key
             setAllData((prev) => {
                 const prevMap = new Map<string, any>();
                 prev.forEach((item: any) => {
                     prevMap.set(getBillKey(item), item);
                 });
                 (data.results?.data || []).forEach((item: any) => {
-                    prevMap.set(getBillKey(item), item); // This will overwrite duplicates
+                    prevMap.set(getBillKey(item), item);
                 });
                 return Array.from(prevMap.values());
             });
@@ -223,15 +230,6 @@ const SalesReportScreen = () => {
         setTotalCustomerAmount(data.results?.total_customer_amount ?? data.total_customer_amount ?? 0);
         // eslint-disable-next-line
     }, [data]);
-
-    // FlatList data: always use allData, but apply search filter on client
-    // const filteredResult = useMemo(() => {
-    //     if (!allData || allData.length === 0) return [];
-    //     if (!search) return allData;
-    //     return allData.filter((item: any) =>
-    //         item.bill_number?.toString().toLowerCase().includes(search.toLowerCase())
-    //     );
-    // }, [allData, search]);
 
     const filteredResult = allData;
 
@@ -248,13 +246,12 @@ const SalesReportScreen = () => {
             const newData = res.data.results?.data || [];
 
             setAllData(prev => {
-                // Use a Map to ensure uniqueness by getBillKey
                 const prevMap = new Map<string, any>();
                 prev.forEach((item: any) => {
                     prevMap.set(getBillKey(item), item);
                 });
                 newData.forEach((item: any) => {
-                    prevMap.set(getBillKey(item), item); // Overwrite if duplicate key
+                    prevMap.set(getBillKey(item), item);
                 });
                 return Array.from(prevMap.values());
             });
@@ -272,12 +269,18 @@ const SalesReportScreen = () => {
         }
     };
 
-
+    // For PDF, use same local time logic for date filters
     const printBuildQuery = useCallback(() => {
         const params: Record<string, string> = {};
 
-        if (fromDate) params["date_time__gte"] = fromDate.toISOString();
-        if (toDate) params["date_time__lte"] = toDate.toISOString();
+        if (fromDate) {
+            const d = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate(), 0, 0, 0, 0);
+            params["date_time__gte"] = d.toISOString();
+        }
+        if (toDate) {
+            const d = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 23, 59, 59, 999);
+            params["date_time__lte"] = d.toISOString();
+        }
         params["full_view"] = "true";
         if (selectedDraw?.id) params["draw_session__draw__id"] = String(selectedDraw.id);
 
@@ -292,6 +295,7 @@ const SalesReportScreen = () => {
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
             .join("&");
     }, [fromDate, toDate, selectedDraw, user?.user_type, selectedFilter]);
+
     // PDF generation: use allData (all loaded pages) if no search, else filteredResult
     const generatePdf = async () => {
         setPrinting(true);
@@ -299,15 +303,7 @@ const SalesReportScreen = () => {
             const query = printBuildQuery();
             const res = await api.get(`/draw-booking/sales-report/?${query}`);
             let allResults = res.data.results?.data || [];
-
-            // If search is applied, filter client-side
             let pdfData = allResults;
-
-            // if (search) {
-            //     pdfData = allResults.filter((item: any) =>
-            //         item.bill_number?.toString().toLowerCase().includes(search.toLowerCase())
-            //     );
-            // }
 
             if (!pdfData || pdfData.length === 0) {
                 alert("No data available to generate PDF.");
@@ -315,7 +311,6 @@ const SalesReportScreen = () => {
                 return;
             }
 
-            // Generate table rows from the data
             const tableRows = pdfData.flatMap((bill: any) =>
                 bill.booking_details ? bill.booking_details.map((detail: any) => `
                     <tr>
@@ -331,7 +326,6 @@ const SalesReportScreen = () => {
                 `).join('') : ''
             ).join('');
 
-            // Calculate total amount from the fetched data
             const totalAmount = res?.data?.results?.total_customer_amount || 0
 
             const now = new Date();
@@ -522,7 +516,6 @@ const SalesReportScreen = () => {
                                 valueField="value"
                                 value={selectedFilter}
                                 onChange={item => {
-                                    // console.log("val", item);
                                     setSelectedFilter(item.value)
                                 }}
                                 placeholder="Select Dealer"
@@ -576,7 +569,6 @@ const SalesReportScreen = () => {
                                 valueField="value"
                                 value={selectedFilter}
                                 onChange={item => {
-                                    // console.log("val", item);
                                     setSelectedFilter(item.value)
                                 }}
                                 placeholder="Select Agent"
@@ -806,7 +798,6 @@ const SalesReportScreen = () => {
                                 refreshing={isFetching}
                                 onRefresh={() => {
                                     setPage(0);
-                                    // setAllData([]);
                                     refetch();
                                 }}
                             />
@@ -839,11 +830,8 @@ const SalesReportScreen = () => {
                         value={fromDate || getToday()}
                         onChange={(event, date) => {
                             if (date) {
-                                const selectedDate = new Date(date);
-                                // If on Android, adjust for timezone offset
-                                if (Platform.OS === "android") {
-                                    selectedDate.setMinutes(selectedDate.getMinutes() + selectedDate.getTimezoneOffset());
-                                }
+                                // Always use local time, ignore timezone offset
+                                const selectedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
                                 setFromDate(selectedDate);
                             }
                             setShowFromPicker(false);
@@ -853,14 +841,11 @@ const SalesReportScreen = () => {
                 {showToPicker && (
                     <DateTimePicker
                         mode="date"
-                        value={toDate || getToday()}
+                        value={toDate || getTomorrow()}
                         onChange={(event, date) => {
                             if (date) {
-                                const selectedDate = new Date(date);
-                                // If on Android, adjust for timezone offset
-                                if (Platform.OS === "android") {
-                                    selectedDate.setMinutes(selectedDate.getMinutes() + selectedDate.getTimezoneOffset());
-                                }
+                                // Always use local time, ignore timezone offset
+                                const selectedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
                                 setToDate(selectedDate);
                             }
                             setShowToPicker(false);
