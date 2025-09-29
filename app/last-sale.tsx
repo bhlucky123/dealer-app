@@ -470,8 +470,8 @@ const LastSaleReportScreen = () => {
                                             <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{amountHandler(Number(item.customer_amount))}</Text>
                                             <Text className="flex-[0.1] text-sm text-right text-emerald-700 font-semibold"></Text>
                                             {/* Booking delete button */}
-                                            {/* {
-                                                user?.user_type !== "ADMIN" && */}
+                                            {
+                                                (user?.user_type !== "ADMIN" || user?.superuser) &&
                                                 <View className="w-4 items-end">
                                                     <Pressable
                                                         onPress={() => openDeleteBookingModal(item)}
@@ -480,7 +480,7 @@ const LastSaleReportScreen = () => {
                                                         <Ionicons name="trash-outline" size={17} color="#ef4444" />
                                                     </Pressable>
                                                 </View>
-                                            {/* } */}
+                                            }
                                         </View>
 
                                         {fullView && Array.isArray(item.booking_details) && item.booking_details.length > 0 && (
@@ -499,16 +499,16 @@ const LastSaleReportScreen = () => {
                                                         <Text className="flex-1 text-[10px] text-right text-violet-600">₹{amountHandler(Number(user?.user_type === 'AGENT' ? d.agent_amount : d.dealer_amount))}</Text>
                                                         <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{amountHandler(Number(d.customer_amount))}</Text>
                                                         {/* 3-dot action menu */}
-                                                        {/* {
-                                                            user?.user_type !== "ADMIN" && */}
-                                                        <View className="ms-2 ">
-                                                            <Pressable
-                                                                onPress={(e) => openActionMenu(d, e)}
-                                                            >
-                                                                <Entypo name="dots-three-vertical" size={16} color="#7c3aed" />
-                                                            </Pressable>
-                                                        </View>
-                                                        {/* } */}
+                                                        {
+                                                            (user?.user_type !== "ADMIN" || user?.superuser) &&
+                                                            <View className="ms-2 ">
+                                                                <Pressable
+                                                                    onPress={(e) => openActionMenu(d, e)}
+                                                                >
+                                                                    <Entypo name="dots-three-vertical" size={16} color="#7c3aed" />
+                                                                </Pressable>
+                                                            </View>
+                                                        }
                                                     </View>
                                                 )}
                                                 initialNumToRender={5}
