@@ -6,7 +6,7 @@ import { formatDateDDMMYYYY } from "@/utils/date";
 import { Entypo, Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -21,11 +21,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+// Helper for today/tomorrow
 const getToday = () => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 };
-
 const getTommorow = () => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -43,6 +43,29 @@ function getSubTypeOptions(number: string) {
         return ["A", "B", "C"];
     }
     return [];
+}
+
+// --- Optimized FlatList for FullView ---
+// We will flatten the data for FlatList when fullView is enabled
+function flattenData(data, fullView) {
+    if (!fullView || !Array.isArray(data)) return data || [];
+    // Each booking (bill) and its details become a single flat list
+    // We'll use a type field to distinguish between bill and detail
+    const flat = [];
+    data.forEach((bill, billIdx) => {
+        flat.push({ type: "bill", bill, key: `bill_${bill.bill_number ?? billIdx}` });
+        if (Array.isArray(bill.booking_details)) {
+            bill.booking_details.forEach((detail, detailIdx) => {
+                flat.push({
+                    type: "detail",
+                    detail,
+                    parentBill: bill,
+                    key: `bill_${bill.bill_number ?? billIdx}_detail_${detail.id ?? detailIdx}`,
+                });
+            });
+        }
+    });
+    return flat;
 }
 
 const LastSaleReportScreen = () => {
@@ -84,7 +107,6 @@ const LastSaleReportScreen = () => {
     const queryClient = useQueryClient();
     const buildQuery = () => {
         const params: Record<string, string> = {};
-
         const formatDateYYYYMMDD = (date: Date) => {
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -258,20 +280,16 @@ const LastSaleReportScreen = () => {
 
     // Handle delete booking (entire booking, not just detail)
     const handleDeleteBooking = async () => {
-
         if (!deleteBookingItem?.bill_number) return;
         setDeleteBookingLoading(true);
         try {
             await api.delete(`/draw-booking/delete/${deleteBookingItem.bill_number}/`);
-
-
             setDeleteBookingModalVisible(false);
             setDeleteBookingItem(null);
             setDeleteBookingLoading(false);
             queryClient.invalidateQueries({ queryKey: ["/draw-booking/sales-report/"] });
             refetch();
         } catch (err: any) {
-
             setDeleteBookingLoading(false);
             Alert.alert("Delete Failed", "Could not delete booking.");
         }
@@ -333,8 +351,6 @@ const LastSaleReportScreen = () => {
 
     // Open delete booking modal
     const openDeleteBookingModal = (booking: any) => {
-        console.log("booking", booking);
-
         setDeleteBookingItem(booking);
         setDeleteBookingModalVisible(true);
     };
@@ -360,6 +376,175 @@ const LastSaleReportScreen = () => {
     // --- Proper loading overlay while fetching data ---
     // Show a full-screen loading overlay when fetching data (not just initial load)
     const showLoadingOverlay = !!selectedDraw?.id && (isLoading || isFetching);
+
+    // --- Optimized FlatList data and renderItem ---
+    // Memoize the flattened data for fullView
+    const flatListData = useMemo(() => {
+        if (!fullView) return data?.results?.data || [];
+        return flattenData(data?.results?.data, fullView);
+    }, [data, fullView]);
+
+    // Memoize renderItem for FlatList
+    const renderItem = useCallback(
+        ({ item, index }) => {
+            // If not fullView, render as before (bill row)
+            if (!fullView) {
+                return (
+                    <View className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <View className="flex-row ps-3 pe-2 py-3 items-center border-b border-gray-100">
+                            <View className="flex-[1.1] flex-col justify-center">
+                                <Text className="text-[10px] text-gray-800 font-medium">{formatDateDDMMYYYY(new Date(item.date_time))}</Text>
+                                <Text className="text-[9px] text-gray-500 mt-0.5">
+                                    {new Date(item.date_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false, })}
+                                </Text>
+                            </View>
+                            {
+                                user?.user_type !== 'AGENT' && (
+                                    <View className="flex-[1.2]">
+                                        <Text
+                                            className="flex-[1.2] text-sm text-center text-gray-700"
+                                            numberOfLines={1}
+                                            ellipsizeMode="tail"
+                                            style={{ minWidth: 0 }}
+                                        >
+                                            {item?.booked_by?.username}
+                                        </Text>
+                                        {item?.booked_by?.user_type && (
+                                            <Text
+                                                className="text-xs text-center text-green-600"
+                                                numberOfLines={1}
+                                                ellipsizeMode="tail"
+                                                style={{ minWidth: 0 }}
+                                            >
+                                                {item.booked_by.user_type}
+                                            </Text>
+                                        )}
+                                    </View>
+                                )
+                            }
+                            <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_number}</Text>
+                            <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_count}</Text>
+                            <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{amountHandler(Number(user?.user_type === 'AGENT' ? item.agent_amount : item.dealer_amount))}</Text>
+                            <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{amountHandler(Number(item.customer_amount))}</Text>
+                            <Text className="flex-[0.1] text-sm text-right text-emerald-700 font-semibold"></Text>
+                            {/* Booking delete button */}
+                            {
+                                (user?.user_type !== "ADMIN" || user?.superuser) &&
+                                <View className="w-4 items-end">
+                                    <Pressable
+                                        onPress={() => openDeleteBookingModal(item)}
+                                        hitSlop={10}
+                                    >
+                                        <Ionicons name="trash-outline" size={17} color="#ef4444" />
+                                    </Pressable>
+                                </View>
+                            }
+                        </View>
+                        {/* Show booking_details as sublist if fullView is off (legacy, but not needed) */}
+                    </View>
+                );
+            }
+
+            // --- fullView: render bill or detail row in a single FlatList ---
+            if (item.type === "bill") {
+                const bill = item.bill;
+                const idx = index;
+                return (
+                    <View className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <View className="flex-row ps-3 pe-2 py-3 items-center border-b border-gray-100">
+                            <View className="flex-[1.1] flex-col justify-center">
+                                <Text className="text-[10px] text-gray-800 font-medium">{formatDateDDMMYYYY(new Date(bill.date_time))}</Text>
+                                <Text className="text-[9px] text-gray-500 mt-0.5">
+                                    {new Date(bill.date_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false, })}
+                                </Text>
+                            </View>
+                            {
+                                user?.user_type !== 'AGENT' && (
+                                    <View className="flex-[1.2]">
+                                        <Text
+                                            className="flex-[1.2] text-sm text-center text-gray-700"
+                                            numberOfLines={1}
+                                            ellipsizeMode="tail"
+                                            style={{ minWidth: 0 }}
+                                        >
+                                            {bill?.booked_by?.username}
+                                        </Text>
+                                        {bill?.booked_by?.user_type && (
+                                            <Text
+                                                className="text-xs text-center text-green-600"
+                                                numberOfLines={1}
+                                                ellipsizeMode="tail"
+                                                style={{ minWidth: 0 }}
+                                            >
+                                                {bill.booked_by.user_type}
+                                            </Text>
+                                        )}
+                                    </View>
+                                )
+                            }
+                            <Text className="flex-1 text-sm text-center text-gray-700">{bill.bill_number}</Text>
+                            <Text className="flex-1 text-sm text-center text-gray-700">{bill.bill_count}</Text>
+                            <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{amountHandler(Number(user?.user_type === 'AGENT' ? bill.agent_amount : bill.dealer_amount))}</Text>
+                            <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{amountHandler(Number(bill.customer_amount))}</Text>
+                            <Text className="flex-[0.1] text-sm text-right text-emerald-700 font-semibold"></Text>
+                            {/* Booking delete button */}
+                            {
+                                (user?.user_type !== "ADMIN" || user?.superuser) &&
+                                <View className="w-4 items-end">
+                                    <Pressable
+                                        onPress={() => openDeleteBookingModal(bill)}
+                                        hitSlop={10}
+                                    >
+                                        <Ionicons name="trash-outline" size={17} color="#ef4444" />
+                                    </Pressable>
+                                </View>
+                            }
+                        </View>
+                    </View>
+                );
+            } else if (item.type === "detail") {
+                const d = item.detail;
+                const parentBill = item.parentBill;
+                return (
+                    <View className={`flex-row ps-3 py-2 ${user?.user_type === "ADMIN" && 'pe-3'}  bg-amber-50/20 border-b border-amber-100 last:border-b-0 items-center`}>
+                        {
+                            user?.user_type !== 'AGENT' &&
+                            <Text className="flex-[1.2] text-[10px] text-center text-gray-600"></Text>
+                        }
+                        <Text className="flex-[1.1] text-[10px] text-gray-600">{d.sub_type} {d.number}</Text>
+                        <Text className="flex-1 text-[10px] text-center text-gray-600">₹{amountHandler(Number(d.amount))}</Text>
+                        <Text className="flex-1 text-[10px] text-center text-gray-600">{d.count}</Text>
+                        <Text className="flex-1 text-[10px] text-right text-violet-600">₹{amountHandler(Number(user?.user_type === 'AGENT' ? d.agent_amount : d.dealer_amount))}</Text>
+                        <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{amountHandler(Number(d.customer_amount))}</Text>
+                        {/* 3-dot action menu */}
+                        {
+                            (user?.user_type !== "ADMIN" || user?.superuser) &&
+                            <View className="ms-2 ">
+                                <Pressable
+                                    onPress={(e) => openActionMenu(d, e)}
+                                >
+                                    <Entypo name="dots-three-vertical" size={16} color="#7c3aed" />
+                                </Pressable>
+                            </View>
+                        }
+                    </View>
+                );
+            }
+            return null;
+        },
+        [fullView, user, openDeleteBookingModal, openActionMenu, amountHandler]
+    );
+
+    // Memoize keyExtractor for FlatList
+    const keyExtractor = useCallback(
+        (item, index) => {
+            if (fullView) {
+                return item.key || index.toString();
+            }
+            return item?.bill_number?.toString() || index?.toString();
+        },
+        [fullView]
+    );
 
     return (
         <SafeAreaView className="flex-1 bg-white">
@@ -414,8 +599,8 @@ const LastSaleReportScreen = () => {
                     <>
                         <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden">
                             <FlatList
-                                data={data?.results?.data || []}
-                                keyExtractor={(item, index) => item?.bill_number?.toString() || index?.toString()}
+                                data={flatListData}
+                                keyExtractor={keyExtractor}
                                 ListHeaderComponent={() => (
                                     <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
                                         <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">Date</Text>
@@ -431,95 +616,7 @@ const LastSaleReportScreen = () => {
                                         <Text className="w-1 text-xs font-semibold text-right text-gray-600 uppercase"></Text>
                                     </View>
                                 )}
-                                renderItem={({ item, index }) => (
-                                    <View className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                                        <View className="flex-row ps-3 pe-2 py-3 items-center border-b border-gray-100">
-                                            <View className="flex-[1.1] flex-col justify-center">
-                                                <Text className="text-[10px] text-gray-800 font-medium">{formatDateDDMMYYYY(new Date(item.date_time))}</Text>
-                                                <Text className="text-[9px] text-gray-500 mt-0.5">
-                                                    {new Date(item.date_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false, })}
-                                                </Text>
-                                            </View>
-                                            {
-                                                user?.user_type !== 'AGENT' && (
-                                                    <View className="flex-[1.2]">
-                                                        <Text
-                                                            className="flex-[1.2] text-sm text-center text-gray-700"
-                                                            numberOfLines={1}
-                                                            ellipsizeMode="tail"
-                                                            style={{ minWidth: 0 }}
-                                                        >
-                                                            {item?.booked_by?.username}
-                                                        </Text>
-                                                        {item?.booked_by?.user_type && (
-                                                            <Text
-                                                                className="text-xs text-center text-green-600"
-                                                                numberOfLines={1}
-                                                                ellipsizeMode="tail"
-                                                                style={{ minWidth: 0 }}
-                                                            >
-                                                                {item.booked_by.user_type}
-                                                            </Text>
-                                                        )}
-                                                    </View>
-                                                )
-                                            }
-                                            <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_number}</Text>
-                                            <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_count}</Text>
-                                            <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{amountHandler(Number(user?.user_type === 'AGENT' ? item.agent_amount : item.dealer_amount))}</Text>
-                                            <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{amountHandler(Number(item.customer_amount))}</Text>
-                                            <Text className="flex-[0.1] text-sm text-right text-emerald-700 font-semibold"></Text>
-                                            {/* Booking delete button */}
-                                            {
-                                                (user?.user_type !== "ADMIN" || user?.superuser) &&
-                                                <View className="w-4 items-end">
-                                                    <Pressable
-                                                        onPress={() => openDeleteBookingModal(item)}
-                                                        hitSlop={10}
-                                                    >
-                                                        <Ionicons name="trash-outline" size={17} color="#ef4444" />
-                                                    </Pressable>
-                                                </View>
-                                            }
-                                        </View>
-
-                                        {fullView && Array.isArray(item.booking_details) && item.booking_details.length > 0 && (
-                                            <FlatList
-                                                data={item?.booking_details || []}
-                                                keyExtractor={(d) => d.id?.toString?.() ?? Math.random().toString()}
-                                                renderItem={({ item: d }) => (
-                                                    <View className={`flex-row ps-3 py-2 ${user?.user_type === "ADMIN" && 'pe-3'}  bg-amber-50/20 border-b border-amber-100 last:border-b-0 items-center`}>
-                                                        {
-                                                            user?.user_type !== 'AGENT' &&
-                                                            <Text className="flex-[1.2] text-[10px] text-center text-gray-600"></Text>
-                                                        }
-                                                        <Text className="flex-[1.1] text-[10px] text-gray-600">{d.sub_type} {d.number}</Text>
-                                                        <Text className="flex-1 text-[10px] text-center text-gray-600">₹{amountHandler(Number(d.amount))}</Text>
-                                                        <Text className="flex-1 text-[10px] text-center text-gray-600">{d.count}</Text>
-                                                        <Text className="flex-1 text-[10px] text-right text-violet-600">₹{amountHandler(Number(user?.user_type === 'AGENT' ? d.agent_amount : d.dealer_amount))}</Text>
-                                                        <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{amountHandler(Number(d.customer_amount))}</Text>
-                                                        {/* 3-dot action menu */}
-                                                        {
-                                                            (user?.user_type !== "ADMIN" || user?.superuser) &&
-                                                            <View className="ms-2 ">
-                                                                <Pressable
-                                                                    onPress={(e) => openActionMenu(d, e)}
-                                                                >
-                                                                    <Entypo name="dots-three-vertical" size={16} color="#7c3aed" />
-                                                                </Pressable>
-                                                            </View>
-                                                        }
-                                                    </View>
-                                                )}
-                                                initialNumToRender={5}
-                                                maxToRenderPerBatch={10}
-                                                windowSize={5}
-                                                removeClippedSubviews={true}
-                                                scrollEnabled={false}
-                                            />
-                                        )}
-                                    </View>
-                                )}
+                                renderItem={renderItem}
                                 ListEmptyComponent={
                                     <View className="flex-1 justify-center items-center py-16">
                                         <Text className="text-gray-500 text-base">
@@ -527,6 +624,26 @@ const LastSaleReportScreen = () => {
                                         </Text>
                                     </View>
                                 }
+                                // --- Optimization props for large lists ---
+                                initialNumToRender={fullView ? 20 : 10}
+                                maxToRenderPerBatch={fullView ? 30 : 10}
+                                windowSize={fullView ? 15 : 5}
+                                removeClippedSubviews={true}
+                                getItemLayout={fullView
+                                    ? (data, index) => {
+                                        // Bill row: 56, detail row: 36 (approx)
+                                        // We'll estimate by type
+                                        const item = data[index];
+                                        const height = item?.type === "bill" ? 56 : 36;
+                                        let offset = 0;
+                                        for (let i = 0; i < index; i++) {
+                                            offset += data[i]?.type === "bill" ? 56 : 36;
+                                        }
+                                        return { length: height, offset, index };
+                                    }
+                                    : undefined
+                                }
+                                // scrollEnabled always true for FlatList
                             />
                         </View>
                     </>
