@@ -2,14 +2,16 @@ import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
+import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as FileSystem from 'expo-file-system';
 import { printToFileAsync } from 'expo-print';
 import { shareAsync } from "expo-sharing";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     FlatList,
     Switch,
     Text,
@@ -86,6 +88,7 @@ const getBookingDetailKey = (d: any, parentBill: any, idx: number) => {
 const SalesReportScreen = () => {
     const { selectedDraw } = useDrawStore();
     const [search, setSearch] = useState("");
+    const [debouncedSearch, setDebouncedSearch] = useState("");
     // Use local time for initial dates
     const [fromDate, setFromDate] = useState<Date | null>(getToday());
     const [toDate, setToDate] = useState<Date | null>(getTomorrow());
@@ -119,6 +122,12 @@ const SalesReportScreen = () => {
         initialData: user?.user_type === "ADMIN" ? cachedDealers : undefined,
     });
 
+    // Debounce search input
+    useEffect(() => {
+        const handle = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+        return () => clearTimeout(handle);
+    }, [search]);
+
     // Build query string for API
     const buildQuery = useCallback((offset = 0, limit = PAGE_SIZE) => {
         const params: Record<string, string> = {};
@@ -142,7 +151,7 @@ const SalesReportScreen = () => {
         
         params["offset"] = String(offset);
         if (fullView) params["full_view"] = "true";
-        if (search) params["search"] = search;
+        if (debouncedSearch) params["search"] = debouncedSearch;
         if (selectedDraw?.id && !allGame) params["draw_session__draw__id"] = String(selectedDraw.id);
 
         if (user?.user_type === "ADMIN" && selectedFilter) {
@@ -156,7 +165,7 @@ const SalesReportScreen = () => {
         return Object.keys(params)
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
             .join("&");
-    }, [fromDate, toDate, selectedDraw, allGame, user?.user_type, selectedFilter, fullView, search]);
+    }, [fromDate, toDate, selectedDraw, allGame, user?.user_type, selectedFilter, fullView, debouncedSearch]);
 
     const query = buildQuery();
 
@@ -181,7 +190,7 @@ const SalesReportScreen = () => {
 
     // Reset on filter change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const filterDeps = [fromDate, toDate, selectedDraw?.id, allGame, user?.user_type, selectedFilter];
+    const filterDeps = [fromDate, toDate, selectedDraw?.id, allGame, user?.user_type, selectedFilter, debouncedSearch];
     // Reset when any filter changes
     useMemo(() => {
         resetPagination();
@@ -195,15 +204,13 @@ const SalesReportScreen = () => {
         error,
         refetch,
         isFetching,
-    } = useQuery({
+    } = useQuery<any>({
         queryKey: ["/draw-booking/sales-report/", buildQuery()],
         queryFn: async () => {
             const res = await api.get(`/draw-booking/sales-report/?${buildQuery()}`);
             return res.data;
         },
         enabled: !!selectedDraw?.id,
-        // Prevent showing loading indicator when fetching more
-        keepPreviousData: true,
     });
 
     // Handle query result side effects (mimic onSuccess)
@@ -461,6 +468,68 @@ const SalesReportScreen = () => {
         }
     };
 
+    // Delete individual booking detail with confirmation
+    const handleDeleteBookingDetail = (detail: any, parentBill: any) => {
+        if (!detail?.id) return;
+        Alert.alert(
+            "Delete Booking Detail",
+            `Are you sure you want to delete booking detail with id "${detail.id}"?`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await api.delete(`/draw-booking/booking-detail-manage/${detail.id}/`);
+                            // Optimistically remove from local list
+                            setAllData(prev => prev.map((b: any) => {
+                                if ((parentBill?.bill_number && b.bill_number === parentBill.bill_number) || (parentBill?.id && b.id === parentBill.id)) {
+                                    const updatedDetails = (b.booking_details || []).filter((d: any) => d.id !== detail.id);
+                                    return { ...b, booking_details: updatedDetails };
+                                }
+                                return b;
+                            }));
+                            // Refresh server data to update totals
+                            queryClient.invalidateQueries({ queryKey: ["/draw-booking/sales-report/"] });
+                            refetch();
+                        } catch (err) {
+                            Alert.alert("Delete Failed", "Could not delete booking detail.");
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    // Delete a booking (entire bill) with confirmation
+    const handleDeleteBooking = (booking: any) => {
+        if (!booking?.bill_number) return;
+        Alert.alert(
+            "Delete Booking",
+            `Are you sure you want to delete booking "${booking.bill_number}"? This will remove all booking details under this bill.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await api.delete(`/draw-booking/delete/${booking.bill_number}/`);
+                            // Optimistically remove from local list
+                            setAllData(prev => prev.filter((b: any) => b.bill_number !== booking.bill_number));
+                            // Refresh server data
+                            queryClient.invalidateQueries({ queryKey: ["/draw-booking/sales-report/"] });
+                            refetch();
+                        } catch (err) {
+                            Alert.alert("Delete Failed", "Could not delete booking.");
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     // Determine if there are more items to load
     const hasMore = (page + 1) * PAGE_SIZE < totalCount;
 
@@ -697,6 +766,7 @@ const SalesReportScreen = () => {
                                         <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Cnt</Text>
                                         <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">{user?.user_type === 'AGENT' ? 'D. Amt' : 'Amt'}</Text>
                                         <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">C. Amt</Text>
+                                        <Text className="w-1 text-xs font-semibold text-right text-gray-600 uppercase"></Text>
                                     </View>
                                 )}
                                 renderItem={({ item, index }) => (
@@ -736,6 +806,15 @@ const SalesReportScreen = () => {
                                             <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_count}</Text>
                                             <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{amountHandler(Number(user?.user_type === 'AGENT' ? item.agent_amount : item.dealer_amount))}</Text>
                                             <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{amountHandler(Number(item.customer_amount))}</Text>
+                                            {
+                                                user?.superuser && (
+                                                    <View className="w-4 items-end">
+                                                        <TouchableOpacity onPress={() => handleDeleteBooking(item)} hitSlop={10}>
+                                                            <Ionicons name="trash-outline" size={17} color="#ef4444" />
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                )
+                                            }
                                         </View>
 
                                         {fullView && Array.isArray(item.booking_details) && item.booking_details.length > 0 && (
@@ -743,7 +822,7 @@ const SalesReportScreen = () => {
                                                 data={item?.booking_details || []}
                                                 keyExtractor={(d, idx) => getBookingDetailKey(d, item, idx)}
                                                 renderItem={({ item: d, index: dIdx }) => (
-                                                    <View className="flex-row px-4 py-2 bg-amber-50/20 border-b border-amber-100 last:border-b-0">
+                                                    <View className="flex-row px-4 py-2 bg-amber-50/20 border-b border-amber-100 last:border-b-0 items-center">
                                                         {
                                                             user?.user_type !== 'AGENT' &&
                                                             <Text className="flex-[1.2] text-[10px] text-center text-gray-600"></Text>
@@ -754,6 +833,15 @@ const SalesReportScreen = () => {
                                                         <Text className="flex-1 text-[10px] text-center text-gray-600">{d.count}</Text>
                                                         <Text className="flex-1 text-[10px] text-right text-violet-600">₹{amountHandler(Number(user?.user_type === 'AGENT' ? d.agent_amount : d.dealer_amount))}</Text>
                                                         <Text className="flex-1 text-[10px] text-right text-emerald-600">₹{amountHandler(Number(d.customer_amount))}</Text>
+                                                        {
+                                                            user?.superuser && (
+                                                                <View className="ms-2">
+                                                                    <TouchableOpacity onPress={() => handleDeleteBookingDetail(d, item)} hitSlop={10}>
+                                                                        <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                                                                    </TouchableOpacity>
+                                                                </View>
+                                                            )
+                                                        }
                                                     </View>
                                                 )}
                                                 initialNumToRender={5}
