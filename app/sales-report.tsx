@@ -85,6 +85,21 @@ const getBookingDetailKey = (d: any, parentBill: any, idx: number) => {
     return `rand_${Math.random().toString(36).slice(2)}_${idx}`;
 };
 
+// --- NEW: Booking Type/SubType Filter Items ---
+const bookingTypeSubTypeOptions = [
+    { label: "Single Digit", value: "single_digit", key: "booking_details__type" },
+    { label: "Double Digit", value: "double_digit", key: "booking_details__type" },
+    { label: "Triple Digit", value: "triple_digit", key: "booking_details__type" },
+    { label: "A", value: "A", key: "booking_details__sub_type" },
+    { label: "B", value: "B", key: "booking_details__sub_type" },
+    { label: "C", value: "C", key: "booking_details__sub_type" },
+    { label: "AB", value: "AB", key: "booking_details__sub_type" },
+    { label: "BC", value: "BC", key: "booking_details__sub_type" },
+    { label: "AC", value: "AC", key: "booking_details__sub_type" },
+    { label: "SUPER", value: "SUPER", key: "booking_details__sub_type" },
+    { label: "BOX", value: "BOX", key: "booking_details__sub_type" },
+];
+
 const SalesReportScreen = () => {
     const { selectedDraw } = useDrawStore();
     const [search, setSearch] = useState("");
@@ -98,6 +113,9 @@ const SalesReportScreen = () => {
     const [allGame, setAllGame] = useState(false);
     const [selectedFilter, setSelectedFilter] = useState("");
     const [printing, setPrinting] = useState(false);
+
+    // --- NEW: Booking Type/SubType Filter State ---
+    const [selectedBookingTypeSubType, setSelectedBookingTypeSubType] = useState<any>(null);
 
     // Pagination state
     const [page, setPage] = useState(0);
@@ -147,6 +165,10 @@ const SalesReportScreen = () => {
             const day = String(toDate.getDate()).padStart(2, "0");
             params["date_time__lte"] = `${year}-${month}-${day}`;
         }
+        // --- NEW: Add booking_details__type or booking_details__sub_type filter if selected ---
+        if (selectedBookingTypeSubType && selectedBookingTypeSubType.value) {
+            params[selectedBookingTypeSubType.key] = selectedBookingTypeSubType.value;
+        }
         console.log("params",params);
         
         params["offset"] = String(offset);
@@ -165,7 +187,7 @@ const SalesReportScreen = () => {
         return Object.keys(params)
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
             .join("&");
-    }, [fromDate, toDate, selectedDraw, allGame, user?.user_type, selectedFilter, fullView, debouncedSearch]);
+    }, [fromDate, toDate, selectedDraw, allGame, user?.user_type, selectedFilter, fullView, debouncedSearch, selectedBookingTypeSubType]);
 
     const query = buildQuery();
 
@@ -190,7 +212,7 @@ const SalesReportScreen = () => {
 
     // Reset on filter change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const filterDeps = [fromDate, toDate, selectedDraw?.id, allGame, user?.user_type, selectedFilter, debouncedSearch];
+    const filterDeps = [fromDate, toDate, selectedDraw?.id, allGame, user?.user_type, selectedFilter, debouncedSearch, selectedBookingTypeSubType];
     // Reset when any filter changes
     useMemo(() => {
         resetPagination();
@@ -212,6 +234,8 @@ const SalesReportScreen = () => {
         },
         enabled: !!selectedDraw?.id,
     });
+
+    console.log("data",data?.results?.data);   
 
     // Handle query result side effects (mimic onSuccess)
     useMemo(() => {
@@ -297,11 +321,15 @@ const SalesReportScreen = () => {
         if (user?.user_type === "DEALER" && selectedFilter) {
             params["booked_agent__id"] = selectedFilter;
         }
+        // --- NEW: Add booking_details__type or booking_details__sub_type filter if selected ---
+        if (selectedBookingTypeSubType && selectedBookingTypeSubType.value) {
+            params[selectedBookingTypeSubType.key] = selectedBookingTypeSubType.value;
+        }
 
         return Object.keys(params)
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
             .join("&");
-    }, [fromDate, toDate, selectedDraw, user?.user_type, selectedFilter]);
+    }, [fromDate, toDate, selectedDraw, user?.user_type, selectedFilter, selectedBookingTypeSubType]);
 
     // PDF generation: use allData (all loaded pages) if no search, else filteredResult
     const generatePdf = async () => {
@@ -572,6 +600,59 @@ const SalesReportScreen = () => {
                                 </TouchableOpacity>
                             </View>
                         </View>
+                    </View>
+
+                    {/* --- NEW: Booking Type/SubType Dropdown Filter --- */}
+                    <View className="mb-2">
+                        <Dropdown
+                            data={bookingTypeSubTypeOptions}
+                            labelField="label"
+                            valueField="value"
+                            value={selectedBookingTypeSubType?.value || ""}
+                            onChange={item => {
+                                setPage(0)
+                                setSelectedBookingTypeSubType(item);
+                            }}
+                            placeholder="Filter by Type/SubType"
+                            style={{
+                                borderColor: "#9ca3af",
+                                borderWidth: 1,
+                                borderRadius: 6,
+                                paddingHorizontal: 8,
+                                padding: 10
+                            }}
+                            containerStyle={{
+                                borderRadius: 6,
+                            }}
+                            itemTextStyle={{
+                                color: "#000",
+                            }}
+                            selectedTextStyle={{
+                                color: "#000",
+                            }}
+                            renderRightIcon={() =>
+                                selectedBookingTypeSubType ? (
+                                    <TouchableOpacity
+                                        onPress={() =>{
+                                            setPage(0)
+                                            setSelectedBookingTypeSubType(null)}}
+                                        style={{
+                                            position: "absolute",
+                                            right: 10,
+                                            zIndex: 10,
+                                            backgroundColor: "#fff",
+                                            width: 24,
+                                            height: 24,
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            borderRadius: 12,
+                                        }}
+                                    >
+                                        <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
+                                    </TouchableOpacity>
+                                ) : null
+                            }
+                        />
                     </View>
 
                     {user?.user_type === "ADMIN" && (

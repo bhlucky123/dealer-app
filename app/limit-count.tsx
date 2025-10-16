@@ -24,6 +24,7 @@ type LimitCount = {
     limit_type: "single_number" | "range";
     range_start: string;
     range_end: string;
+    number_type?: "single_digit" | "double_digit" | "triple_digit";
 };
 
 // Memoized item to avoid hook error and unnecessary re-renders
@@ -46,6 +47,16 @@ const LimitCountItem = memo(
                 ? `${item.range_start} - ${item.range_end}`
                 : item.number;
 
+        // Show number type if available (single/double/triple)
+        const displayNumberType =
+            item.number_type
+                ? {
+                    single_digit: "Single Digit",
+                    double_digit: "Double Digit",
+                    triple_digit: "Triple Digit",
+                  }[item.number_type]
+                : undefined;
+
         return (
             <View className="bg-white rounded-xl mb-3 shadow shadow-black/10">
                 <View className="flex-row items-end py-4 px-4">
@@ -56,6 +67,11 @@ const LimitCountItem = memo(
                         <Text className="text-xl text-blue-gray-900 font-bold tracking-wide">
                             {displayNumber}
                         </Text>
+                        {displayNumberType && (
+                            <Text className="text-xs text-blue-600 font-semibold mt-0.5">
+                                {displayNumberType}
+                            </Text>
+                        )}
                     </View>
                     <View className="flex-1">
                         <Text className="text-xs text-blue-gray-400 font-medium mb-0.5 tracking-tight">
@@ -94,6 +110,7 @@ const LimitCountItem = memo(
                                         range_start: item.range_start,
                                         range_end: item.range_end,
                                         number: item.number,
+                                        number_type: item?.number_type || "single_digit" // fallback
                                     });
                                     setIsEditing(false);
                                 }}
@@ -146,6 +163,8 @@ const LimitCountScreen = () => {
 
     // UI state for adding new limit
     const [limitType, setLimitType] = useState<"single_number" | "range">("single_number");
+    const [numberType, setNumberType] = useState<"single_digit" | "double_digit" | "triple_digit">("single_digit");
+
     const [newNumber, setNewNumber] = useState("");
     const [newRangeStart, setNewRangeStart] = useState("");
     const [newRangeEnd, setNewRangeEnd] = useState("");
@@ -172,6 +191,7 @@ const LimitCountScreen = () => {
             range_start: string;
             range_end: string;
             draw: number;
+            number_type: "single_digit" | "double_digit" | "triple_digit"
         }) => {
             return api.post("/draw/limit-number-count/", payload);
         },
@@ -210,8 +230,10 @@ const LimitCountScreen = () => {
             range_start: string;
             range_end: string;
             number: string;
+            number_type: "single_digit" | "double_digit" | "triple_digit"
         }) => {
             // PATCH only count, but keep other info for UI
+            // Pass number_type, even if UI only PATCHes `count`
             return api.patch(`/draw/limit-number-count/${payload.id}/`, {
                 count: payload.count,
             });
@@ -248,6 +270,33 @@ const LimitCountScreen = () => {
         },
     });
 
+    // Utility to get digit length
+    const getDigitsForType = (type: "single_digit" | "double_digit" | "triple_digit") => {
+        switch (type) {
+            case "single_digit": return 1;
+            case "double_digit": return 2;
+            case "triple_digit": return 3;
+            default: return 1;
+        }
+    };
+
+    // Filter input so that only up-to-N digits can be entered, and numbers only
+    const onSetNewNumber = (text: string) => {
+        let onlyDigits = text.replace(/\D/g, "");
+        const maxLen = getDigitsForType(numberType);
+        setNewNumber(onlyDigits.slice(0, maxLen));
+    };
+
+    const onSetNewRangeStart = (text: string) => {
+        const onlyDigits = text.replace(/\D/g, "");
+        setNewRangeStart(onlyDigits.slice(0, getDigitsForType(numberType)));
+    };
+
+    const onSetNewRangeEnd = (text: string) => {
+        const onlyDigits = text.replace(/\D/g, "");
+        setNewRangeEnd(onlyDigits.slice(0, getDigitsForType(numberType)));
+    };
+
     const handleAddLimit = () => {
         if (!selectedDraw?.id) {
             Alert.alert("No Draw", "Please select a draw.");
@@ -262,8 +311,13 @@ const LimitCountScreen = () => {
 
         if (limitType === "single_number") {
             const trimmedNumber = newNumber.trim();
-            if (!/^\d+$/.test(trimmedNumber) || trimmedNumber.length === 0) {
-                Alert.alert("Invalid", "Please enter a valid number.");
+            const requiredDigits = getDigitsForType(numberType);
+
+            if (!/^\d+$/.test(trimmedNumber) || trimmedNumber.length !== requiredDigits) {
+                Alert.alert(
+                    "Invalid",
+                    `Please enter a valid ${requiredDigits === 1 ? "single" : requiredDigits === 2 ? "double" : "triple"} digit number.`
+                );
                 return;
             }
             setIsSubmitting(true);
@@ -274,18 +328,21 @@ const LimitCountScreen = () => {
                 range_start: "",
                 range_end: "",
                 draw: selectedDraw.id,
+                number_type: numberType,
             });
         } else {
             // range
             const trimmedStart = newRangeStart.trim();
             const trimmedEnd = newRangeEnd.trim();
+            const requiredDigits = getDigitsForType(numberType);
+
             if (
                 !/^\d+$/.test(trimmedStart) ||
                 !/^\d+$/.test(trimmedEnd) ||
-                trimmedStart.length === 0 ||
-                trimmedEnd.length === 0
+                trimmedStart.length !== requiredDigits ||
+                trimmedEnd.length !== requiredDigits
             ) {
-                Alert.alert("Invalid", "Please enter valid range start and end.");
+                Alert.alert("Invalid", `Please enter valid and equal length (${requiredDigits}) range start and end.`);
                 return;
             }
             if (parseInt(trimmedStart, 10) > parseInt(trimmedEnd, 10)) {
@@ -300,43 +357,151 @@ const LimitCountScreen = () => {
                 range_start: trimmedStart,
                 range_end: trimmedEnd,
                 draw: selectedDraw.id,
+                number_type: numberType, // range is now tracked with numberType
             });
         }
     };
 
+    // --- Better styled Multi-level Tabs ---
+    const tabColors = {
+        activeBg: "bg-blue-600",
+        inactiveBg: "bg-white",
+        activeText: "text-white",
+        inactiveText: "text-blue-600",
+        border: "border border-blue-200",
+        rounded: "rounded-full",
+        shadow: "shadow shadow-blue-600/10"
+    };
+
+    // Top-level: Single/Double/Triple digit tab
+    // Reduced size: less padding, smaller font, tighter radii/margins
+
+    const NumberTypeTabs = () => (
+        <View className="flex-row justify-center my-2">
+            <View
+                style={{
+                    flexDirection: "row",
+                    backgroundColor: "#EFF6FF",
+                    borderRadius: 20,
+                    padding: 2,
+                    shadowColor: "#3B82F6",
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.05,
+                    shadowRadius: 4,
+                    elevation: 3,
+                }}
+            >
+                {(["single_digit", "double_digit", "triple_digit"] as const).map((type, idx, arr) => {
+                    const selected = numberType === type;
+                    const roundedLeft = idx === 0 ? 14 : 6;
+                    const roundedRight = idx === arr.length-1 ? 14 : 6;
+                    return (
+                        <TouchableOpacity
+                            key={type}
+                            className={[
+                                "mx-0.5",
+                                selected ? "bg-blue-500" : "bg-white",
+                            ].join(" ")}
+                            style={{
+                                paddingHorizontal: 12,
+                                paddingVertical: 5,
+                                borderTopLeftRadius: roundedLeft,
+                                borderBottomLeftRadius: roundedLeft,
+                                borderTopRightRadius: roundedRight,
+                                borderBottomRightRadius: roundedRight,
+                                marginLeft: idx === 0 ? 0 : 2,
+                                marginRight: idx === arr.length-1 ? 0 : 2,
+                                borderWidth: selected ? 0 : 1,
+                                borderColor: selected ? "#2563eb" : "#c7d5fa",
+                                elevation: selected ? 2 : 0,
+                                shadowColor: selected ? "#2563eb" : undefined,
+                                shadowOpacity: selected ? 0.08 : 0,
+                                shadowRadius: selected ? 4 : 0,
+                            }}
+                            activeOpacity={0.9}
+                            onPress={() => {
+                                setNumberType(type);
+                                setNewNumber("");
+                                setNewRangeStart("");
+                                setNewRangeEnd("");
+                            }}
+                            disabled={isSubmitting}
+                        >
+                            <Text
+                                className={[
+                                    "font-bold text-[13px]",
+                                    selected ? "text-white" : "text-blue-600",
+                                ].join(" ")}
+                                style={{
+                                    letterSpacing: 1,
+                                    color: selected ? "#fff" : "#2563eb"
+                                }}
+                            >
+                                {type === "single_digit"
+                                    ? "Single Digit"
+                                    : type === "double_digit"
+                                        ? "Double Digit"
+                                        : "Triple Digit"}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+        </View>
+    );
+
+    // 2nd-level: single number / range tab
+    const LimitTypeTabs = () => (
+        <View className="flex-row justify-center my-2">
+            {(["single_number", "range"] as const).map((type, idx, arr) => (
+                <TouchableOpacity
+                    key={type}
+                    className={[
+                        "px-5 py-2 mx-0.5",
+                        tabColors.rounded,
+                        tabColors.shadow,
+                        tabColors.border,
+                        limitType === type ? "bg-blue-500" : "bg-blue-100",
+                        idx === 0 ? "ml-0" : "",
+                        idx === arr.length - 1 ? "mr-0" : ""
+                    ].join(" ")}
+                    style={{
+                        borderTopLeftRadius: idx === 0 ? 22 : 10,
+                        borderBottomLeftRadius: idx === 0 ? 22 : 10,
+                        borderTopRightRadius: idx === arr.length - 1 ? 22 : 10,
+                        borderBottomRightRadius: idx === arr.length - 1 ? 22 : 10,
+                        elevation: limitType === type ? 2 : 0
+                    }}
+                    onPress={() => {
+                        setLimitType(type);
+                        setNewNumber(""); setNewRangeStart(""); setNewRangeEnd("");
+                    }}
+                    disabled={isSubmitting}
+                >
+                    <Text
+                        className={[
+                            "font-bold text-base tracking-tight",
+                            limitType === type ? "text-white" : "text-blue-600"
+                        ].join(" ")}
+                        style={{letterSpacing: 1}}
+                    >
+                        {type === "single_number" ? "Single Number" : "Range"}
+                    </Text>
+                </TouchableOpacity>
+            ))}
+        </View>
+    );
+
     const renderHeader = () => (
         <View>
             <View className="bg-white rounded-xl p-4 mb-4 shadow shadow-black/10">
-                <Text className="text-base font-semibold text-blue-600 mb-2 tracking-tight">
+                <Text className="text-base font-semibold text-blue-600 mb-1 tracking-tight">
                     Add Limit
                 </Text>
-                <View className="flex-row items-center mb-2">
-                    <TouchableOpacity
-                        className={`px-3 py-1.5 rounded mr-2 ${limitType === "single_number"
-                            ? "bg-blue-600"
-                            : "bg-blue-50 border border-blue-200"
-                            }`}
-                        onPress={() => setLimitType("single_number")}
-                        disabled={isSubmitting}
-                    >
-                        <Text className={`font-bold text-base tracking-tight ${limitType === "single_number" ? "text-white" : "text-blue-600"}`}>
-                            Single Number
-                        </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        className={`px-3 py-1.5 rounded ${limitType === "range"
-                            ? "bg-blue-600"
-                            : "bg-blue-50 border border-blue-200"
-                            }`}
-                        onPress={() => setLimitType("range")}
-                        disabled={isSubmitting}
-                    >
-                        <Text className={`font-bold text-base tracking-tight ${limitType === "range" ? "text-white" : "text-blue-600"}`}>
-                            Range
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-                <View className="flex-row items-end space-x-2 ">
+                <NumberTypeTabs />
+                <LimitTypeTabs />
+
+                <View className="flex-row items-end space-x-2 mt-2">
                     {limitType === "single_number" ? (
                         <>
                             <View className="flex-1">
@@ -347,11 +512,11 @@ const LimitCountScreen = () => {
                                     className="rounded bg-blue-50 text-base text-blue-gray-900 px-3 py-2 mr-1 shadow shadow-blue-600/10"
                                     placeholder="Number"
                                     value={newNumber}
-                                    onChangeText={setNewNumber}
+                                    onChangeText={onSetNewNumber}
                                     keyboardType="number-pad"
                                     editable={!isSubmitting}
                                     placeholderTextColor="#b0b0b0"
-                                    maxLength={3}
+                                    maxLength={getDigitsForType(numberType)}
                                     returnKeyType="next"
                                 />
                             </View>
@@ -366,11 +531,11 @@ const LimitCountScreen = () => {
                                     className="rounded bg-blue-50 text-base text-blue-gray-900 px-3 py-2 mr-1 shadow shadow-blue-600/10"
                                     placeholder="Start"
                                     value={newRangeStart}
-                                    onChangeText={setNewRangeStart}
+                                    onChangeText={onSetNewRangeStart}
                                     keyboardType="number-pad"
                                     editable={!isSubmitting}
                                     placeholderTextColor="#b0b0b0"
-                                    maxLength={3}
+                                    maxLength={getDigitsForType(numberType)}
                                     returnKeyType="next"
                                 />
                             </View>
@@ -382,11 +547,11 @@ const LimitCountScreen = () => {
                                     className="rounded bg-blue-50 text-base text-blue-gray-900 px-3 py-2 mr-1 shadow shadow-blue-600/10"
                                     placeholder="End"
                                     value={newRangeEnd}
-                                    onChangeText={setNewRangeEnd}
+                                    onChangeText={onSetNewRangeEnd}
                                     keyboardType="number-pad"
                                     editable={!isSubmitting}
                                     placeholderTextColor="#b0b0b0"
-                                    maxLength={3}
+                                    maxLength={getDigitsForType(numberType)}
                                     returnKeyType="next"
                                 />
                             </View>
