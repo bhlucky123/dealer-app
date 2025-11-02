@@ -48,6 +48,17 @@ const formatDateDDMMYYYY = (date?: Date | null) => {
     return `${day}/${month}/${year}`;
 };
 
+
+const formatDate = (date?: Date | null) => {
+    if (!date) return "";
+    // Short format: DD/MM/YY
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = String(d.getFullYear()).slice(-2);
+    return `${day}/${month}/${year}`;
+};
+
 // Helper for filename: format as YYYYMMDD
 const formatDateYYYYMMDD = (date?: Date | null) => {
     if (!date) return "";
@@ -169,8 +180,8 @@ const SalesReportScreen = () => {
         if (selectedBookingTypeSubType && selectedBookingTypeSubType.value) {
             params[selectedBookingTypeSubType.key] = selectedBookingTypeSubType.value;
         }
-        console.log("params",params);
-        
+        console.log("params", params);
+
         params["offset"] = String(offset);
         if (fullView) params["full_view"] = "true";
         if (debouncedSearch) params["search"] = debouncedSearch;
@@ -235,7 +246,7 @@ const SalesReportScreen = () => {
         enabled: !!selectedDraw?.id,
     });
 
-    console.log("data",data?.results?.data);   
+    console.log("data", data?.results?.data);
 
     // Handle query result side effects (mimic onSuccess)
     useMemo(() => {
@@ -633,9 +644,10 @@ const SalesReportScreen = () => {
                             renderRightIcon={() =>
                                 selectedBookingTypeSubType ? (
                                     <TouchableOpacity
-                                        onPress={() =>{
+                                        onPress={() => {
                                             setPage(0)
-                                            setSelectedBookingTypeSubType(null)}}
+                                            setSelectedBookingTypeSubType(null)
+                                        }}
                                         style={{
                                             position: "absolute",
                                             right: 10,
@@ -784,8 +796,8 @@ const SalesReportScreen = () => {
                             <Text className="text-sm text-gray-700 font-medium mr-2">Full View</Text>
                             <Switch
                                 value={fullView}
-                                onValueChange={(val)=> {
-                                    if(val){
+                                onValueChange={(val) => {
+                                    if (val) {
                                         setPage(0)
                                     }
                                     setFullView(val)
@@ -854,9 +866,9 @@ const SalesReportScreen = () => {
                                     <View className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                                         <View className="flex-row px-4 py-3 items-center border-b border-gray-100">
                                             <View className="flex-[1.1] flex-col justify-center">
-                                                <Text className="text-[10px] text-gray-800 font-medium">{formatDateDDMMYYYY(new Date(item.date_time))}</Text>
+                                                <Text className="text-[10px] text-gray-800 font-medium">{formatDate(new Date(item.date_time))}</Text>
                                                 <Text className="text-[9px] text-gray-500 mt-0.5">
-                                                    {new Date(item.date_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false, })}
+                                                    {new Date(item.date_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true, })}
                                                 </Text>
                                             </View>
                                             {
@@ -872,12 +884,23 @@ const SalesReportScreen = () => {
                                                         </Text>
                                                         {item?.booked_by?.user_type && (
                                                             <Text
-                                                                className="text-xs text-center text-green-600"
+                                                                className="text-xs text-center text-violet-700"
                                                                 numberOfLines={1}
                                                                 ellipsizeMode="tail"
                                                                 style={{ minWidth: 0 }}
                                                             >
                                                                 {item.booked_by.user_type}
+                                                            </Text>
+                                                        )}
+
+                                                        {item?.customer_name && (
+                                                            <Text
+                                                                className="text-xs text-center text-emerald-700"
+                                                                numberOfLines={1}
+                                                                ellipsizeMode="tail"
+                                                                style={{ minWidth: 0 }}
+                                                            >
+                                                                {item?.customer_name}
                                                             </Text>
                                                         )}
                                                     </View>
@@ -942,7 +965,7 @@ const SalesReportScreen = () => {
                                 // Remove infinite scroll
                                 // onEndReached={handleLoadMore}
                                 // onEndReachedThreshold={0.5}
-                                
+
                                 ListFooterComponent={
                                     <>
                                         {isFetchingMore && (

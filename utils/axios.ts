@@ -29,11 +29,44 @@ api.interceptors.request.use(
 
 // Response interceptor (optional)
 api.interceptors.response.use(
-  (response) => response,
+  // (response) => response,
+  (response) => {
+    console.log("response", response);
+    if (response.status === 204) {
+      // Return a custom empty object or message if needed
+      return { ...response, data: null };
+    }
+    return response;
+  },
   (error) => {
+    console.log("error", error);
+    console.log("Raw error:", error);
+
+    if (
+      error.request &&
+      typeof error.request._response === "string" &&
+      error.request._response.includes("HTTP 204 had non-zero Content-Length")
+    ) {
+      console.warn("⚠️ Fixing malformed 204 No Content response...");
+      
+      return Promise.resolve({
+        status: 204,
+        statusText: "No Content",
+        data: null,
+        headers: {},
+        config: error.config,
+      });
+    }
+
+    if (error.request) {
+      console.log("🚨 Raw response text:", error.request.responseText);
+      console.log("🚨 Raw status:", error.request.status);
+    }
     if (error.response) {
       const { status, data } = error.response;
       console.log("❌ Axios Error:", status, data);
+
+      
 
       if (status === 503) {
         console.log("naivigating due to inative", status);

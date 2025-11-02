@@ -4,10 +4,11 @@ import api from "@/utils/axios";
 import { getToday, getTommorow } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
+    Switch,
     Text,
     TouchableOpacity,
     View
@@ -53,11 +54,12 @@ const WinnersReportScreen = () => {
     const [toDate, setToDate] = useState<Date>(getTommorow());
     const [showFromPicker, setShowFromPicker] = useState(false);
     const [showToPicker, setShowToPicker] = useState(false);
-    // const [fullView, setFullView] = useState(false);
+    const [allGame, setAllGame] = useState(false);
     const [selectedAgent, setSelectedAgent] = useState("");
     const [selectedDealer, setSelectedDealer] = useState("");
 
-    const { user } = useAuthStore();
+    const { user, token } = useAuthStore();
+    console.log("token", token);
 
     // QueryClient for caching
     const queryClient = useQueryClient();
@@ -96,7 +98,7 @@ const WinnersReportScreen = () => {
             params["booked_agent__id"] = selectedAgent;
         if (user?.user_type === "ADMIN" && selectedDealer)
             params["booked_dealer__id"] = selectedDealer;
-        if (selectedDraw?.id) params["booking_detail__booking__draw_session__draw__id"] = String(selectedDraw.id);
+        if (selectedDraw?.id && !allGame) params["booking_detail__booking__draw_session__draw__id"] = String(selectedDraw.id);
 
         return Object.keys(params)
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
@@ -295,16 +297,16 @@ const WinnersReportScreen = () => {
                         />
                     )}
 
-                    {/* <View className="flex-row items-center justify-between px-1 pt-1">
-                        <Text className="text-sm text-gray-700">Full View</Text>
+                    <View className="flex-row items-center justify-between px-1 pt-1">
+                        <Text className="text-sm text-gray-700">All Game</Text>
                         <Switch
-                            value={fullView}
-                            onValueChange={setFullView}
+                            value={allGame}
+                            onValueChange={setAllGame}
                             trackColor={{ false: "#e5e7eb", true: "#a78bfa" }}
-                            thumbColor={fullView ? "#7c3aed" : "#f4f3f4"}
+                            thumbColor={allGame ? "#7c3aed" : "#f4f3f4"}
                             ios_backgroundColor="#e5e7eb"
                         />
-                    </View> */}
+                    </View>
                 </View>
 
                 {/* --- Main Content Area --- */}
