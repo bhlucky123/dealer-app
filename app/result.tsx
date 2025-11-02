@@ -16,6 +16,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 /** Prize row colours to match screenshot */
 const PRIZE_COLOURS = [
@@ -400,6 +401,7 @@ const ResultPage: React.FC = () => {
 
     return (
         <ScrollView className="flex-1">
+            <SafeAreaView>
             {/* Date filter */}
             <View className="px-4 pt-4 flex-row items-end justify-between">
                 {/* Date filter section */}
@@ -544,10 +546,10 @@ const ResultPage: React.FC = () => {
                             <Text className="w-10 text-center py-1.5 text-[11px] font-medium border-r border-gray-300 bg-white/20">
                                 {idx + 1}
                             </Text>
-                            <Text className="flex-1 py-1.5 text-[12px] font-bold text-center text-gray-800">
+                            <Text className="flex-1 py-1.5 text-[16px] font-bold text-center text-gray-800">
                                 {row.label}
                             </Text>
-                            <Text className="w-20 py-1.5 text-[13px] font-mono font-bold text-center border-l border-gray-300">
+                            <Text className="w-20 py-1.5 text-[17px] font-mono font-bold text-center border-l border-gray-300">
                                 {row.value}
                             </Text>
                         </View>
@@ -568,7 +570,7 @@ const ResultPage: React.FC = () => {
                                     return (
                                         <Text
                                             key={`prize-${colIdx}-${rowIdx}`}
-                                            className={`py-2 text-center text-[12px] font-mono border-b border-gray-200 ${colIdx < 2 ? "border-r border-gray-200" : ""}`}
+                                            className={`py-2 text-center text-[15px] font-mono font-bold border-b border-gray-200 ${colIdx < 2 ? "border-r border-gray-200" : ""}`}
                                         >
                                             {prize || ""}
                                         </Text>
@@ -591,6 +593,7 @@ const ResultPage: React.FC = () => {
                     }}
                 />
             )}
+        </SafeAreaView>
         </ScrollView>
     );
 };
