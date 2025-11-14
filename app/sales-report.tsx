@@ -1007,7 +1007,7 @@ const SalesReportScreen = () => {
                                 {totalBillCount || 0}
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-violet-700">
-                                ₹{amountHandler(Number(totalDealerAmount?.toFixed(0) || 0))}
+                                ₹{amountHandler(Number((user?.user_type === "ADMIN" || user?.user_type === "DEALER") ? totalDealerAmount?.toFixed(0) : totalAgentAmount?.toFixed(0) || 0))}
                             </Text>
                             <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">
                                 ₹{amountHandler(Number(totalCustomerAmount?.toFixed(0) || 0))}

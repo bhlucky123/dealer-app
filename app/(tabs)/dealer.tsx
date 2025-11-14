@@ -1,3 +1,4 @@
+import { PrizeConfigBlock } from "@/components/prize-config";
 import useDealer from "@/hooks/use-dealer";
 import { useAuthStore } from "@/store/auth";
 import { amountHandler } from "@/utils/amount";
@@ -20,6 +21,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { Card, PRIZE_CONFIG_FIELDS } from "./more";
 
 // Dealer type
 type Dealer = {
@@ -32,6 +34,18 @@ type Dealer = {
     commission: number;
     single_digit_number_commission: number;
     cap_amount: number;
+
+    is_prize_set?: boolean;
+    "box_direct": string,
+    "box_indirect": string,
+    "double_digit_prize": string,
+    "single_digit_prize": string,
+    "super_complementary_prize": string,
+    "super_fifth_prize": string,
+    "super_first_prize": string,
+    "super_fourth_prize": string,
+    "super_second_prize": string,
+    "super_third_prize": string
 };
 
 // Eye icon SVG (simple inline, no extra dependency)
@@ -65,14 +79,25 @@ const DealerForm = ({
         calculate_str: defaultValues.calculate_str || "",
         secret_pin: defaultValues.secret_pin?.toString() || "",
         commission: defaultValues.commission?.toString() || "",
-        single_digit_number_commission:
-            defaultValues.single_digit_number_commission?.toString() || "",
+        single_digit_number_commission: defaultValues.single_digit_number_commission?.toString() || "",
         cap_amount: defaultValues.cap_amount?.toString() || "",
+        is_prize_set: defaultValues?.is_prize_set || false,
+        "box_direct": defaultValues?.box_direct || "",
+        "box_indirect": defaultValues?.box_indirect || "",
+        "double_digit_prize": defaultValues?.double_digit_prize || "",
+        "single_digit_prize": defaultValues?.single_digit_prize || "",
+        "super_complementary_prize": defaultValues?.super_complementary_prize || "",
+        "super_fifth_prize": defaultValues?.super_fifth_prize || "",
+        "super_first_prize": defaultValues?.super_first_prize || "",
+        "super_fourth_prize": defaultValues?.super_fourth_prize || "",
+        "super_second_prize": defaultValues?.super_second_prize || "",
+        "super_third_prize": defaultValues?.super_third_prize || ""
     });
 
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [focusedField, setFocusedField] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
+    
 
     const validate = () => {
         const newErrors: Record<string, string> = {};
@@ -101,6 +126,19 @@ const DealerForm = ({
         if (Number(form.cap_amount) < 0)
             newErrors.cap_amount = "Cap amount cannot be negative";
 
+        if(form?.is_prize_set){
+            if(!form?.single_digit_prize)
+            newErrors.single_digit_prize = "Single digit prize is required";
+            if(!form?.double_digit_prize)
+                newErrors.double_digit_prize = "Double digit prize is required";
+            if(!form?.box_direct)
+                newErrors.box_direct = "Box Direct is required";
+            if(!form?.super_first_prize)
+                newErrors.super_first_prize = "Super First Prize is required";
+            if(!form?.super_second_prize)
+                newErrors.super_second_prize = "Super Second Prize is required";
+        }
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -110,8 +148,57 @@ const DealerForm = ({
         setErrors((prev) => ({ ...prev, [key]: "" }));
     };
 
+    const validatePrizeConfig = () => {
+        // if(!form.box_direct){
+        //     setErrors((prev) => ({ ...prev, ["errMsg"]: "Box Direct is required" }));
+        //     return false;
+        // }
+
+        // if(!form.box_indirect){
+        //     setErrors((prev) => ({ ...prev, ["errMsg"]: "Box Indirect is required" }));
+        //     return false;
+        // }
+
+        // if(!form.double_digit_prize){
+        //     setErrors((prev) => ({ ...prev, ["errMsg"]: "Double Digit Prize is required" }));
+        //     return false;
+        // }
+
+        // if(!form.){
+        //     setErrors((prev) => ({ ...prev, ["errMsg"]: "Double Digit Prize is required" }));
+        //     return false;
+        // }
+
+        
+
+
+
+
+        if (
+            !form ||
+            PRIZE_CONFIG_FIELDS.some(
+                ({ key }) =>
+                    form[key] === undefined ||
+                    form[key] === null ||
+                    isNaN(Number(form[key]))
+            )
+        ) {
+            setErrors((prev) => ({ ...prev, ["errMsg"]: "All fields are required and must be numbers" }));
+
+            return false;
+        }
+        setErrors((prev) => ({ ...prev, ["errMsg"]: "" }));
+
+        return true
+    };
+
     const handleSubmit = () => {
-        if (!validate()) return;
+        console.log("validatePrizeConfig", validatePrizeConfig(), "!validate()", validate())
+        if (!validate()) {
+            console.log("inside if");
+            return
+        }
+        console.log("after validation");
 
         const preparedData: Partial<Dealer> = {
             ...form,
@@ -338,7 +425,48 @@ const DealerForm = ({
                         </TouchableOpacity>
                     </View>
 
-                    <View className="pb-20">
+                    <Card>
+                        <View>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setForm((prev) => ({...form, is_prize_set: !prev?.is_prize_set}))
+                                }}
+                                className={`
+                flex-row items-center justify-between p-4 rounded-xl border-2
+                ${form.is_active
+                                        ? 'bg-green-50 border-green-300'
+                                        : 'bg-gray-50 border-gray-300'
+                                    }
+              `}
+                                activeOpacity={0.8}
+                            >
+                                <Text className="text-gray-700 font-medium">Prize Config</Text>
+                                <View className={`
+                w-12 h-6 rounded-full p-1
+                ${form?.is_prize_set ? 'bg-green-500' : 'bg-gray-400'}
+              `}>
+                                    <View className={`
+                  w-4 h-4 bg-white rounded-full transition-all duration-200
+                  ${form?.is_prize_set ? 'ml-6' : 'ml-0'}
+                `} />
+                                </View>
+                            </TouchableOpacity>
+                        </View>
+                        {
+                            form?.is_prize_set &&
+                            <PrizeConfigBlock form={form} errors={errors} onChange={(data) => {
+                                console.log("data", data);
+
+                                if(Object.keys.length > 0){
+                                    setErrors({})
+                                }
+                                setForm((prev) => ({ ...prev, ...data }as any))
+                            }} />
+                        }
+                    </Card>
+
+
+                    <View className="pb-20 my-12 mb-12">
                         {/* Added padding-bottom for the submit button */}
                         <TouchableOpacity
                             className={`bg-blue-600 py-4 rounded-xl shadow-lg active:scale-95 ${submitting ? 'opacity-60' : ''}`}
@@ -434,7 +562,10 @@ export default function DealerManagement() {
     });
     const { createDealer, editDealer, deleteDealer } = useDealer();
 
+    
+    
     const filteredDealers = dealers.filter(d => d.username.toLowerCase().includes(searchQuery.toLowerCase()));
+    console.log("filteredDealers",filteredDealers);
 
     const handleCreate = (data: any) => {
         setSubmitting(true)
@@ -476,6 +607,7 @@ export default function DealerManagement() {
 
         editDealer({ ...data, id: editData?.id }, {
             onSuccess: (updated) => {
+                console.log("Success")
                 setShowForm(false);
                 setSubmitting(false)
                 queryClient.setQueryData<any[]>(["dealers"], (old) =>
@@ -484,6 +616,7 @@ export default function DealerManagement() {
                 setEditData(null);
             },
             onError: (err) => {
+                console.log("Error",err)
                 setSubmitting(false);
                 let errorMsg = "Failed to update dealer.";
 

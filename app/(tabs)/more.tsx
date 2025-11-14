@@ -51,7 +51,7 @@ interface PrizeConfig {
   super_complementary_prize: number;
 }
 
-const PRIZE_CONFIG_FIELDS: { key: keyof PrizeConfig; label: string }[] = [
+export const PRIZE_CONFIG_FIELDS: { key: keyof PrizeConfig; label: string }[] = [
   { key: "single_digit_prize", label: "Single Digit Prize" },
   { key: "double_digit_prize", label: "Double Digit Prize" },
   { key: "box_direct", label: "Box Direct" },
@@ -65,7 +65,7 @@ const PRIZE_CONFIG_FIELDS: { key: keyof PrizeConfig; label: string }[] = [
 ];
 
 // --- Reusable Components ---
-function Card({ title, children, style = {} }: { title?: string; children: React.ReactNode; style?: any }) {
+export function Card({ title, children, style = {} }: { title?: string; children: React.ReactNode; style?: any }) {
   return (
     <View
       style={{
