@@ -45,8 +45,20 @@ const DailyReport = () => {
     const params: Record<string, any> = {};
     console.log("fromDate", fromDate);
 
-    if (fromDate) params.date_time__gte = fromDate.toISOString();
-    if (toDate) params.date_time__lte = toDate.toISOString();
+    if (fromDate) {
+      // Format as yyyy/mm/dd
+      const year = fromDate.getFullYear();
+      const month = String(fromDate.getMonth() + 1).padStart(2, "0");
+      const day = String(fromDate.getDate()).padStart(2, "0");
+      params["date_time__gte"] = `${year}-${month}-${day}`;
+  }
+  if (toDate) {
+      // Format as yyyy/mm/dd
+      const year = toDate.getFullYear();
+      const month = String(toDate.getMonth() + 1).padStart(2, "0");
+      const day = String(toDate.getDate()).padStart(2, "0");
+      params["date_time__lte"] = `${year}-${month}-${day}`;
+  }
     if (selectedDraw?.id && !allGames) params.draw_session__draw = selectedDraw.id;
     console.log("buildQuery", params);
 
@@ -275,7 +287,7 @@ const DailyReport = () => {
           {/* Detailed Table */}
           <View className="border border-gray-200 rounded-lg mt-6 mb-14 overflow-hidden bg-white" style={{ elevation: 0 }}>
             <Text className="bg-gray-100 px-3 py-2 font-bold text-sm border-b border-gray-200">DETAILED</Text>
-            {renderTableHeader(user?.user_type === "ADMIN" ? ["DATE", "SALE", "WIN", "BAL"] : ["DATE", "SALE"])}
+            {renderTableHeader(user?.user_type === "ADMIN" ? ["DATE", "SALE", "WIN", "BAL"] : ["DATE", "SALE", "WIN", "BAL"])}
             {data?.report?.map((item: any) => renderDetailRow(item))}
             {data?.report &&
               renderDetailRow(

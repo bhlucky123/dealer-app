@@ -4,7 +4,7 @@ import api from "@/utils/axios";
 import { getToday, getTommorow } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -31,6 +31,16 @@ type WinnerReport = {
     booking_datetime?: string; // Add this if your API returns a date field
 };
 
+type PaginatedResult<T> = {
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: {
+        data: T[];
+        total_winning_prize: number;
+    };
+};
+
 // Helper function to format date as dd/mm/yyyy
 function formatDateToDDMMYYYY(date: Date | string | undefined | null): string {
     if (!date) return "";
@@ -47,6 +57,8 @@ function formatDateToDDMMYYYY(date: Date | string | undefined | null): string {
     return `${day}/${month}/${year}`;
 }
 
+const PAGE_SIZE = 10;
+
 const WinnersReportScreen = () => {
     const { selectedDraw } = useDrawStore();
     const [search, setSearch] = useState("");
@@ -58,9 +70,32 @@ const WinnersReportScreen = () => {
     const [selectedAgent, setSelectedAgent] = useState("");
     const [selectedDealer, setSelectedDealer] = useState("");
 
-    const { user, token } = useAuthStore();
-    console.log("token", token);
+    // Pagination state
+    const [offset, setOffset] = useState(0);
+    const [data, setData] = useState<WinnerReport[]>([]);
+    const [count, setCount] = useState(0);
+    const [totalAmount, setTotalAmount] = useState(0);
+    const [fetchingMore, setFetchingMore] = useState(false);
+    const [loadingInitial, setLoadingInitial] = useState(false);
+    const [error, setError] = useState<any>(null);
+    const [refreshing, setRefreshing] = useState(false);
 
+    const { user, token } = useAuthStore();
+
+    // Reset pagination offset when filters change
+    useEffect(() => {
+        setOffset(0);
+        setData([]);
+        setCount(0);
+    }, [
+        fromDate?.toISOString?.(),
+        toDate?.toISOString?.(),
+        allGame,
+        selectedDraw?.id,
+        selectedAgent,
+        selectedDealer
+    ]);
+    
     // QueryClient for caching
     const queryClient = useQueryClient();
     const cachedAgents = queryClient.getQueryData<Agent[]>(["agents"]);
@@ -89,7 +124,7 @@ const WinnersReportScreen = () => {
     });
 
     // Build query params
-    const buildQuery = () => {
+    const buildQuery = (offsetVal: number = 0, limitVal: number = PAGE_SIZE) => {
         const params: Record<string, string> = {};
         if (fromDate) params["date_time__gte"] = fromDate.toISOString();
         if (toDate) params["date_time__lte"] = toDate.toISOString();
@@ -100,19 +135,73 @@ const WinnersReportScreen = () => {
             params["booked_dealer__id"] = selectedDealer;
         if (selectedDraw?.id && !allGame) params["booking_detail__booking__draw_session__draw__id"] = String(selectedDraw.id);
 
+        params["offset"] = String(offsetVal);
+        params["limit"] = String(limitVal);
+
         return Object.keys(params)
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
             .join("&");
     };
 
-    const { data = [], isLoading, error, refetch } = useQuery<WinnerReport[]>({
-        queryKey: ["/draw-result/winners/", buildQuery()],
-        queryFn: async () => {
-            const res = await api.get(`/draw-result/winners/?${buildQuery()}`);
-            return res?.data || [];
+    // Fetch data function for pagination (returns the response, not just .results)
+    const fetchPaginated = useCallback(
+        async (offsetVal: number = 0, append: boolean = false) => {
+            if (!selectedDraw?.id) {
+                setData([]);
+                setCount(0);
+                return;
+            }
+            try {
+                //TODO
+                // console.log("fetching..")
+                if (!append) setLoadingInitial(true);
+                setFetchingMore(append);
+                setError(null);
+                const res = await api.get<PaginatedResult<WinnerReport>>(`/draw-result/winners/?${buildQuery(offsetVal)}`);
+                const { results, count: total } = res.data;
+                setCount(total);
+                setTotalAmount(results?.total_winning_prize || 0)
+                if (append) {
+                    setData(prev => [...prev, ...results?.data || []]);
+                } else {
+                    setData(results?.data || []);
+                }
+            } catch (e) {
+                setError(e);
+            } finally {
+                setLoadingInitial(false);
+                setFetchingMore(false);
+                setRefreshing(false);
+            }
         },
-        enabled: !!selectedDraw?.id,
-    });
+        [
+            fromDate, toDate, allGame, selectedDraw?.id, 
+            selectedAgent, selectedDealer, user?.user_type
+        ]
+    );
+
+    // Fetch data whenever pagination or filter changes
+    useEffect(() => {
+        fetchPaginated(offset, offset > 0);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
+        offset, fromDate?.toISOString?.(), toDate?.toISOString?.(), 
+        allGame, selectedDraw?.id, selectedAgent, selectedDealer
+    ]);
+
+    // Load more handler
+    const handleLoadMore = () => {
+        // Only fetch more if there's potentially more data
+        if (fetchingMore || loadingInitial || data.length >= count) return;
+        setOffset(prev => prev + PAGE_SIZE);
+    };
+
+    // Refresh handler (pull-to-refresh)
+    const handleRefresh = () => {
+        setRefreshing(true);
+        setOffset(0);
+        fetchPaginated(0, false);
+    };
 
     // Filter by search (bill number)
     const filteredData = useMemo(() => {
@@ -122,7 +211,7 @@ const WinnersReportScreen = () => {
         );
     }, [data, search]);
 
-    // Calculate totals
+    // Calculate totals (on ALL loaded so far)
     const totals = useMemo(() => {
         let totalPrize = 0;
         let totalCount = 0;
@@ -132,7 +221,6 @@ const WinnersReportScreen = () => {
             const prize = Number(item.prize) || 0;
             totalPrize += prize;
             totalCount += count;
-            // If you have a separate amount field, use it. Otherwise, use prize as amount.
             totalAmount += prize;
         });
         return {
@@ -143,8 +231,7 @@ const WinnersReportScreen = () => {
         };
     }, [filteredData]);
 
-    // Determine if we should show the total footer
-    const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && filteredData.length > 0;
+    const shouldShowTotalFooter = !!selectedDraw?.id && !loadingInitial && !error && filteredData.length > 0;
 
     // Helper to safely get username from dealer/agent (string or object)
     const getUsername = (userField: any) => {
@@ -316,7 +403,7 @@ const WinnersReportScreen = () => {
                             No draw selected. Please choose one.
                         </Text>
                     </View>
-                ) : isLoading ? (
+                ) : loadingInitial ? (
                     <View className="flex-1 justify-center items-center">
                         <View className="bg-white rounded-xl px-6 py-8 shadow-md border border-gray-200 items-center">
                             <ActivityIndicator size="large" color="#7c3aed" />
@@ -335,7 +422,7 @@ const WinnersReportScreen = () => {
                                 There was a problem fetching the winners data.
                             </Text>
                             <TouchableOpacity
-                                onPress={() => refetch()}
+                                onPress={() => fetchPaginated(offset, offset > 0)}
                                 className="bg-violet-600 px-4 py-2 rounded-lg"
                             >
                                 <Text className="text-white font-semibold">Retry</Text>
@@ -362,7 +449,6 @@ const WinnersReportScreen = () => {
                                             "px-2 py-2 border-b border-gray-100",
                                             index % 2 === 0 ? "bg-white" : "bg-gray-50"
                                         ].join(" ")}
-
                                     >
                                         <View className="flex-row items-center">
                                             {/* Date */}
@@ -419,6 +505,26 @@ const WinnersReportScreen = () => {
                                         </Text>
                                     </View>
                                 }
+                                onEndReached={handleLoadMore}
+                                onEndReachedThreshold={0.5}
+                                refreshing={refreshing}
+                                onRefresh={handleRefresh}
+                                ListFooterComponent={
+                                    fetchingMore && filteredData.length < count ? (
+                                        <View className="py-4 items-center">
+                                            <ActivityIndicator size="small" color="#7c3aed" />
+                                            <Text style={{ color: "#7c3aed", marginTop: 8 }}>Loading more...</Text>
+                                        </View>
+                                    ) : filteredData.length < count ? (
+                                        <TouchableOpacity
+                                            onPress={handleLoadMore}
+                                            className="bg-violet-600 px-4 py-2 rounded-lg m-4 self-center"
+                                            style={{ minWidth: 110, alignItems: "center" }}
+                                        >
+                                            <Text style={{ color: "white", fontWeight: "bold" }}>Load more</Text>
+                                        </TouchableOpacity>
+                                    ) : null
+                                }
                             />
                         </View>
 
@@ -432,16 +538,16 @@ const WinnersReportScreen = () => {
                                     <Text className="flex-1 text-sm text-center font-semibold text-gray-700">
                                         {totals.totalCount}
                                     </Text> */}
-                                    <Text className="flex-1 text-sm text-center font-semibold text-gray-700">
+                                    {/* <Text className="flex-1 text-sm text-center font-semibold text-gray-700"> */}
                                         {/* (Unused column, could be left blank or used for something else) */}
-                                    </Text>
-                                    <Text className="flex-1 text-sm text-right font-semibold text-violet-700">
+                                    {/* </Text> */}
+                                    {/* <Text className="flex-1 text-sm text-right font-semibold text-violet-700"> */}
                                         {/* Total Prize */}
-                                        ₹{totals.totalPrize.toLocaleString()}
-                                    </Text>
+                                        {/* ₹{totals.totalPrize.toLocaleString()} */}
+                                    {/* </Text> */}
                                     <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">
                                         {/* Total Amount */}
-                                        ₹{totals.totalAmount.toLocaleString()}
+                                        ₹{totalAmount} 
                                     </Text>
                                 </View>
                             </View>
