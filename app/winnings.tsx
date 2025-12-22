@@ -480,9 +480,21 @@ const WinnersReportScreen = () => {
                                             </View>
                                             {/* Dealer */}
                                             <View className="flex-1 items-center">
-                                                <Text className="text-xs text-center text-gray-700 font-semibold">
-                                                    {getUsername(item.dealer)}
-                                                </Text>
+                                                <View>
+                                                    <Text className="text-xs text-center text-gray-700 font-semibold">
+                                                        {getUsername(item.dealer)}
+                                                    </Text>
+                                                    {item?.customer_name && (
+                                                        <Text
+                                                            className="text-xs text-center text-emerald-700"
+                                                            numberOfLines={1}
+                                                            ellipsizeMode="tail"
+                                                            style={{ minWidth: 0 }}
+                                                        >
+                                                            {item?.customer_name}
+                                                        </Text>
+                                                    )}
+                                                </View>
                                                 {item.agent && (
                                                     <Text className="text-[10px] text-center text-gray-400">
                                                         Agent: {getUsername(item.agent)}
