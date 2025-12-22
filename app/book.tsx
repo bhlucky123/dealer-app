@@ -1,8 +1,7 @@
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
-import { getThemeColors } from "@/utils/color";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Clipboard } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
@@ -22,6 +21,7 @@ import {
 import { ALERT_TYPE, Dialog } from "react-native-alert-notification";
 import { Dropdown } from 'react-native-element-dropdown';
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Agent } from "./(tabs)/agent";
 
 type BookingDetail = {
   lsk: string;
@@ -88,11 +88,12 @@ const BookingScreen: React.FC = () => {
   // Modal for failed lines in paste
   const [failedPasteModalVisible, setFailedPasteModalVisible] = useState(false);
   const [failedPasteLines, setFailedPasteLines] = useState<string[]>([]);
+  const [selectedDealer, setSelectedDealer] = useState("");
+  const [selectedAgent, setSelectedAgent] = useState("");
 
   const { selectedDraw, setSelectedDraw } = useDrawStore();
 
   const colorTheme = selectedDraw?.color_theme;
-  const themeColors = getThemeColors(colorTheme);
   const { user } = useAuthStore();
 
   const countInputRef = useRef<TextInput>(null);
@@ -162,6 +163,53 @@ const BookingScreen: React.FC = () => {
     enabled: !!selectedDraw?.id,
     select: (response) => response,
     refetchOnMount: true,
+  });
+
+  const queryClient = useQueryClient();
+
+  const cachedAgents = queryClient.getQueryData<Agent[]>(["agents"]);
+  const cachedDealers = queryClient.getQueryData<Agent[]>(["dealers"]);
+
+  // const { data: agents = [] } = useQuery<Agent[]>({
+  //   queryKey: ["agents"],
+  //   queryFn: () => api.get("/agent/manage/").then((res) => res.data),
+  //   enabled: user?.user_type === "DEALER" && !cachedAgents,
+  //   initialData: user?.user_type === "DEALER" ? cachedAgents : undefined,
+  // });
+
+
+  const {
+    data: agents = [],
+    isLoading: isAgentLoading,
+    refetch: refetchAgents,
+    isFetching: isAgentFetching,
+    error: agentError,
+    isError: isAgentError,
+  } = useQuery<Agent[]>({
+    queryKey: ["agents", selectedDealer],
+    queryFn: async () => {
+      try {
+        let url = "/agent/manage/";
+        if (selectedDealer) {
+          url += `?assigned_dealer__id=${encodeURIComponent(Number(selectedDealer))}`;
+        }
+        const res = await api.get(url);
+        return res.data;
+      } catch (err: any) {
+        console.log("err", err);
+        return [];
+      }
+    },
+    enabled: !!selectedDealer,
+    initialData: [],
+
+  });
+
+  const { data: dealers = [] } = useQuery<Agent[]>({
+    queryKey: ["dealers"],
+    queryFn: () => api.get("/administrator/dealer/").then((res) => res.data),
+    enabled: user?.user_type === "ADMIN" && !cachedDealers,
+    initialData: user?.user_type === "ADMIN" ? cachedDealers : undefined,
   });
 
   // Show error message if draw session is not active or error occurs
@@ -456,11 +504,6 @@ const BookingScreen: React.FC = () => {
         const start = parseNum(num);
         const end = parseNum(endNumberInput);
 
-        console.log("start", start);
-        console.log("end", end);
-        console.log("subType", subType);
-        console.log("isDouble", isDouble, "isSingle", isSingle);
-
         if (isNaN(start) || isNaN(end) || start > end) {
           Alert.alert(
             "Invalid Range",
@@ -483,18 +526,22 @@ const BookingScreen: React.FC = () => {
           }
           if (subType === "BOTH") {
             if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, "SUPER", undefined, bookingType));
-            if (bCountVal > 0) newEntries.push(createEntry(paddedNum, bCountVal, "BOX", undefined, bookingType));
+            // FIXED: Use bCountVal if > 0, otherwise use countVal for the BOX part.
+            const boxCount = bCountVal > 0 ? bCountVal : countVal;
+            if (boxCount > 0) newEntries.push(createEntry(paddedNum, boxCount, "BOX", undefined, bookingType));
           } else if (subType === "BOX") {
             // Fix: For BOX, add a booking for each number in the range
             if (paddedNum.length !== 3) continue;
-            if (!bCountInput || !isValidNumberString(bCountInput) || !isValidPositiveNumber(bCountInput)) continue;
-            newEntries.push(createEntry(paddedNum, bCountVal, "BOX", undefined, bookingType));
-          } else if (isDouble && subType === "ALL") {
-            ["AB", "BC", "AC"].forEach((lsk) => {
-              if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, lsk, bookingType));
-            });
+            // FIXED: Use bCountVal if > 0, otherwise use countVal. Validate the chosen count.
+            const boxCount = bCountVal > 0 ? bCountVal : countVal;
+            if (boxCount <= 0) continue;
+            newEntries.push(createEntry(paddedNum, boxCount, "BOX", undefined, bookingType));
           } else if (isSingle && subType === "ALL") {
             ["A", "B", "C"].forEach((lsk) => {
+              if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, lsk, bookingType));
+            });
+          } else if (isDouble && subType === "ALL") {
+            ["AB", "BC", "AC"].forEach((lsk) => {
               if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, lsk, bookingType));
             });
           } else {
@@ -509,7 +556,6 @@ const BookingScreen: React.FC = () => {
         setBCountInput("");
         return;
       }
-      console.log("invalids1", invalids);
 
       // For BOX, only require bCount and must be 3-digit
       if (subType === "BOX") {
@@ -517,15 +563,16 @@ const BookingScreen: React.FC = () => {
           invalids.push(num);
           return;
         }
-        if (!bCountInput || !isValidNumberString(bCountInput) || !isValidPositiveNumber(bCountInput)) {
+        const effectiveBoxCount = bCountVal > 0 ? bCountVal : countVal;
+        if (effectiveBoxCount <= 0) {
           Alert.alert(
             "Invalid input",
-            "Please enter a valid box count."
+            "Please enter a valid count or B.Count greater than 0."
           );
           return;
         }
         const padded = num.padStart(3, "0");
-        allEntries.push(createEntry(padded, bCountVal, "BOX", undefined, bookingType));
+        allEntries.push(createEntry(padded, effectiveBoxCount, "BOX", undefined, bookingType));
         return;
       }
       console.log("invalids2", invalids);
@@ -540,18 +587,65 @@ const BookingScreen: React.FC = () => {
       }
 
       // Validate bCountInput if needed
+      // if (subType === "BOTH") {
+      //   if (num.length !== 3) {
+      //     invalids.push(num);
+      //     return;
+      //   }
+      //   if (!isValidNumberString(bCountInput) || !isValidPositiveNumber(bCountInput)) {
+      //     Alert.alert(
+      //       "Invalid input",
+      //       "Please enter a valid box count."
+      //     );
+      //     return;
+      //   }
+      // }
       if (subType === "BOTH") {
-        if (num.length !== 3) {
-          invalids.push(num);
-          return;
-        }
-        if (!isValidNumberString(bCountInput) || !isValidPositiveNumber(bCountInput)) {
+        // --- New Logic for BOTH ---
+
+        // 1. Check if SUPER count is valid (still required via countInput)
+        if (!isValidNumberString(countInput) || !isValidPositiveNumber(countInput)) {
           Alert.alert(
             "Invalid input",
-            "Please enter a valid box count."
+            "Please enter a valid count for SUPER."
           );
           return;
         }
+
+        // 2. Determine effective BOX count: bCountInput (if valid) or countInput
+        const boxCountValue = bCountVal > 0 ? bCountVal : countVal;
+
+        // 3. Check if number is 3-digit (required for BOTH)
+        if (num.length !== 3) {
+          Alert.alert(
+            "Invalid input",
+            "BOTH option is only available for 3-digit numbers."
+          );
+          return;
+        }
+
+        // 4. Check if at least one count is positive
+        if (countVal <= 0 && boxCountValue <= 0) {
+          Alert.alert(
+            "Invalid input",
+            "Total count for BOTH (SUPER or BOX) must be greater than 0."
+          );
+          return;
+        }
+
+        const padded = num.padStart(digitsRequired, "0");
+
+        // Push SUPER entry (using countInput - validated above)
+        if (countVal > 0) {
+          allEntries.push(createEntry(padded, countVal, "SUPER", undefined, bookingType));
+        }
+
+        // Push BOX entry (using effective BOX count)
+        if (boxCountValue > 0) {
+          allEntries.push(createEntry(padded, boxCountValue, "BOX", undefined, bookingType));
+        }
+
+        return;
       }
       if (isSingle && countVal < 5) {
         Alert.alert(
@@ -620,7 +714,9 @@ const BookingScreen: React.FC = () => {
             const paddedNum = i.toString().padStart(3, "0");
             if (subType === "BOTH") {
               if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, "SUPER", undefined, bookingType));
-              if (bCountVal > 0) newEntries.push(createEntry(paddedNum, bCountVal, "BOX", undefined, bookingType));
+              // FIXED: Use bCountVal if > 0, otherwise use countVal for the BOX part.
+              const boxCount = bCountVal > 0 ? bCountVal : countVal;
+              if (boxCount > 0) newEntries.push(createEntry(paddedNum, boxCount, "BOX", undefined, bookingType));
             } else if (isDouble && subType === "ALL") {
               ["AB", "BC", "AC"].forEach((lsk) => {
                 if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, lsk, bookingType));
@@ -692,7 +788,9 @@ const BookingScreen: React.FC = () => {
           const number = perm;
           if (subType === "BOTH") {
             if (countVal > 0) newEntries.push(createEntry(number, countVal, "SUPER", undefined, bookingType));
-            if (bCountVal > 0) newEntries.push(createEntry(number, bCountVal, "BOX", undefined, bookingType));
+            // FIXED: Use bCountVal if > 0, otherwise use countVal for the BOX part.
+            const boxCount = bCountVal > 0 ? bCountVal : countVal;
+            if (boxCount > 0) newEntries.push(createEntry(number, boxCount, "BOX", undefined, bookingType));
           } else if (isDouble && subType === "ALL") {
             ["AB", "BC", "AC"].forEach((lsk) => {
               if (countVal > 0) newEntries.push(createEntry(number, countVal, lsk, lsk, bookingType));
@@ -811,10 +909,20 @@ const BookingScreen: React.FC = () => {
       return;
     }
     if (DrawSessionDetails?.session?.active_session_id) {
+      let bookedAgent = null;
+       let booked_dealer = null;
+      if (selectedDealer) {
+        booked_dealer = Number(selectedDealer);
+      }
+      if (selectedAgent) {
+        bookedAgent = Number(selectedAgent);
+        booked_dealer = null;
+      }
       const data = {
         customer_name: customerName,
         draw_session: DrawSessionDetails?.session?.active_session_id,
-        booked_agent: Number(user?.id),
+        booked_agent: bookedAgent,
+        booked_dealer: booked_dealer,
         booking_details: bookingDetails.map(
           ({ number, count, type, sub_type }) => ({
             number,
@@ -936,9 +1044,8 @@ const BookingScreen: React.FC = () => {
     setDrawSession(num.toString());
   };
 
-
-
   const handlePastBookings = async () => {
+    console.log("on paste booking")
     try {
       let clipboardText: string = "";
       if (Platform.OS === "web") {
@@ -979,6 +1086,7 @@ const BookingScreen: React.FC = () => {
         3: ["SUPER", "BOX", "SET", "BOTH"],
       };
 
+      // Helper: Validate if subType is allowed for number length
       function isValidSubtypeForNumber(number: string, subType: string) {
         const len = number.length;
         const st = (subType || "").toUpperCase();
@@ -992,16 +1100,22 @@ const BookingScreen: React.FC = () => {
         if (!number || isNaN(Number(number)) || !count || isNaN(Number(count)) || Number(count) <= 0) return false;
         let nlen = number.length;
         let st = (subType || "").toUpperCase();
+
+        // Default subType logic
         if (!st) {
           if (nlen === 1) st = "A";
           else if (nlen === 2) st = "AB";
           else st = "SUPER";
         }
+
+        // Validate subType for number length
         if (!isValidSubtypeForNumber(number, st)) return false;
+
         bookings.push({ number, count: Number(count), subType: st });
         return true;
       }
 
+      // Helper: Add both SUPER and BOX for dual count (only for 3-digit)
       function pushDualBooking(number: string, count1: number, count2: number) {
         if (number.length !== 3) return false;
         let ok1 = pushBooking(number, count1, "SUPER");
@@ -1009,42 +1123,93 @@ const BookingScreen: React.FC = () => {
         return ok1 && ok2;
       }
 
-      // Regexes for various formats
-      const abcRegex = /^\s*Abc\s+(\d+)\s+(\d+)\s*$/i;
-      const superSpaceRegex = /^\s*(\d{1,3})\s{2,}(\d+)\s*$/;
-      const threeDigitSpaceRegex = /^\s*(\d{3})\s+(\d+)\s*$/;
-      // For new request: accept space-separated 3-part bookings, e.g. "123 5 2"
-      const numberDualSpaceCount = /^\s*(\d{1,3})\s+(\d+)\s+(\d+)\s*$/;
-      // Accept "subtype=number=count", e.g. "Bc=15=10", "Ac=35=25"
-      const subtypeEqNumberEqCount = /^\s*([Aa][Bb]|[Aa][Cc]|[Bb][Cc])\s*=\s*(\d{1,3})\s*=\s*(\d+)\s*$/;
-      // Accept "Abc=25=5" (needs to add all: ab, ac, bc with number=25, count=5), "Abc-32-10" etc.
-      const abcEqNumberEqCount = /^\s*Abc\s*=\s*(\d+)\s*=\s*(\d+)\s*$/i;
-      const abcDashNumberDashCount = /^\s*Abc\s*-\s*(\d+)\s*-\s*(\d+)\s*$/i;
-      // Accept "Abc 56 15" as 3 combos (AB, AC, BC)
-      const abcSpaceNumberSpaceCount = /^\s*Abc\s+(\d{1,3})\s+(\d+)\s*$/i;
-      // Accept "Abc-23,34,15=10"
-      const abcDashMultiNumbersEqCount = /^\s*Abc\s*-\s*([\d, ]+)=\s*(\d+)\s*$/i;
+      // Helper: For SET subtype and 3-digit, push all perms as SUPER
+      function pushSetBookings(number: string, count: number) {
+        if (number.length === 3) {
+          const perms = Array.from(new Set([
+            number[0] + number[1] + number[2],
+            number[0] + number[2] + number[1],
+            number[1] + number[0] + number[2],
+            number[1] + number[2] + number[0],
+            number[2] + number[0] + number[1],
+            number[2] + number[1] + number[0],
+          ]));
+          let anyOk = false;
+          for (let perm of perms) {
+            if (pushBooking(perm, count, "SUPER")) anyOk = true;
+          }
+          return anyOk;
+        }
+        return false;
+      }
 
+      // Regexes for various formats (original list)...
+
+      // 1. WhatsApp prefix
+      // 2. "Abc 0 5" style (legacy)
+      const abcRegex = /^\s*Abc\s+(\d+)\s+(\d+)\s*$/i;
+      // 3. "304  10" style (number, 2+ spaces, count)
+      const superSpaceRegex = /^\s*(\d{1,3})\s{2,}(\d+)\s*$/;
+      // 4. "054 2" (3-digit number, 1 space, count)
+      const threeDigitSpaceRegex = /^\s*(\d{3})\s+(\d+)\s*$/;
+      // 5. "number [subType] count"
       const normalMatchRegex = /^\s*(\d{1,3})\s+([A-Za-z]+)?\s*(\d+)\s*$/;
+      // 6. "123=5", "123+5", etc
       const superSymbolRegex = /^\s*(\d{1,3})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s*$/;
+      // 7. "041-1.2", "041-1*2", etc
       const dualCountRegex = /^\s*(\d{1,3})\s*[-=+\/\.\#\&\*:,]\s*(\d+)[^0-9]+(\d+)\s*$/;
+      // 8. "036,2" or "036, 2" or "036-2" or etc.
       const commaOrSymbolRegex = /^\s*(\d{1,3})\s*[,=+\-:\/\.\#\&\*]\s*(\d+)\s*$/;
+      // 9. "AB.24.2" or "BC.41.2"
       const subtypeDotNumberDotCount = /^\s*([A-Za-z]+)[\.\-]([0-9]{1,3})[\.\-](\d+)\s*$/;
+      // 10. "100.2.2"
       const numberDotCountDotCount = /^\s*(\d{1,3})[\.\-](\d+)[\.\-](\d+)\s*$/;
+      // 11. "021*2"
       const numberStarCount = /^\s*(\d{1,3})\s*\*\s*(\d+)\s*$/;
+      // 12. "312.6"
       const numberDotCount = /^\s*(\d{1,3})\s*[\.\-]\s*(\d+)\s*$/;
+      // 12a. "608..50"
       const numberDoubleDotCount = /^\s*(\d{1,3})\s*\.\.\s*(\d+)\s*$/;
+      // 13. "123-5 box", "123=5 set", "123-5 super", "123-5 both"
       const numberSymbolCountSubtype = /^\s*(\d{1,3})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s+([A-Za-z]+)\s*$/;
+      // 14. "56 AC=5", "34 AB:5", ...
       const numberSubtypeSymbolCount = /^\s*(\d{1,3})\s*([A-Za-z]+)\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s*$/;
+      // 15. "A 8 20"
       const subtypeNumberCount = /^\s*([A-Za-z]+)\s+(\d{1,3})\s+(\d+)\s*$/;
+      // 16. "Dear 6", ...
       const ignoreLineRegex = /^\s*[A-Za-z ]+\d+\s*$/;
+      // 17. "709-5,077-6,078-5,..." 
       const multiBookingLineRegex = /(\d{1,3})\s*[-=+\*\/\.\#\&:,]\s*(\d+)/g;
+
+      // --- Set 524.1 style ---
       const setWordNumberDotCount = /^\s*Set\s+(\d{3})\.(\d+)\s*$/i;
+      // --- "770,,1" style ---
       const numberDoubleCommaCount = /^\s*(\d{1,3})\s*,{2,}\s*(\d+)\s*$/;
-      const abSpaceNumberEqCount = /^\s*([Aa][Bb])\s+(\d{1,3})\s*=\s*(\d+)\s*$/;
-      const abEqNumberEqCount = /^\s*([Aa][Bb])\s*=\s*(\d{1,3})\s*=\s*(\d+)\s*$/;
-      const subtypeNumberSymbolCount = /^\s*([A-Za-z]+)\s+(\d{1,3})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s*$/;
-      const singleLetterEqNumberEqCount = /^\s*([ABCabc])\s*=\s*(\d{1,3})\s*=\s*(\d+)\s*$/;
+      // --- "Abc-8-5" style ---
+      const abcDashNumberDashCount = /^\s*Abc\s*-\s*(\d+)\s*-\s*(\d+)\s*$/i;
+      // --- 3-value booking ---
+      const numberCount1Count2Regex = /^\s*(\d{1,3})\s+(\d+)\s+(\d+)\s*$/;
+      // --- C+7+100 ---
+      const subtypePlusNumberPlusCount = /^\s*([A-Za-z]+)\+(\d+)\+(\d+)\s*$/;
+      // --- Abc=6=25 ---
+      const subtypeEqNumberEqCount = /^\s*([A-Za-z]+)=(\d+)[=]+(\d+)\s*$/;
+      // --- Abc-4,6=30 ---
+      const subtypeDashMultiNumbersEqCount = /^\s*([A-Za-z]+)-([\d, ]+)=\s*(\d+)\s*$/;
+      // --- Abc flexible combo ---
+      const abcFlexibleComboRegex = /^\s*Abc[\s=+\-]+(\d+)[\s=+\-]+(\d+)\s*$/i;
+
+      // --- Custom regex for bc:43:15 or bc:43=15 and similar (subtype:number:count style, comma/dots etc too) ---
+      const subtypeNumberCountFlexible = /^\s*([A-Za-z]+)\s*[:=\-,.\s]+\s*(\d+)\s*[:=\-,.\s]+\s*(\d+)\s*$/i;
+      // For "AB,15,10" - subtype,number,count (comma/space/dot/slash/hyphen separated)
+      const subtypeNumberCountCommaFlexible = /^\s*([A-Za-z]+)[,:\.\-\s]+(\d+)[,:\.\-\s]+(\d+)\s*$/i;
+      // For "ac:14=10" hybrid
+      const subtypeNumberCountHybrid = /^\s*([A-Za-z]+)\s*[:=\-,.\s]+\s*(\d+)\s*[=:\-,.\s]+\s*(\d+)\s*$/i;
+
+      // ---- Main new regex for number+count+subtype, with any separator, BOX/SET awareness ----
+      // for 123=5=box / 123-5-BOX / 123+25+box / 123:5:box / 123.20.box / 123,4,BOX / 123 2 box
+      const numberCountSubtypeFlexible = /^\s*(\d{1,3})\s*([=+\-:\/\.,\s]+)\s*(\d+)\s*([=+\-:\/\.,\s]+)\s*([A-Za-z]+)\s*$/i;
+      // also allow 123 5 set
+      const numberCountSubtypeSpaces = /^\s*(\d{1,3})\s+(\d+)\s+([A-Za-z]+)\s*$/i;
 
       for (const origLine of lines) {
         let line = origLine;
@@ -1056,55 +1221,123 @@ const BookingScreen: React.FC = () => {
           waPrefix = waMatch[0];
           line = line.slice(waPrefix.length).trim();
         }
+
+        // If after removing prefix, line is empty, just add the prefix to failedLines and continue
         if (line.length === 0) {
           if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
           continue;
         }
+
+        // 0. Ignore lines like "Dear 6", "Kerala 3"
         if (ignoreLineRegex.test(line)) continue;
 
-        let m;
+        // ---- 1. YOUR NEW REQUEST: bc:43:15, AB,15,10, ac:14=10 style ----
+        // Try the most-flexible: subtype:number:count (colons, commas, spaces, dots), eg. "bc:43:15", "AB,15,10"
+        let m = null;
 
-        // "Abc-23,34,15=10" format: Abc-23,34,15=10 → for each 23,34,15, add ab/ac/bc subtype bookings
-        m = line.match(abcDashMultiNumbersEqCount);
-        if (m) {
-          let nums = m[1].split(",").map(n => n.trim()).filter(Boolean);
-          let cnt = m[2];
-          let anyOk = false;
-          for (let num of nums) {
-            let ok = pushBooking(num, cnt, "AB") & pushBooking(num, cnt, "AC") & pushBooking(num, cnt, "BC");
-            if (ok) anyOk = true;
-          }
-          if (!anyOk) {
+        // bc:43:15 or ac:14=10 or AB,15,10
+        m = line.match(subtypeNumberCountFlexible);
+        if (m && m[1] && m[2] && m[3]) {
+          // Defensive: subtype, number, count
+          if (!pushBooking(m[2], m[3] as any, m[1])) {
             if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
             failedLines.push(origLine);
           }
           continue;
         }
 
-        // Case: "Abc=25=5" means ab=25=5, ac=25=5, bc=25=5
-        m = line.match(abcEqNumberEqCount);
-        if (m) {
-          let num = m[1];
-          let cnt = m[2];
-          let ok =
-            pushBooking(num, cnt, "AB") &
-            pushBooking(num, cnt, "AC") &
-            pushBooking(num, cnt, "BC");
-          if (!ok) {
+        // Try comma flexible also (should be covered by above)
+        m = line.match(subtypeNumberCountCommaFlexible);
+        if (m && m[1] && m[2] && m[3]) {
+          if (!pushBooking(m[2], m[3] as any, m[1])) {
             if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
             failedLines.push(origLine);
           }
           continue;
         }
 
-        // "Abc-8-5" style, interpreted as AB/AC/BC (3 subtypes)
+        // Try hybrid (should be covered, but for safety)
+        m = line.match(subtypeNumberCountHybrid);
+        if (m && m[1] && m[2] && m[3]) {
+          if (!pushBooking(m[2], m[3] as any, m[1])) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // ---- 2. YOUR NEW REQUEST: number + count + subtype, with separators, like 123=5=box, 123 2 box etc ----
+        m = line.match(numberCountSubtypeFlexible);
+        if (m && m[1] && m[3] && m[5]) {
+          let number = m[1];
+          let count = m[3];
+          let subtype = (m[5] || "").toUpperCase();
+
+          // SET logic if subtype is SET
+          if (subtype === "SET") {
+            if (!pushSetBookings(number, count as any)) {
+              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+              failedLines.push(origLine);
+            }
+          } else if (subtype === "BOTH" && number.length === 3) {
+            let ok1 = pushBooking(number, count as any, "SUPER");
+            let ok2 = pushBooking(number, count as any, "BOX");
+            if (!(ok1 && ok2)) {
+              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+              failedLines.push(origLine);
+            }
+          } else {
+            if (!pushBooking(number, count as any, subtype)) {
+              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+              failedLines.push(origLine);
+            }
+          }
+          continue;
+        }
+
+        m = line.match(numberCountSubtypeSpaces);
+        if (m && m[1] && m[2] && m[3]) {
+          let number = m[1];
+          let count = m[2];
+          let subtype = (m[3] || "").toUpperCase();
+          if (subtype === "SET") {
+            if (!pushSetBookings(number, count as any)) {
+              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+              failedLines.push(origLine);
+            }
+          } else if (subtype === "BOTH" && number.length === 3) {
+            let ok1 = pushBooking(number, count as any, "SUPER");
+            let ok2 = pushBooking(number, count as any, "BOX");
+            if (!(ok1 && ok2)) {
+              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+              failedLines.push(origLine);
+            }
+          } else {
+            if (!pushBooking(number, count as any, subtype)) {
+              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+              failedLines.push(origLine);
+            }
+          }
+          continue;
+        }
+
+        // --- 1. Handle "Abc=25=5", "Abc-32-10", "Abc 56 15", "Abc+5=10", "Abc=6=25" as AB, BC, AC ---
+        m = line.match(abcFlexibleComboRegex);
+        if (m) {
+          let ok1 = pushBooking(m[1], m[2] as any, "AB");
+          let ok2 = pushBooking(m[1], m[2] as any, "BC");
+          let ok3 = pushBooking(m[1], m[2] as any, "AC");
+          if (!(ok1 && ok2 && ok3)) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // --- Existing ABC legacy (strict) ---
         m = line.match(abcDashNumberDashCount);
         if (m) {
-          let num = m[1], cnt = m[2];
-          let ok =
-            pushBooking(num, cnt, "AB") &
-            pushBooking(num, cnt, "AC") &
-            pushBooking(num, cnt, "BC");
+          let ok = pushBooking(m[1], m[2] as any, "A") && pushBooking(m[1], m[2] as any, "B") && pushBooking(m[1], m[2] as any, "C");
           if (!ok) {
             if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
             failedLines.push(origLine);
@@ -1112,86 +1345,19 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // "Abc 56 15" style -- AB/AC/BC
-        m = line.match(abcSpaceNumberSpaceCount);
-        if (m) {
-          let num = m[1], cnt = m[2];
-          let ok =
-            pushBooking(num, cnt, "AB") &
-            pushBooking(num, cnt, "AC") &
-            pushBooking(num, cnt, "BC");
-          if (!ok) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // "Bc=15=10", "Ac=35=25", "Ab=45=100"
-        m = line.match(subtypeEqNumberEqCount);
-        if (m) {
-          // m[1] = subtype (AB, AC, BC), m[2] = number, m[3] = count
-          let ok = pushBooking(m[2], m[3], m[1].toUpperCase());
-          if (!ok) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // "A=4=10", "B=4=5", "C=4=5" style ---
-        m = line.match(singleLetterEqNumberEqCount);
-        if (m) {
-          if (!pushBooking(m[2], m[3], m[1].toUpperCase())) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // "Ab 45=100" and "AB 45=100" style ---
-        m = line.match(abSpaceNumberEqCount);
-        if (m) {
-          if (!pushBooking(m[2], m[3], m[1].toUpperCase())) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // "Ab=45=100" and "AB=45=100" style ---
-        m = line.match(abEqNumberEqCount);
-        if (m) {
-          if (!pushBooking(m[2], m[3], m[1].toUpperCase())) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // "Set 524.1" style
+        // --- Set 524.1 style ---
         m = line.match(setWordNumberDotCount);
         if (m) {
           const num = m[1];
           const count = m[2];
-          if (num.length === 3) {
-            const perms = Array.from(new Set([
-              num[0] + num[1] + num[2],
-              num[0] + num[2] + num[1],
-              num[1] + num[0] + num[2],
-              num[1] + num[2] + num[0],
-              num[2] + num[0] + num[1],
-              num[2] + num[1] + num[0],
-            ]));
-            for (let perm of perms) pushBooking(perm, count, "SUPER");
-          } else {
+          if (!pushSetBookings(num, count)) {
             if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
             failedLines.push(origLine);
           }
           continue;
         }
 
-        // "770,,1" style (number,,count)
+        // --- "770,,1" style ---
         m = line.match(numberDoubleCommaCount);
         if (m) {
           if (!pushBooking(m[1], m[2])) {
@@ -1201,17 +1367,62 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // "AB 45/100", "AB 45-100", etc.
-        m = line.match(subtypeNumberSymbolCount);
+        // --- 3-value booking: "123 5 2"
+        m = line.match(numberCount1Count2Regex);
         if (m) {
-          if (!pushBooking(m[2], m[4], m[1])) {
+          if (m[1].length === 3) {
+            let ok = pushBooking(m[1], m[2], "SUPER") && pushBooking(m[1], m[3], "BOX");
+            if (!ok) {
+              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+              failedLines.push(origLine);
+            }
+          } else {
+            let ok = pushBooking(m[1], m[2]) && pushBooking(m[1], m[3]);
+            if (!ok) {
+              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+              failedLines.push(origLine);
+            }
+          }
+          continue;
+        }
+
+        // --- C+7+100 --- (subtype, number, count)
+        m = line.match(subtypePlusNumberPlusCount);
+        if (m) {
+          if (!pushBooking(m[2], m[3], m[1])) {
             if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
             failedLines.push(origLine);
           }
           continue;
         }
 
-        // "709-5,077-6,078-5,..."
+        // --- Abc=6=25 --- (subtype, = number, = count)
+        m = line.match(subtypeEqNumberEqCount);
+        if (m) {
+          if (!pushBooking(m[2], m[3], m[1])) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // --- Abc-4,6=30 --- (subtype, numbers (comma/space separated), count)
+        m = line.match(subtypeDashMultiNumbersEqCount);
+        if (m) {
+          let numbers = m[2].split(/[\s,]+/).map(num => num.trim()).filter(Boolean);
+          let count = m[3];
+          let anyOk = false;
+          for (let num of numbers) {
+            if (pushBooking(num, count, m[1])) anyOk = true;
+          }
+          if (!anyOk) {
+            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+            failedLines.push(origLine);
+          }
+          continue;
+        }
+
+        // -- Multi-booking line: "709-5,077-6,078-5,..."
         let multiMatch = [...line.matchAll(multiBookingLineRegex)];
         if (multiMatch.length > 1) {
           let anyOk = false;
@@ -1225,7 +1436,7 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // "041-1.2", "041-1*2", "041-1/2", "123=3=3", etc.
+        // -- Dual count: "041-1.2", "041-1*2", "041-1/2", "123=3=3", "145+2+2", "156:3-5", "165+5:6"
         m = line.match(dualCountRegex);
         if (m) {
           if (!pushDualBooking(m[1], m[2], m[3])) {
@@ -1235,7 +1446,7 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // "608..50"
+        // -- "608..50"
         m = line.match(numberDoubleDotCount);
         if (m) {
           if (!pushBooking(m[1], m[2])) {
@@ -1245,14 +1456,10 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // Legacy: "Abc 0 5" style
+        // -- "Abc 0 5" style (legacy)
         m = line.match(abcRegex);
         if (m) {
-          let num = m[1], cnt = m[2];
-          let ok =
-            pushBooking(num, cnt, "A") &
-            pushBooking(num, cnt, "B") &
-            pushBooking(num, cnt, "C");
+          let ok = pushBooking(m[1], m[2], "A") && pushBooking(m[1], m[2], "B") && pushBooking(m[1], m[2], "C");
           if (!ok) {
             if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
             failedLines.push(origLine);
@@ -1260,7 +1467,7 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // "304  10" style (number, 2+ spaces, count)
+        // -- "304  10" (number, 2+ spaces, count)
         m = line.match(superSpaceRegex);
         if (m) {
           if (!pushBooking(m[1], m[2])) {
@@ -1270,7 +1477,7 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // "054 2" (3-digit number, 1 space, count)
+        // -- "054 2" (3-digit number, 1 space, count)
         m = line.match(threeDigitSpaceRegex);
         if (m) {
           if (!pushBooking(m[1], m[2])) {
@@ -1280,21 +1487,7 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // --- ADDED: strictly accept 3-part "number count1 count2" e.g. "123 5 2"
-        m = line.match(numberDualSpaceCount);
-        if (m) {
-          let num = m[1];
-          let cnt1 = m[2];
-          let cnt2 = m[3];
-          let ok = pushDualBooking(num, cnt1, cnt2);
-          if (!ok) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // "number [subType] count"
+        // -- "number [subType] count"
         m = line.match(normalMatchRegex);
         if (m) {
           if (!pushBooking(m[1], m[3], m[2])) {
@@ -1304,7 +1497,7 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // "123=5", "123+5", "123/5", etc.
+        // -- "123=5", "123+5", etc
         m = line.match(superSymbolRegex);
         if (m) {
           if (!pushBooking(m[1], m[3])) {
@@ -1314,7 +1507,7 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // "036,2" or other comma/symbol-delimited
+        // -- "036,2", "036-2", etc
         m = line.match(commaOrSymbolRegex);
         if (m) {
           if (!pushBooking(m[1], m[2])) {
@@ -1324,7 +1517,7 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // "AB.24.2" or "BC.41.2"
+        // -- "AB.24.2" or "BC.41.2"
         m = line.match(subtypeDotNumberDotCount);
         if (m) {
           if (!pushBooking(m[2], m[3], m[1])) {
@@ -1334,7 +1527,7 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // "100.2.2"
+        // -- "100.2.2"
         m = line.match(numberDotCountDotCount);
         if (m) {
           let ok = pushBooking(m[1], m[2], "SUPER") && pushBooking(m[1], m[3], "BOX");
@@ -1345,7 +1538,7 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // "021*2"
+        // -- "021*2"
         m = line.match(numberStarCount);
         if (m) {
           if (!pushBooking(m[1], m[2])) {
@@ -1355,7 +1548,7 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // "312.6"
+        // -- "312.6"
         m = line.match(numberDotCount);
         if (m) {
           if (!pushBooking(m[1], m[2])) {
@@ -1365,33 +1558,18 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // "123-5 box", "123=5 set", "123-5 both"
+        // -- "123-5 box", "123=5 set", "123-5 super", "123-5 both"
         m = line.match(numberSymbolCountSubtype);
         if (m) {
           let subType = m[4].toUpperCase();
           if (subType === "SET") {
-            if (m[1].length === 3) {
-              const perms = Array.from(new Set([
-                m[1][0] + m[1][1] + m[1][2],
-                m[1][0] + m[1][2] + m[1][1],
-                m[1][1] + m[1][0] + m[1][2],
-                m[1][1] + m[1][2] + m[1][0],
-                m[1][2] + m[1][0] + m[1][1],
-                m[1][2] + m[1][1] + m[1][0],
-              ]));
-              for (let perm of perms) pushBooking(perm, m[3], "SUPER");
-            } else {
+            if (!pushSetBookings(m[1], m[3])) {
               if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
               failedLines.push(origLine);
             }
-          } else if (subType === "BOTH") {
-            if (m[1].length === 3) {
-              pushBooking(m[1], m[3], "SUPER");
-              pushBooking(m[1], m[3], "BOX");
-            } else {
-              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-              failedLines.push(origLine);
-            }
+          } else if (subType === "BOTH" && m[1].length === 3) {
+            pushBooking(m[1], m[3], "SUPER");
+            pushBooking(m[1], m[3], "BOX");
           } else {
             if (!pushBooking(m[1], m[3], subType)) {
               if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
@@ -1401,7 +1579,7 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // "56 AC=5", etc.
+        // -- "56 AC=5", "34 AB:5", "45 BC-5", "6 A=10", "8 B=15", "7 C #15"
         m = line.match(numberSubtypeSymbolCount);
         if (m) {
           if (!pushBooking(m[1], m[4], m[2])) {
@@ -1411,7 +1589,7 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // "A 8 20", "A 9 20"
+        // -- "A 8 20", "A 9 20"
         m = line.match(subtypeNumberCount);
         if (m) {
           if (!pushBooking(m[2], m[3], m[1])) {
@@ -1421,6 +1599,7 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
+        // If still not matched, add WhatsApp prefix (if any) and the line to failedLines
         if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
         if (line.length > 0) failedLines.push(origLine);
       }
@@ -1438,28 +1617,84 @@ const BookingScreen: React.FC = () => {
         addBooking(booking.subType, booking.number, booking.count, booking.count);
         added++;
       }
+      if (failedLines.length > 0) {
+        // Pattern for lines like "Abc=6=25", "Abc-4-15", "Abc 5 25", etc.
+        const abcPattern = /^\s*abc\s*[\=\-\+\:\s]\s*(\d+)\s*[\=\-\+\:\s]\s*(\d+)\s*$/i;
+        // WhatsApp prefix and possible trailing message, capture message after prefix
+        const waPrefixCaptureMessage = /^\[.*?\][^:]*:\s*(.*)$/;
+        const newFailedLines: string[] = [];
+        for (const failedLine of failedLines) {
+          let handled = false;
+          // If line is a WA prefix (with or without message)
+          const waMatch = failedLine.match(waPrefixCaptureMessage);
+          if (waMatch) {
+            // waMatch[1] is the message after the prefix (may be empty)
+            const possibleMessage = waMatch[1] ? waMatch[1].trim() : "";
+            if (possibleMessage.length > 0) {
+              // If the message matches the ABC pattern, process it just like a normal text
+              const match = possibleMessage.match(abcPattern);
+              if (match) {
+                const number = match[1];
+                const count = Number(match[2]);
+                if (!isNaN(count)) {
+                  if (number.length === 1) {
+                    addBooking("A", number, count, count);
+                    addBooking("B", number, count, count);
+                    addBooking("C", number, count, count);
+                  } else {
+                    addBooking("AB", number, count, count);
+                    addBooking("AC", number, count, count);
+                    addBooking("BC", number, count, count);
+                  }
+                  added++;
+                  handled = true;
+                }
+              }
+            }
+            // If not handled (either empty after prefix or not ABC), keep the failed line
+            if (!handled) {
+              newFailedLines.push(failedLine);
+            }
+            continue;
+          }
+          // If not a WhatsApp line, try matching the main ABC pattern
+          const match = failedLine.match(abcPattern);
+          if (match) {
+            const number = match[1];
+            const count = Number(match[2]);
+            if (!isNaN(count)) {
+              if (number.length === 1) {
+                addBooking("A", number, count, count);
+                addBooking("B", number, count, count);
+                addBooking("C", number, count, count);
+              } else {
+                addBooking("AB", number, count, count);
+                addBooking("AC", number, count, count);
+                addBooking("BC", number, count, count);
+              }
+              added++;
+              handled = true;
+            }
+          }
+          if (!handled) {
+            newFailedLines.push(failedLine);
+          }
+        }
+        if (newFailedLines.length > 0) {
+          setFailedPasteLines(newFailedLines);
+          setFailedPasteModalVisible(true);
+        }
+      }
 
       if (added === 0) {
         ToastAndroid.show('No valid bookings found in clipboard.', ToastAndroid.SHORT);
       } else {
         ToastAndroid.show(`Added ${added} booking${added > 1 ? "s" : ""} from clipboard.`, ToastAndroid.SHORT);
       }
-
-      if (failedLines.length > 0) {
-        setFailedPasteLines(failedLines);
-        setFailedPasteModalVisible(true);
-      }
     } catch (err) {
       Alert.alert("Clipboard Error", "Could not read clipboard.");
     }
-  }
-  // 🔑 Utility: Generate all 6 permutations of a 3-digit number
-
-
-  // const handlePastBookings = async () => {
-  //   ... (omitted for brevity)
-  // };
-
+  };
 
   const handleBackClick = () => {
     setSelectedDraw(null)
@@ -1524,6 +1759,120 @@ const BookingScreen: React.FC = () => {
               <Clipboard width={24} height={24} color="#374151" />
             </TouchableOpacity>
           </View>
+
+          {
+            user?.user_type === "ADMIN" && (
+              <View className="flex flex-row gap-3">
+
+                <View className="mb-2 flex-1">
+                  <Dropdown
+                    data={dealers.map((dealer) => ({
+                      label: dealer.username,
+                      value: dealer.id,
+                    }))}
+                    labelField="label"
+                    valueField="value"
+                    value={selectedDealer}
+                    onChange={item => {
+                      setSelectedDealer(item.value)
+                    }}
+                    placeholder="Select Dealer"
+                    style={{
+                      borderColor: "#9ca3af",
+                      borderWidth: 1,
+                      borderRadius: 6,
+                      paddingHorizontal: 8,
+                      padding: 10
+                    }}
+                    containerStyle={{
+                      borderRadius: 6,
+                    }}
+                    itemTextStyle={{
+                      color: "#000",
+                    }}
+                    selectedTextStyle={{
+                      color: "#000",
+                    }}
+                    renderRightIcon={() =>
+                      selectedDealer ? (
+                        <TouchableOpacity
+                          onPress={() => setSelectedDealer("")}
+                          style={{
+                            position: "absolute",
+                            right: 10,
+                            zIndex: 10,
+                            // backgroundColor: "#fff",
+                            width: 24,
+                            height: 24,
+                            alignItems: "center",
+                            justifyContent: "center",
+                            borderRadius: 12,
+                          }}
+                        >
+                          <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
+                        </TouchableOpacity>
+                      ) : null
+                    }
+                  />
+                </View>
+
+                {selectedDealer && (
+                  <View className="mb-2 flex-1">
+                    <Dropdown
+                      data={agents.map((agent) => ({
+                        label: agent.username,
+                        value: agent.id,
+                      }))}
+                      labelField="label"
+                      valueField="value"
+                      value={selectedAgent}
+                      onChange={item => {
+                        setSelectedAgent(item.value)
+                      }}
+                      placeholder="Select Agent"
+                      style={{
+                        borderColor: "#9ca3af",
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        paddingHorizontal: 8,
+                        padding: 10
+                      }}
+                      containerStyle={{
+                        borderRadius: 6,
+                      }}
+                      itemTextStyle={{
+                        color: "#000",
+                      }}
+                      selectedTextStyle={{
+                        color: "#000",
+                      }}
+                      renderRightIcon={() =>
+                        selectedAgent ? (
+                          <TouchableOpacity
+                            onPress={() => setSelectedAgent("")}
+                            style={{
+                              position: "absolute",
+                              right: 10,
+                              zIndex: 10,
+                              // backgroundColor: "#fff",
+                              width: 24,
+                              height: 24,
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: 12,
+
+                            }}
+                          >
+                            <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
+                          </TouchableOpacity>
+                        ) : null
+                      }
+                    />
+                  </View>
+                )}
+
+              </View>
+            )}
 
           <View className="flex-row items-center mb-4 gap-2">
             {[1, 2, 3].map((num) => (

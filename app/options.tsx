@@ -1,7 +1,6 @@
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import { router } from "expo-router";
-import React from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 
 const OptionsPage = () => {
@@ -10,6 +9,10 @@ const OptionsPage = () => {
 
   // Define menu items with their corresponding routes
   const menuItems = [
+    {
+      label: "Book Ticket",
+      route: `/book`,
+    },
     {
       label: "Sales Report",
       route: `/sales-report`,
@@ -39,7 +42,7 @@ const OptionsPage = () => {
       </Text>
 
 
-      {
+      {/* {
         (user?.user_type === "DEALER" || user?.user_type === "AGENT") && (
           <TouchableOpacity
             className="bg-gray-100 rounded-lg py-4 px-4 mb-3"
@@ -51,7 +54,7 @@ const OptionsPage = () => {
             <Text className="text-center text-base text-black">Book Ticket</Text>
           </TouchableOpacity>
         )
-      }
+      } */}
 
       {menuItems.map((item, index) => (
         <TouchableOpacity
@@ -59,7 +62,7 @@ const OptionsPage = () => {
           className="bg-gray-100 rounded-lg py-4 px-4 mb-3"
           activeOpacity={0.7}
           onPress={() => {
-            router.push(item.route);
+            router.push(item.route as any);
           }}
         >
           <Text className="text-center text-base text-black">{item.label}</Text>

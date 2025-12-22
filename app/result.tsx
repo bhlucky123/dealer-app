@@ -89,8 +89,12 @@ function canEditResult(published_at: string | undefined | null) {
     if (!published_at) return false;
     const publishedDate = new Date(published_at);
     const now = new Date();
-    // Allow edit only within 2 hours of published_at
-    return now.getTime() - publishedDate.getTime() < 2 * 60 * 60 * 1000;
+    // Allow edit only if published_at is the same calendar day as today
+    return (
+        publishedDate.getFullYear() === now.getFullYear() &&
+        publishedDate.getMonth() === now.getMonth() &&
+        publishedDate.getDate() === now.getDate()
+    );
 }
 
 // Helper to format time as HH:mm (from "15:05:00" or "15:05")

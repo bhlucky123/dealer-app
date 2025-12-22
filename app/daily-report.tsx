@@ -4,7 +4,8 @@ import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
 import { formatDateDDMMYYYY } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
 import { Calendar, Check } from "lucide-react-native";
 import { useCallback, useState } from "react";
 import {
@@ -16,56 +17,59 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Dropdown } from "react-native-element-dropdown";
+import { Agent } from "./(tabs)/agent";
 
-const getToday = () => {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-};
+// --- DATE HELPERS (as in sales-report.tsx) ---
 
-const getTommorow = () => {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-};
+function stripTime(date: Date) {
+  // Returns a copy of date at 00:00:00 (midnight, local time)
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
 
 const DailyReport = () => {
   const { selectedDraw } = useDrawStore();
 
-  // Set today as default for both fromDate and toDate
+  // Default: today, tomorrow
   const today = new Date();
-  const [fromDate, setFromDate] = useState<Date>(getToday());
-  const [toDate, setToDate] = useState<Date>(getTommorow());
+  const [fromDate, setFromDate] = useState<Date>(stripTime(today));
+  // set toDate to today+1, but immediately stripTime
+  const [toDate, setToDate] = useState<Date>(stripTime(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)));
   const [showFromPicker, setShowFromPicker] = useState(false);
   const [showToPicker, setShowToPicker] = useState(false);
   const [allGames, setAllGames] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const { user } = useAuthStore()
+  const { user } = useAuthStore();
 
+  const queryClient = useQueryClient();
+  const cachedAgents = queryClient.getQueryData<Agent[]>(["agents"]);
+  const cachedDealers = queryClient.getQueryData<Agent[]>(["dealers"]);
+  const [selectedDealer, setSelectedDealer] = useState("");
+  const [selectedAgent, setSelectedAgent] = useState("");
+
+
+  // When sending to API, use yyyy-mm-dd (local)
   const buildQuery = () => {
     const params: Record<string, any> = {};
-    console.log("fromDate", fromDate);
-
+    // Don't include time, just yyyy-mm-dd
     if (fromDate) {
-      // Format as yyyy/mm/dd
       const year = fromDate.getFullYear();
       const month = String(fromDate.getMonth() + 1).padStart(2, "0");
       const day = String(fromDate.getDate()).padStart(2, "0");
       params["date_time__gte"] = `${year}-${month}-${day}`;
-  }
-  if (toDate) {
-      // Format as yyyy/mm/dd
+    }
+    if (toDate) {
       const year = toDate.getFullYear();
       const month = String(toDate.getMonth() + 1).padStart(2, "0");
       const day = String(toDate.getDate()).padStart(2, "0");
       params["date_time__lte"] = `${year}-${month}-${day}`;
-  }
+    }
     if (selectedDraw?.id && !allGames) params.draw_session__draw = selectedDraw.id;
-    console.log("buildQuery", params);
-
+    if (user?.user_type === "ADMIN" && selectedDealer) params.dealer = selectedDealer;
+    if (user?.user_type === "DEALER" && selectedAgent) params.booked_agent = selectedAgent;
     return params;
   };
-
-
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["/draw-booking/daily-report", buildQuery()],
@@ -76,10 +80,35 @@ const DailyReport = () => {
     enabled: !!selectedDraw?.id,
   });
 
-  console.log("data daily report", data);
+  const { data: agents = [] } = useQuery<Agent[]>({
+    queryKey: ["agents"],
+    queryFn: () => api.get("/agent/manage/").then((res) => res.data),
+    enabled: user?.user_type === "DEALER" && !cachedAgents,
+    initialData: user?.user_type === "DEALER" ? cachedAgents : undefined,
+  });
 
+  const { data: dealers = [] } = useQuery<Agent[]>({
+    queryKey: ["dealers"],
+    queryFn: () => api.get("/administrator/dealer/").then((res) => res.data),
+    enabled: user?.user_type === "ADMIN" && !cachedDealers,
+    initialData: user?.user_type === "ADMIN" ? cachedDealers : undefined,
+  });
 
-
+  // Assign correct BALANCE field on each row
+  const REPORT_DATA = data?.report?.map((item: any) => ({
+    ...item,
+    BALANCE:
+      ((user?.user_type === "ADMIN" || user?.user_type === "DEALER")
+        ? item?.total_dealer_amount || 0
+        : item?.total_agent_amount || 0) - (item?.total_winning_prize || 0) || 0,
+  }));
+  const SUMMARY_DATA = data?.summary?.map((item: any) => ({
+    ...item,
+    BALANCE:
+      ((user?.user_type === "ADMIN" || user?.user_type === "DEALER")
+        ? item?.total_dealer_amount || 0
+        : item?.total_agent_amount || 0) - (item?.total_winning_prize || 0) || 0,
+  }));
 
   const renderTableHeader = (cols: string[]) => (
     <View className="flex-row bg-gray-100 border-b border-gray-200 py-2">
@@ -96,30 +125,31 @@ const DailyReport = () => {
       key={isTotal ? "summary-total" : item.draw + (item.agent?.username || "")}
       className={`flex-row py-2 border-b border-gray-100 ${isTotal ? "bg-gray-100" : "bg-white"}`}
     >
-      {isTotal &&
+      {isTotal ?
         <Text className="flex-1 text-xs text-center text-gray-800">
           Total
         </Text>
-      }
-      {/* <Text className="flex-1 text-xs text-center text-gray-800">
-        {isTotal ? "Total" : item.agent?.username || item.dealer?.username || "-"}
-      </Text> */}
-      {
-        !isTotal &&
+        :
         <Text className="flex-1 text-xs text-center text-gray-800">{item.draw}</Text>
       }
-      <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(Number(user?.user_type === "ADMIN" ? item.total_dealer_amount : item.total_amount))}</Text>
-      {/* {
-        user?.user_type === "ADMIN" && */}
-      <><Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(item?.total_winning_prize || 0)}</Text>
+      <Text className="flex-1 text-xs text-center text-gray-800">
+        {amountHandler(Number((user?.user_type === "ADMIN" || user?.user_type === "DEALER") ? item.total_dealer_amount : item.total_amount))}
+      </Text>
+      <>
+        <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(item?.total_winning_prize || 0)}</Text>
         {
           isTotal ? (
-            <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(item?.balance || 0)}</Text>
+            <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(item?.BALANCE || item?.balance || 0)}</Text>
           ) :
-            <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(((user?.user_type === "ADMIN" || user?.user_type === "DEALER") ? item?.total_dealer_amount || 0 : item?.total_agent_amount || 0) - (item?.total_winning_prize || 0) || 0)}</Text>
+            <Text className="flex-1 text-xs text-center text-gray-800">
+              {amountHandler(
+                ((user?.user_type === "ADMIN" || user?.user_type === "DEALER")
+                  ? item?.total_dealer_amount || 0
+                  : item?.total_agent_amount || 0) - (item?.total_winning_prize || 0) || 0
+              )}
+            </Text>
         }
       </>
-      {/* } */}
     </View>
   );
 
@@ -131,22 +161,22 @@ const DailyReport = () => {
       <Text className="flex-1 text-xs text-center text-gray-800">
         {isTotal ? "Total" : item.date}
       </Text>
-      {/* <Text className="flex-1 text-xs text-center text-gray-800">
-        {item.agent?.username || item.dealer?.username || "-"}
-      </Text> */}
-      {/* <Text className="flex-1 text-xs text-center text-gray-800">{item.draw}</Text> */}
-      <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(Number(user?.user_type === "ADMIN" ? item.total_dealer_amount : item.total_amount))}</Text>
-      {/* {
-        user?.user_type === "ADMIN" && */}
-      <><Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(item?.total_winning_prize || 0)}</Text>
+      <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(Number((user?.user_type === "ADMIN" || user?.user_type === "DEALER") ? item.total_dealer_amount : item.total_amount))}</Text>
+      <>
+        <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(item?.total_winning_prize || 0)}</Text>
         {
           isTotal ? (
-            <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(item?.balance || 0)}</Text>
+            <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(item?.BALANCE || item?.balance || 0)}</Text>
           ) :
-            <Text className="flex-1 text-xs text-center text-gray-800">{amountHandler(((user?.user_type === "ADMIN" || user?.user_type === "DEALER") ? item?.total_dealer_amount || 0 : item?.total_agent_amount || 0) - (item?.total_winning_prize || 0) || 0)}</Text>
+            <Text className="flex-1 text-xs text-center text-gray-800">
+              {amountHandler(
+                ((user?.user_type === "ADMIN" || user?.user_type === "DEALER")
+                  ? item?.total_dealer_amount || 0
+                  : item?.total_agent_amount || 0) - (item?.total_winning_prize || 0) || 0
+              )}
+            </Text>
         }
       </>
-      {/* } */}
     </View>
   );
 
@@ -158,6 +188,38 @@ const DailyReport = () => {
       setRefreshing(false);
     }
   }, [refetch]);
+
+  // SUM HELPERS
+  function getBalanceSum(rows: any[]) {
+    if (!Array.isArray(rows)) return 0;
+    return rows.reduce((acc, row) => {
+      const amount =
+        ((user?.user_type === "ADMIN" || user?.user_type === "DEALER")
+          ? row?.total_dealer_amount || 0
+          : row?.total_agent_amount || 0);
+      const prize = row?.total_winning_prize || 0;
+      return acc + (amount - prize);
+    }, 0);
+  }
+
+  function getTotalSale(rows: any[]) {
+    if (!Array.isArray(rows)) return 0;
+    return rows.reduce(
+      (acc, row) =>
+        acc +
+        (((user?.user_type === "ADMIN" || user?.user_type === "DEALER") ? (row?.total_dealer_amount || 0) : (row?.total_amount || 0))),
+      0
+    );
+  }
+
+  function getTotalWinningPrize(rows: any[]) {
+    if (!Array.isArray(rows)) return 0;
+    return rows.reduce((acc, row) => acc + (row?.total_winning_prize || 0), 0);
+  }
+
+  const router = useRouter();
+
+  // --- COMPONENT RENDER ---
 
   return (
     <View className="flex-1 bg-white">
@@ -194,6 +256,116 @@ const DailyReport = () => {
           </View>
         </View>
 
+        <View className="mt-2">
+          {user?.user_type === "ADMIN" && (
+            <View className="mb-2">
+              <Dropdown
+                data={dealers.map((dealer) => ({
+                  label: dealer.username,
+                  value: dealer.id,
+                }))}
+                labelField="label"
+                valueField="value"
+                value={selectedDealer}
+                onChange={item => {
+                  setSelectedDealer(item.value)
+                }}
+                placeholder="Select Dealer"
+                style={{
+                  borderColor: "#9ca3af",
+                  borderWidth: 1,
+                  borderRadius: 6,
+                  paddingHorizontal: 8,
+                  padding: 10
+                }}
+                containerStyle={{
+                  borderRadius: 6,
+                }}
+                itemTextStyle={{
+                  color: "#000",
+                }}
+                selectedTextStyle={{
+                  color: "#000",
+                }}
+                renderRightIcon={() =>
+                  selectedDealer ? (
+                    <TouchableOpacity
+                      onPress={() => setSelectedDealer("")}
+                      style={{
+                        position: "absolute",
+                        right: 10,
+                        zIndex: 10,
+                        backgroundColor: "#fff",
+                        width: 24,
+                        height: 24,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderRadius: 12,
+                      }}
+                    >
+                      <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
+                    </TouchableOpacity>
+                  ) : null
+                }
+              />
+            </View>
+          )}
+          {user?.user_type === "DEALER" && (
+            <View className="mb-2">
+              <Dropdown
+                data={agents.map((agent) => ({
+                  label: agent.username,
+                  value: agent.id,
+                }))}
+                labelField="label"
+                valueField="value"
+                value={selectedAgent}
+                onChange={item => {
+                  setSelectedAgent(item.value)
+                }}
+                placeholder="Select Agent"
+                style={{
+                  borderColor: "#9ca3af",
+                  borderWidth: 1,
+                  borderRadius: 6,
+                  paddingHorizontal: 8,
+                  padding: 10
+                }}
+                containerStyle={{
+                  borderRadius: 6,
+                }}
+                itemTextStyle={{
+                  color: "#000",
+                }}
+                selectedTextStyle={{
+                  color: "#000",
+                }}
+                renderRightIcon={() =>
+                  selectedAgent ? (
+                    <TouchableOpacity
+                      onPress={() => setSelectedAgent("")}
+                      style={{
+                        position: "absolute",
+                        right: 10,
+                        zIndex: 10,
+                        backgroundColor: "#fff",
+                        width: 24,
+                        height: 24,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderRadius: 12,
+
+                      }}
+                    >
+                      <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
+                    </TouchableOpacity>
+                  ) : null
+                }
+              />
+            </View>
+          )}
+        </View>
+
         <TouchableOpacity
           className="flex-row items-center gap-2 mt-2"
           activeOpacity={0.7}
@@ -223,6 +395,13 @@ const DailyReport = () => {
             )}
           </View>
           <Text className="text-sm text-gray-700">All Games</Text>
+          {/* <TouchableOpacity
+            onPress={() => router.push("/report")}
+            className="flex-row items-center gap-2 mt-2"
+            activeOpacity={0.7}
+          >
+            <Text className="text-sm text-gray-700">Report</Text>
+          </TouchableOpacity> */}
         </TouchableOpacity>
       </View>
 
@@ -266,20 +445,16 @@ const DailyReport = () => {
           {/* Summary Table */}
           <View className="border border-gray-200 rounded-lg overflow-hidden bg-white" style={{ elevation: 0 }}>
             <Text className="bg-gray-100 px-3 py-2 font-bold text-sm border-b border-gray-200">SUMMARY</Text>
-            {renderTableHeader(user?.user_type === "ADMIN" ? ["GAME", "SALE", "WIN", "BAL"] : ["GAME", "SALE", "WIN", "BAL"])}
+            {renderTableHeader(["GAME", "SALE", "WIN", "BAL"])}
             {data?.summary?.map((item: any) => renderSummaryRow(item))}
-            {data?.summary &&
+            {SUMMARY_DATA &&
               renderSummaryRow(
-                data.summary.reduce(
-                  (acc: any, cur: any) => ({
-                    total_amount: (user?.user_type === "ADMIN" ? acc.total_dealer_amount || 0 : acc.total_amount || 0) + (user?.user_type === "ADMIN" ? cur.total_dealer_amount || 0 : cur.total_amount || 0),
-                    total_dealer_amount: (user?.user_type === "ADMIN" ? acc.total_dealer_amount || 0 : acc.total_amount || 0) + (user?.user_type === "ADMIN" ? cur.total_dealer_amount || 0 : cur.total_amount || 0),
-                    balance: ((user?.user_type === "ADMIN" || user?.user_type === "DEALER") ? (acc.total_dealer_amount || 0) - (acc.total_winning_prize || 0) || 0 : (acc.total_agent_amount || 0) - (acc.total_winning_prize || 0) || 0),
-                    total_winning_prize: (acc.total_winning_prize || 0) + cur.total_winning_prize,
-                    total_win: (acc.total_win || 0) + (cur.total_win || 0),
-                  }),
-                  {}
-                ),
+                {
+                  total_amount: getTotalSale(SUMMARY_DATA),
+                  total_dealer_amount: getTotalSale(SUMMARY_DATA), // For ADMIN
+                  total_winning_prize: getTotalWinningPrize(SUMMARY_DATA),
+                  BALANCE: getBalanceSum(SUMMARY_DATA),
+                },
                 true
               )}
           </View>
@@ -287,20 +462,16 @@ const DailyReport = () => {
           {/* Detailed Table */}
           <View className="border border-gray-200 rounded-lg mt-6 mb-14 overflow-hidden bg-white" style={{ elevation: 0 }}>
             <Text className="bg-gray-100 px-3 py-2 font-bold text-sm border-b border-gray-200">DETAILED</Text>
-            {renderTableHeader(user?.user_type === "ADMIN" ? ["DATE", "SALE", "WIN", "BAL"] : ["DATE", "SALE", "WIN", "BAL"])}
+            {renderTableHeader(["DATE", "SALE", "WIN", "BAL"])}
             {data?.report?.map((item: any) => renderDetailRow(item))}
-            {data?.report &&
+            {REPORT_DATA &&
               renderDetailRow(
-                data.report.reduce(
-                  (acc: any, cur: any) => ({
-                    total_amount: (user?.user_type === "ADMIN" ? acc.total_dealer_amount || 0 : acc.total_amount || 0) + (user?.user_type === "ADMIN" ? cur.total_dealer_amount || 0 : cur.total_amount || 0),
-                    total_dealer_amount: (user?.user_type === "ADMIN" ? acc.total_dealer_amount || 0 : acc.total_amount || 0) + (user?.user_type === "ADMIN" ? cur.total_dealer_amount || 0 : cur.total_amount || 0),
-                    total_winning_prize: (acc.total_winning_prize || 0) + cur.total_winning_prize,
-                    balance: ((user?.user_type === "ADMIN" || user?.user_type === "DEALER") ? (acc.total_dealer_amount || 0) - (acc.total_winning_prize || 0) || 0 : (acc.total_agent_amount || 0) - (acc.total_winning_prize || 0) || 0),
-                    total_win: (acc.total_win || 0) + (cur.total_win || 0),
-                  }),
-                  {}
-                ),
+                {
+                  total_amount: getTotalSale(REPORT_DATA),
+                  total_dealer_amount: getTotalSale(REPORT_DATA), // For ADMIN
+                  total_winning_prize: getTotalWinningPrize(REPORT_DATA),
+                  BALANCE: getBalanceSum(REPORT_DATA),
+                },
                 true
               )}
           </View>
@@ -310,43 +481,41 @@ const DailyReport = () => {
       {/* Date Pickers */}
       {showFromPicker && (
         <DateTimePicker
-          value={fromDate || today}
+          value={fromDate || stripTime(today)}
           mode="date"
           display={Platform.OS === "android" ? "default" : "spinner"}
-          onChange={(_e, d) => {
-            // Fix: On Android, the selected date is in UTC, so adjust to local date
-            if (d) {
-              const selectedDate = new Date(d);
-              // If on Android, adjust for timezone offset
-              if (Platform.OS === "android") {
-                selectedDate.setMinutes(selectedDate.getMinutes() + selectedDate.getTimezoneOffset());
-              }
-              console.log("selectedDate", selectedDate);
-
-              setFromDate(selectedDate);
-            }
+          onChange={(event, selected) => {
             setShowFromPicker(false);
+            if (event.type === "set" && selected) {
+              // Always strip time to midnight local
+              const localDate = stripTime(new Date(selected));
+              setFromDate(localDate);
+              // Optionally, if fromDate > toDate, auto-advance toDate to fromDate
+              if (toDate && localDate > toDate) {
+                setToDate(localDate);
+              }
+            }
           }}
+          maximumDate={toDate}
         />
       )}
       {showToPicker && (
         <DateTimePicker
-          value={toDate || today}
+          value={toDate || stripTime(today)}
           mode="date"
           display={Platform.OS === "android" ? "default" : "spinner"}
-          onChange={(_e, d) => {
-            if (d) {
-              const selectedDate = new Date(d);
-              // If on Android, adjust for timezone offset
-              if (Platform.OS === "android") {
-                selectedDate.setMinutes(selectedDate.getMinutes() + selectedDate.getTimezoneOffset());
-              }
-              console.log("selectedDate To", selectedDate);
-
-              setToDate(selectedDate);
-            }
+          onChange={(event, selected) => {
             setShowToPicker(false);
+            if (event.type === "set" && selected) {
+              const localDate = stripTime(new Date(selected));
+              setToDate(localDate);
+              // Optionally, if toDate < fromDate, auto-move fromDate backward
+              if (fromDate && localDate < fromDate) {
+                setFromDate(localDate);
+              }
+            }
           }}
+          minimumDate={fromDate}
         />
       )}
     </View>

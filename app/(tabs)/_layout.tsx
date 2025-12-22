@@ -1,7 +1,6 @@
 import { useAuthStore } from '@/store/auth';
 import { Tabs } from 'expo-router';
 import { CreditCard, Home, MoreHorizontal, Users } from 'lucide-react-native';
-import React from 'react';
 import { View } from 'react-native';
 
 export default function TabLayout() {
@@ -55,6 +54,16 @@ export default function TabLayout() {
             tabBarItemStyle: { display: user?.user_type === "ADMIN" ? 'flex' : "none" }
           }}
         />
+
+        <Tabs.Screen
+          name="staff"
+          options={{
+            title: 'Staff',
+            tabBarIcon: ({ color }) => <Users size={24} color={color} />,
+            tabBarItemStyle: { display: user?.superuser ? 'flex' : "none" }
+          }}
+        />
+        
         <Tabs.Screen
           name="payement"
           options={{
