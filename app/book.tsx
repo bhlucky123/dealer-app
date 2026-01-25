@@ -59,9 +59,9 @@ type DrawSessionResponse = {
 
 const RangeOptions = [
   { label: "Book", value: "Book" },
-  { label: "Range", value: "Range" },
+  { label: "R", value: "Range" },
   { label: "Set", value: "Set" },
-  { label: "Different", value: "Different" },
+  { label: "D", value: "Different" },
 ];
 
 const BookingScreen: React.FC = () => {
@@ -1892,31 +1892,39 @@ const BookingScreen: React.FC = () => {
               </TouchableOpacity>
             ))}
             <View className="flex-1 ml-2">
-              <Dropdown
-                data={rangeOptions}
-                labelField="label"
-                valueField="value"
-                value={selectedRange}
-                onChange={item => setSelectedRange(item.value)}
-                placeholder="Select Type"
-                style={{
-                  borderColor: "#9ca3af",
-                  borderWidth: 1,
-                  borderRadius: 6,
-                  paddingHorizontal: 8,
-                  padding: 10
-                }}
-                containerStyle={{
-                  borderRadius: 6,
-                }}
-                itemTextStyle={{
-                  color: "#000",
-                }}
-                selectedTextStyle={{
-                  color: "#000",
-                }}
-                disable={!!drawSessionError}
-              />
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                {rangeOptions
+                  .filter(option => option.value !== "Book") // Exclude 'Book'
+                  .map(option => (
+                    <TouchableOpacity
+                      key={option.value}
+                      onPress={() => {
+                        if (selectedRange === option.value) {
+                          setSelectedRange("Book"); // Deselect, fallback to 'Book'
+                        } else {
+                          setSelectedRange(option.value as any);
+                        }
+                      }}
+                      style={{
+                        backgroundColor: selectedRange === option.value ? "#2563eb" : "#fff",
+                        borderColor: "#9ca3af",
+                        borderWidth: 1.5,
+                        borderRadius: 20,
+                        paddingVertical: 8,
+                        paddingHorizontal: 18,
+                        marginRight: 6,
+                        minWidth: 50,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                      disabled={!!drawSessionError}
+                    >
+                      <Text style={{ color: selectedRange === option.value ? "#fff" : "#2563eb", fontWeight: "bold" }}>
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+              </View>
             </View>
           </View>
 

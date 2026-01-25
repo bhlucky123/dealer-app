@@ -31,7 +31,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   // (response) => response,
   (response) => {
-    console.log(response?.status,"response", response?.data);
+    // console.log(response?.status,"response", response?.data);
     if (response.status === 204) {
       // Return a custom empty object or message if needed
       return { ...response, data: null };
