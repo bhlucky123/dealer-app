@@ -177,6 +177,10 @@ export default function RootLayout() {
           <Stack.Screen name="agent/[agentId]" options={{
             headerShown: false,
           }} />
+
+          <Stack.Screen name="report/[id]" options={{
+            headerShown: false,
+          }} />
           <Stack.Screen name="+not-found" />
         </Stack>
       </AlertNotificationRoot>

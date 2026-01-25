@@ -4,7 +4,7 @@ import { useAuthStore } from "@/store/auth";
 import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { useRouter } from "expo-router";
 import { Eye, EyeOff, MoveLeft } from "lucide-react-native";
 import { useState } from "react";
 import {
@@ -97,7 +97,7 @@ const DealerForm = ({
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [focusedField, setFocusedField] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
-    
+
 
     const validate = () => {
         const newErrors: Record<string, string> = {};
@@ -126,16 +126,16 @@ const DealerForm = ({
         if (Number(form.cap_amount) < 0)
             newErrors.cap_amount = "Cap amount cannot be negative";
 
-        if(form?.is_prize_set){
-            if(!form?.single_digit_prize)
-            newErrors.single_digit_prize = "Single digit prize is required";
-            if(!form?.double_digit_prize)
+        if (form?.is_prize_set) {
+            if (!form?.single_digit_prize)
+                newErrors.single_digit_prize = "Single digit prize is required";
+            if (!form?.double_digit_prize)
                 newErrors.double_digit_prize = "Double digit prize is required";
-            if(!form?.box_direct)
+            if (!form?.box_direct)
                 newErrors.box_direct = "Box Direct is required";
-            if(!form?.super_first_prize)
+            if (!form?.super_first_prize)
                 newErrors.super_first_prize = "Super First Prize is required";
-            if(!form?.super_second_prize)
+            if (!form?.super_second_prize)
                 newErrors.super_second_prize = "Super Second Prize is required";
         }
 
@@ -169,7 +169,7 @@ const DealerForm = ({
         //     return false;
         // }
 
-        
+
 
 
 
@@ -429,7 +429,7 @@ const DealerForm = ({
                         <View>
                             <TouchableOpacity
                                 onPress={() => {
-                                    setForm((prev) => ({...form, is_prize_set: !prev?.is_prize_set}))
+                                    setForm((prev) => ({ ...form, is_prize_set: !prev?.is_prize_set }))
                                 }}
                                 className={`
                 flex-row items-center justify-between p-4 rounded-xl border-2
@@ -457,10 +457,10 @@ const DealerForm = ({
                             <PrizeConfigBlock form={form} errors={errors} onChange={(data) => {
                                 console.log("data", data);
 
-                                if(Object.keys.length > 0){
+                                if (Object.keys.length > 0) {
                                     setErrors({})
                                 }
-                                setForm((prev) => ({ ...prev, ...data }as any))
+                                setForm((prev) => ({ ...prev, ...data } as any))
                             }} />
                         }
                     </Card>
@@ -488,7 +488,12 @@ const DealerForm = ({
 };
 
 const DealerCard = ({ item, onEdit, onDelete }: { item: Dealer; onEdit: () => void; onDelete: () => void }) => {
-    const { user } = useAuthStore()
+    const { user } = useAuthStore();
+    const router = useRouter()
+
+    const onReport = () => {
+        router.push("/reports/[id]")
+    }
 
     return (
         < View className="bg-white mx-4 mb-4 rounded-xl border border-gray-200 overflow-hidden" >
@@ -497,6 +502,7 @@ const DealerCard = ({ item, onEdit, onDelete }: { item: Dealer; onEdit: () => vo
                 <View className="flex-row justify-between mb-4">
                     <Text className="text-lg font-semibold">{item.username}</Text>
                     <View className="flex-row gap-2">
+
                         <TouchableOpacity onPress={() => {
                             router.push(`/agent/${item.id}`)
                         }} className="px-3 py-1 bg-gray-100 rounded-md">
@@ -535,6 +541,16 @@ const DealerCard = ({ item, onEdit, onDelete }: { item: Dealer; onEdit: () => vo
                         ₹{amountHandler(item.cap_amount)}
                     </Text>
                 </View>
+
+                <View className="flex-row justify-end">
+                    {
+                        user?.user_type === "ADMIN" &&
+                        <TouchableOpacity onPress={() => {
+                            router.push({ pathname: "/reports/[id]", params: { id: String(item.id) } })
+                        }} className="px-3 py-1 w-24 mt-3 bg-green-100 rounded-md">
+                            <Text className="text-center" >Report</Text>
+                        </TouchableOpacity>}
+                </View>
             </View>
         </View >
     )
@@ -562,10 +578,10 @@ export default function DealerManagement() {
     });
     const { createDealer, editDealer, deleteDealer } = useDealer();
 
-    
-    
+
+
     const filteredDealers = dealers.filter(d => d.username.toLowerCase().includes(searchQuery.toLowerCase()));
-    console.log("filteredDealers",filteredDealers);
+    console.log("filteredDealers", filteredDealers);
 
     const handleCreate = (data: any) => {
         setSubmitting(true)
@@ -616,7 +632,7 @@ export default function DealerManagement() {
                 setEditData(null);
             },
             onError: (err) => {
-                console.log("Error",err)
+                console.log("Error", err)
                 setSubmitting(false);
                 let errorMsg = "Failed to update dealer.";
 
