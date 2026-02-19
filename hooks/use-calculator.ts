@@ -57,6 +57,8 @@ export const useCalculator = () => {
 
   console.log("err", error);
 
+  console.log("equationData",equationData)
+
 
 
   // Only check for equation match in handleEqual, not during number input
