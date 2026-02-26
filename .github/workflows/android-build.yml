@@ -9,27 +9,43 @@ permissions:
   contents: write
 
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Determine which builds to run
+        id: set-matrix
+        run: |
+          MSG=$(echo "${{ github.event.head_commit.message }}" | tr '[:upper:]' '[:lower:]')
+
+          ADMIN='{"user_type":"ADMIN","slug":"admin","scheme":"admin","package":"com.luckybh.admin","icon":"admin-appicon.png"}'
+          DEALER='{"user_type":"DEALER","slug":"dealer","scheme":"dealer","package":"com.luckybh.dealer","icon":"dealer-appicon.png"}'
+          AGENT='{"user_type":"AGENT","slug":"agent","scheme":"agent","package":"com.luckybh.agent","icon":"agent-appicon.png"}'
+
+          HAS_ADMIN=$(echo "$MSG" | grep -c "#admin" || true)
+          HAS_DEALER=$(echo "$MSG" | grep -c "#dealer" || true)
+          HAS_AGENT=$(echo "$MSG" | grep -c "#agent" || true)
+
+          ENTRIES=""
+          if [ "$HAS_ADMIN" -gt 0 ]; then ENTRIES="$ADMIN"; fi
+          if [ "$HAS_DEALER" -gt 0 ]; then [ -n "$ENTRIES" ] && ENTRIES="$ENTRIES,"; ENTRIES="${ENTRIES}${DEALER}"; fi
+          if [ "$HAS_AGENT" -gt 0 ]; then [ -n "$ENTRIES" ] && ENTRIES="$ENTRIES,"; ENTRIES="${ENTRIES}${AGENT}"; fi
+
+          # No hashtags = build all 3
+          if [ -z "$ENTRIES" ]; then
+            ENTRIES="$ADMIN,$DEALER,$AGENT"
+          fi
+
+          echo "matrix={\"include\":[$ENTRIES]}" >> $GITHUB_OUTPUT
+
   build:
     runs-on: ubuntu-latest
+    needs: setup
+    name: ${{ matrix.user_type }} Build
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - user_type: ADMIN
-            slug: admin
-            scheme: admin
-            package: com.luckybh.admin
-            icon: admin-appicon.png
-          - user_type: DEALER
-            slug: dealer
-            scheme: dealer
-            package: com.luckybh.dealer
-            icon: dealer-appicon.png
-          - user_type: AGENT
-            slug: agent
-            scheme: agent
-            package: com.luckybh.agent
-            icon: agent-appicon.png
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
 
     steps:
       - name: Checkout repository
@@ -112,18 +128,25 @@ jobs:
           done
           ls -la
 
-      - name: Create Release with all APKs
+      - name: List built APKs
+        id: list-apks
+        run: |
+          APKS=""
+          for f in apks/*.apk; do
+            name=$(basename "$f")
+            url="https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/${name}"
+            APKS="${APKS}<li><a href='${url}'>${name}</a></li>"
+          done
+          echo "apk_links=$APKS" >> $GITHUB_OUTPUT
+
+      - name: Create Release with APKs
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: "Build ${{ env.RELEASE_TAG }}"
           body: |
             Automated build from branch `${{ github.ref_name }}`
-
-            **APKs included:**
-            - ADMIN (com.luckybh.admin)
-            - DEALER (com.luckybh.dealer)
-            - AGENT (com.luckybh.agent)
+            Commit: ${{ github.event.head_commit.message }}
           files: apks/*.apk
 
       - name: Send email notification
@@ -134,7 +157,7 @@ jobs:
           secure: true
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          subject: "Android Build Complete - All 3 APKs Ready"
+          subject: "Android Build Complete - APKs Ready"
           to: ${{ secrets.MAIL_TO }}
           from: ${{ secrets.MAIL_USERNAME }}
           html_body: |
@@ -144,9 +167,5 @@ jobs:
               <strong>Author:</strong> ${{ github.actor }}
             </p>
             <h3>Download APKs:</h3>
-            <ul>
-              <li><a href="https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/admin-app-${{ env.TIMESTAMP }}.apk">ADMIN APK</a></li>
-              <li><a href="https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/dealer-app-${{ env.TIMESTAMP }}.apk">DEALER APK</a></li>
-              <li><a href="https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/agent-app-${{ env.TIMESTAMP }}.apk">AGENT APK</a></li>
-            </ul>
+            <ul>${{ steps.list-apks.outputs.apk_links }}</ul>
             <p><a href="https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }}">View Release Page</a></p>
