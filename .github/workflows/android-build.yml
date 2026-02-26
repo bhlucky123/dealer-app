@@ -51,7 +51,8 @@ jobs:
         run: npm ci
 
       - name: Set userType to ${{ matrix.user_type }}
-        run: sed -i 's/userType: "[A-Z]*"/userType: "${{ matrix.user_type }}"/' utils/config.ts
+        run: |
+          sed -i 's/userType: "[A-Z]*"/userType: "${{ matrix.user_type }}"/' utils/config.ts
 
       - name: Configure app.json for ${{ matrix.user_type }}
         run: |
