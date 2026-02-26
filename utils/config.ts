@@ -12,3 +12,4 @@ export const config: Config = {
   // userType: "DEALER",
   // userType: "AGENT",
 };
+
