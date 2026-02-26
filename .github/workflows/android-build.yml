@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch: # allows manual trigger from GitHub UI
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -38,9 +41,41 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Rename APK with timestamp
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
+          TIMESTAMP=$(date +'%Y%m%d-%H%M%S')
+          cp "$APK_PATH" "dealer-app-${TIMESTAMP}.apk"
+          echo "APK_FILE=dealer-app-${TIMESTAMP}.apk" >> $GITHUB_ENV
+          echo "RELEASE_TAG=build-${TIMESTAMP}" >> $GITHUB_ENV
+
+      - name: Create Release with APK
+        uses: softprops/action-gh-release@v2
         with:
-          name: release-apk
-          path: android/app/build/outputs/apk/release/*.apk
-          retention-days: 30
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: "Build ${{ env.RELEASE_TAG }}"
+          body: |
+            Automated build from branch `${{ github.ref_name }}`
+            Commit: ${{ github.event.head_commit.message }}
+          files: ${{ env.APK_FILE }}
+
+      - name: Send email notification
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "Android Build ${{ job.status }} - ${{ github.repository }}"
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_USERNAME }}
+          body: |
+            Build ${{ job.status }} for ${{ github.repository }}
+
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.event.head_commit.message }}
+            Author: ${{ github.actor }}
+
+            Download APK: https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }}

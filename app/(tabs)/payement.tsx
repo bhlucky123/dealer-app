@@ -121,7 +121,7 @@ export default function PaymentTab() {
         let endpoint = "";
         if (user?.user_type === "ADMIN") endpoint = "/draw-payment/dealers-with-pending-balance/";
         else if (user?.user_type === "DEALER") endpoint = "/draw-payment/agents-with-pending-balance/";
-       
+
         function buildQuery(params: Record<string, any>): string {
             const esc = encodeURIComponent;
             const query = Object.entries(params)
@@ -225,8 +225,10 @@ export default function PaymentTab() {
             date_received: string;
             to_dealer?: boolean;
         }) => {
-            const payload = { amount, date_received, to_dealer };
-            return api.post(`/draw-payment/dealer-to-administrator/${dealerId}/`, payload);
+            const endpoint = to_dealer
+                ? `/draw-payment/admin-dealer/${dealerId}/paid/`
+                : `/draw-payment/admin-dealer/${dealerId}/receive/`;
+            return api.post(endpoint, { amount, date_received });
         },
         onSuccess: () => {
             // After update, refetch first page!
@@ -236,7 +238,9 @@ export default function PaymentTab() {
         },
         onError: (error: any) => {
             let msg = "Failed to update dealer balance";
-            if (error?.response?.data?.date_received) {
+            if (error?.response?.data?.error) {
+                msg = error.response.data.error;
+            } else if (error?.response?.data?.date_received) {
                 msg = error.response.data.date_received.join("\n");
             } else if (error?.response?.data?.dealer) {
                 msg = error.response.data.dealer.join("\n");
@@ -252,15 +256,17 @@ export default function PaymentTab() {
             agentId,
             amount,
             date_received,
+            to_agent,
         }: {
             agentId: number;
             amount: number;
             date_received: string;
+            to_agent?: boolean;
         }) => {
-            return api.post(`/draw-payment/agent-to-dealer/${agentId}/`, {
-                amount,
-                date_received,
-            });
+            const endpoint = to_agent
+                ? `/draw-payment/agent-dealer/${agentId}/paid/`
+                : `/draw-payment/agent-dealer/${agentId}/receive/`;
+            return api.post(endpoint, { amount, date_received });
         },
         onSuccess: () => {
             // After update, refetch first page!
@@ -270,7 +276,9 @@ export default function PaymentTab() {
         },
         onError: (error: any) => {
             let msg = "Failed to update agent balance";
-            if (error?.response?.data?.date_received) {
+            if (error?.response?.data?.error) {
+                msg = error.response.data.error;
+            } else if (error?.response?.data?.date_received) {
                 msg = error.response.data.date_received.join("\n");
             } else if (error?.response?.data?.agent) {
                 msg = error.response.data.agent.join("\n");
@@ -311,7 +319,7 @@ export default function PaymentTab() {
         if (user?.user_type === "ADMIN") {
             dealerToAdminPaymentMutation.mutate({ dealerId: modalItem.id, amount, date_received, to_dealer: modalItem?.to_dealer });
         } else if (user?.user_type === "DEALER") {
-            agentToDealerPaymentMutation.mutate({ agentId: modalItem.id, amount, date_received });
+            agentToDealerPaymentMutation.mutate({ agentId: modalItem.id, amount, date_received, to_agent: modalItem?.to_dealer });
         }
     };
 
@@ -335,47 +343,42 @@ export default function PaymentTab() {
             <Text style={{ color: "#334155", marginTop: 4 }}>
                 Balance: <Text style={{ fontWeight: "bold" }}>₹ {item.balance_amount.toLocaleString()}</Text>
             </Text>
-           <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
-                    <TouchableOpacity
-                        onPress={() => {
-                            openUpdateModal(item)
-                        }}
-                        style={{
-                            backgroundColor: "#2563eb",
-                            paddingVertical: 8,
-                            paddingHorizontal: 16,
-                            borderRadius: 8,
-                            flex: 1,
-                            alignItems: "center",
-                        }}
-                    >
-                        <Text style={{ color: "#fff", fontWeight: "bold" }}>
-                            Update Balance
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-
-            {/* {
-                item?.balance_amount < 0 && user?.user_type === "ADMIN" && (<View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
-                    <TouchableOpacity
-                        onPress={() => {
-                            openUpdateModal({ ...item, to_dealer: true })
-                        }}
-                        style={{
-                            backgroundColor: "red",
-                            paddingVertical: 8,
-                            paddingHorizontal: 16,
-                            borderRadius: 8,
-                            flex: 1,
-                            alignItems: "center",
-                        }}
-                    >
-                        <Text style={{ color: "#fff", fontWeight: "bold" }}>
-                            Pay Balance
-                        </Text>
-                    </TouchableOpacity>
-                </View>)
-            } */}
+            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10, gap: 10 }}>
+                <TouchableOpacity
+                    onPress={() => {
+                        openUpdateModal(item)
+                    }}
+                    style={{
+                        backgroundColor: "#16a34a",
+                        paddingVertical: 8,
+                        paddingHorizontal: 16,
+                        borderRadius: 8,
+                        flex: 1,
+                        alignItems: "center",
+                    }}
+                >
+                    <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                        Received
+                    </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    onPress={() => {
+                        openUpdateModal({ ...item, to_dealer: true })
+                    }}
+                    style={{
+                        backgroundColor: "#dc2626",
+                        paddingVertical: 8,
+                        paddingHorizontal: 16,
+                        borderRadius: 8,
+                        flex: 1,
+                        alignItems: "center",
+                    }}
+                >
+                    <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                        Paid
+                    </Text>
+                </TouchableOpacity>
+            </View>
         </View>
     );
 
@@ -421,61 +424,58 @@ export default function PaymentTab() {
                     autoCorrect={false}
                 />
                 {(!!searchInput) && (
-                    <TouchableOpacity onPress={() => setSearchInput("")} style={{paddingHorizontal: 8, height: 40, justifyContent: "center"}}>
-                        <Text style={{fontSize: 20, color: "#64748b"}}>×</Text>
+                    <TouchableOpacity onPress={() => setSearchInput("")} style={{ paddingHorizontal: 8, height: 40, justifyContent: "center" }}>
+                        <Text style={{ fontSize: 20, color: "#64748b" }}>×</Text>
                     </TouchableOpacity>
                 )}
             </View>
 
-            {allData.length === 0 ? (
-                <Text className="text-center text-gray-300 mt-10">
-                    No {user?.user_type === "ADMIN" ? "dealers" : "agents"} with pending balance.
-                </Text>
-            ) : (
-                <>
-                    <FlatList
-                        data={allData}
-                        keyExtractor={(item) => String(item.id)}
-                        renderItem={renderItem}
-                        contentContainerStyle={{ paddingBottom: 32 }}
-                        refreshControl={
-                            <RefreshControl
-                                refreshing={refreshing}
-                                onRefresh={onRefresh}
-                                colors={["#2563eb"]}
-                                tintColor="#2563eb"
-                            />
-                        }
-                        ListFooterComponent={
-                            (allData.length < totalCount && !!next) ? (
-                                <View style={{ alignItems: "center", marginVertical: 12 }}>
-                                    <TouchableOpacity
-                                        style={{
-                                            backgroundColor: "#2563eb",
-                                            borderRadius: 8,
-                                            paddingHorizontal: 24,
-                                            paddingVertical: 12,
-                                            minWidth: 120,
-                                            alignItems: "center",
-                                            opacity: isLoadingMore ? 0.7 : 1,
-                                        }}
-                                        onPress={handleLoadMore}
-                                        disabled={isLoadingMore}
-                                    >
-                                        {isLoadingMore ? (
-                                            <ActivityIndicator color="#fff" />
-                                        ) : (
-                                            <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>
-                                                Load More
-                                            </Text>
-                                        )}
-                                    </TouchableOpacity>
-                                </View>
-                            ) : null
-                        }
+            <FlatList
+                data={allData}
+                keyExtractor={(item) => String(item.id)}
+                renderItem={renderItem}
+                contentContainerStyle={{ paddingBottom: 32, flexGrow: 1 }}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        colors={["#2563eb"]}
+                        tintColor="#2563eb"
                     />
-                </>
-            )}
+                }
+                ListEmptyComponent={
+                    <Text className="text-center text-gray-300 mt-10">
+                        No {user?.user_type === "ADMIN" ? "dealers" : "agents"} with pending balance.
+                    </Text>
+                }
+                ListFooterComponent={
+                    (allData.length < totalCount && !!next) ? (
+                        <View style={{ alignItems: "center", marginVertical: 12 }}>
+                            <TouchableOpacity
+                                style={{
+                                    backgroundColor: "#2563eb",
+                                    borderRadius: 8,
+                                    paddingHorizontal: 24,
+                                    paddingVertical: 12,
+                                    minWidth: 120,
+                                    alignItems: "center",
+                                    opacity: isLoadingMore ? 0.7 : 1,
+                                }}
+                                onPress={handleLoadMore}
+                                disabled={isLoadingMore}
+                            >
+                                {isLoadingMore ? (
+                                    <ActivityIndicator color="#fff" />
+                                ) : (
+                                    <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>
+                                        Load More
+                                    </Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    ) : null
+                }
+            />
 
             {/* Modal for updating balance */}
             <Modal
@@ -512,7 +512,7 @@ export default function PaymentTab() {
                             keyboardShouldPersistTaps="handled"
                         >
                             <Text style={{ fontWeight: "bold", fontSize: 18, color: "#1e293b", marginBottom: 8, textAlign: "center" }}>
-                                {user?.user_type === "ADMIN" ? "Update Dealer Balance" : "Update Agent Balance"}
+                                {modalItem?.to_dealer ? "Pay" : "Receive"} - {user?.user_type === "ADMIN" ? "Dealer" : "Agent"}
                             </Text>
                             <Text style={{ color: "#334155", marginBottom: 12, textAlign: "center" }}>
                                 {modalItem?.name}
@@ -587,7 +587,7 @@ export default function PaymentTab() {
                                 <Pressable
                                     onPress={handleModalSubmit}
                                     style={{
-                                        backgroundColor: "#2563eb",
+                                        backgroundColor: modalItem?.to_dealer ? "#dc2626" : "#16a34a",
                                         paddingVertical: 10,
                                         paddingHorizontal: 24,
                                         borderRadius: 8,
@@ -600,8 +600,8 @@ export default function PaymentTab() {
                                     <Text style={{ color: "#fff", fontWeight: "bold" }}>
                                         {((user?.user_type === "ADMIN" && dealerToAdminPaymentMutation.isPending) ||
                                             (user?.user_type === "DEALER" && agentToDealerPaymentMutation.isPending))
-                                            ? "Updating..."
-                                            : "Update"}
+                                            ? "Submitting..."
+                                            : modalItem?.to_dealer ? "Pay" : "Receive"}
                                     </Text>
                                 </Pressable>
                             </View>
