@@ -128,32 +128,56 @@ jobs:
           done
           ls -la
 
-      - name: List built APKs
-        id: list-apks
+      - name: Upload APKs to GoFile
+        id: gofile-upload
         run: |
-          APK_ROWS=""
-          COPY_ALL=""
-          ATTACH_LIST=""
+          SERVER=$(curl -s https://api.gofile.io/servers | jq -r '.data.servers[0].name // "store1"')
+          echo "Using GoFile server: ${SERVER}"
+
+          GOFILE_ROWS=""
+          GOFILE_COPY=""
+          for f in apks/*.apk; do
+            name=$(basename "$f")
+            app_label=$(echo "$name" | sed 's/-${{ env.TIMESTAMP }}\.apk//')
+
+            echo "Uploading ${name}..."
+            RESPONSE=$(curl -s -F "file=@${f}" "https://${SERVER}.gofile.io/uploadFile")
+            STATUS=$(echo "$RESPONSE" | jq -r '.status')
+
+            if [ "$STATUS" = "ok" ]; then
+              DL_PAGE=$(echo "$RESPONSE" | jq -r '.data.downloadPage')
+              echo "  OK -> ${DL_PAGE}"
+              GOFILE_ROWS="${GOFILE_ROWS}<tr><td style='padding:12px 16px;border-bottom:1px solid #e2e8f0;'><span style='font-weight:700;font-size:15px;color:#1e293b;'>${app_label}</span></td><td style='padding:12px 8px;border-bottom:1px solid #e2e8f0;text-align:right;'><a href='${DL_PAGE}' style='display:inline-block;background:#059669;color:#fff;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;'>Download</a></td><td style='padding:12px 8px;border-bottom:1px solid #e2e8f0;text-align:right;'><a href='${DL_PAGE}' style='display:inline-block;background:#f1f5f9;color:#334155;padding:8px 14px;border-radius:8px;text-decoration:none;font-weight:600;font-size:12px;border:1px solid #e2e8f0;'>Copy Link</a></td></tr>"
+              GOFILE_COPY="${GOFILE_COPY}${app_label} : ${DL_PAGE}\n"
+            else
+              echo "  FAILED -> ${RESPONSE}"
+              GOFILE_ROWS="${GOFILE_ROWS}<tr><td style='padding:12px 16px;border-bottom:1px solid #e2e8f0;'><span style='font-weight:700;font-size:15px;color:#1e293b;'>${app_label}</span></td><td colspan='2' style='padding:12px 16px;border-bottom:1px solid #e2e8f0;text-align:right;color:#dc2626;font-size:13px;font-weight:600;'>Upload failed</td></tr>"
+            fi
+          done
+
+          echo "gofile_rows<<GEOF" >> $GITHUB_OUTPUT
+          echo "$GOFILE_ROWS" >> $GITHUB_OUTPUT
+          echo "GEOF" >> $GITHUB_OUTPUT
+          echo "gofile_copy<<GCEOF" >> $GITHUB_OUTPUT
+          echo -e "$GOFILE_COPY" >> $GITHUB_OUTPUT
+          echo "GCEOF" >> $GITHUB_OUTPUT
+          echo "gofile_copy_encoded<<GEEOF" >> $GITHUB_OUTPUT
+          echo -e "$GOFILE_COPY" | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip()))" >> $GITHUB_OUTPUT
+          echo "GEEOF" >> $GITHUB_OUTPUT
+
+      - name: Build GitHub release link rows
+        id: gh-links
+        run: |
+          GH_ROWS=""
           for f in apks/*.apk; do
             name=$(basename "$f")
             url="https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/${name}"
             app_label=$(echo "$name" | sed 's/-${{ env.TIMESTAMP }}\.apk//')
-            APK_ROWS="${APK_ROWS}<tr><td style='padding:12px 16px;border-bottom:1px solid #e2e8f0;'><span style='font-weight:700;font-size:15px;color:#1e293b;'>${app_label}</span></td><td style='padding:12px 16px;border-bottom:1px solid #e2e8f0;text-align:right;'><a href='${url}' style='display:inline-block;background:#4f46e5;color:#fff;padding:8px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;'>Download</a></td></tr>"
-            COPY_ALL="${COPY_ALL}${app_label} : ${url}\n"
-            [ -n "$ATTACH_LIST" ] && ATTACH_LIST="${ATTACH_LIST},"
-            ATTACH_LIST="${ATTACH_LIST}${f}"
+            GH_ROWS="${GH_ROWS}<tr><td style='padding:10px 16px;border-bottom:1px solid #e2e8f0;'><span style='font-weight:600;font-size:14px;color:#64748b;'>${app_label}</span></td><td style='padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:right;'><a href='${url}' style='display:inline-block;background:#f1f5f9;color:#475569;padding:6px 14px;border-radius:6px;text-decoration:none;font-weight:600;font-size:12px;border:1px solid #e2e8f0;'>Download</a></td></tr>"
           done
-          # Use delimiter for multiline output
-          echo "apk_rows<<APKEOF" >> $GITHUB_OUTPUT
-          echo "$APK_ROWS" >> $GITHUB_OUTPUT
-          echo "APKEOF" >> $GITHUB_OUTPUT
-          echo "copy_all<<COPYEOF" >> $GITHUB_OUTPUT
-          echo -e "$COPY_ALL" >> $GITHUB_OUTPUT
-          echo "COPYEOF" >> $GITHUB_OUTPUT
-          echo "copy_all_encoded<<ENCEOF" >> $GITHUB_OUTPUT
-          echo -e "$COPY_ALL" | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip()))" >> $GITHUB_OUTPUT
-          echo "ENCEOF" >> $GITHUB_OUTPUT
-          echo "attachments=$ATTACH_LIST" >> $GITHUB_OUTPUT
+          echo "gh_rows<<GHEOF" >> $GITHUB_OUTPUT
+          echo "$GH_ROWS" >> $GITHUB_OUTPUT
+          echo "GHEOF" >> $GITHUB_OUTPUT
 
       - name: Create Release with APKs
         uses: softprops/action-gh-release@v2
@@ -176,13 +200,12 @@ jobs:
           subject: "Android Build Complete - APKs Ready"
           to: ${{ secrets.MAIL_TO }}
           from: ${{ secrets.MAIL_USERNAME }}
-          attachments: ${{ steps.list-apks.outputs.attachments }}
           html_body: |
             <div style="max-width:600px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;padding:24px;">
               <div style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-                <div style="background:linear-gradient(135deg,#4f46e5,#6366f1);padding:28px 24px;text-align:center;">
+                <div style="background:linear-gradient(135deg,#059669,#10b981);padding:28px 24px;text-align:center;">
                   <h1 style="color:#fff;margin:0;font-size:22px;font-weight:800;">Build Successful</h1>
-                  <p style="color:#c7d2fe;margin:8px 0 0;font-size:13px;">APKs attached to this email — no login needed</p>
+                  <p style="color:#a7f3d0;margin:8px 0 0;font-size:13px;">Public download links — no GitHub account needed</p>
                 </div>
                 <div style="padding:20px 24px;">
                   <table style="width:100%;margin-bottom:8px;" cellpadding="0" cellspacing="0">
@@ -205,21 +228,28 @@ jobs:
                   </div>
                 </div>
                 <div style="padding:0 24px 20px;">
-                  <h3 style="margin:0 0 12px;font-size:16px;color:#1e293b;font-weight:700;">Download APKs</h3>
-                  <p style="margin:0 0 12px;font-size:12px;color:#64748b;">APK files are attached to this email. Download directly from the attachments below.</p>
+                  <h3 style="margin:0 0 4px;font-size:16px;color:#1e293b;font-weight:700;">Download APKs</h3>
+                  <p style="margin:0 0 12px;font-size:12px;color:#059669;font-weight:600;">Public links via GoFile — no login required</p>
                   <table style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:12px;overflow:hidden;" cellpadding="0" cellspacing="0">
-                    ${{ steps.list-apks.outputs.apk_rows }}
+                    ${{ steps.gofile-upload.outputs.gofile_rows }}
                   </table>
                 </div>
                 <div style="padding:0 24px 20px;">
-                  <h3 style="margin:0 0 8px;font-size:14px;color:#64748b;font-weight:600;">Share Links</h3>
-                  <div style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:12px;">
-                    <pre style="margin:0;font-family:'SF Mono',Monaco,Consolas,monospace;font-size:12px;color:#334155;white-space:pre-wrap;word-break:break-all;line-height:1.8;">${{ steps.list-apks.outputs.copy_all }}</pre>
+                  <h3 style="margin:0 0 8px;font-size:14px;color:#64748b;font-weight:600;">All Links</h3>
+                  <div style="background:#1e293b;border-radius:10px;padding:16px 18px;">
+                    <pre style="margin:0;font-family:'SF Mono',Monaco,Consolas,monospace;font-size:12px;color:#e2e8f0;white-space:pre-wrap;word-break:break-all;line-height:2;">${{ steps.gofile-upload.outputs.gofile_copy }}</pre>
                   </div>
-                  <a href="mailto:?subject=APK%20Download%20Links&body=${{ steps.list-apks.outputs.copy_all_encoded }}" style="display:inline-block;background:#4f46e5;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;">Forward All Links</a>
+                </div>
+                <div style="padding:0 24px 20px;">
+                  <h3 style="margin:0 0 4px;font-size:14px;color:#94a3b8;font-weight:600;">GitHub Release Links</h3>
+                  <p style="margin:0 0 10px;font-size:11px;color:#94a3b8;">Requires GitHub login</p>
+                  <table style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:10px;overflow:hidden;" cellpadding="0" cellspacing="0">
+                    ${{ steps.gh-links.outputs.gh_rows }}
+                  </table>
                 </div>
                 <div style="padding:0 24px 24px;text-align:center;">
-                  <a href="https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }}" style="display:inline-block;background:#0f172a;color:#fff;padding:12px 32px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;">View Release Page</a>
+                  <a href="mailto:?subject=APK%20Download%20Links&body=${{ steps.gofile-upload.outputs.gofile_copy_encoded }}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;margin-right:8px;">Forward All Links</a>
+                  <a href="https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }}" style="display:inline-block;background:#0f172a;color:#fff;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;">View Release</a>
                 </div>
               </div>
               <p style="text-align:center;color:#94a3b8;font-size:11px;margin:16px 0 0;">Automated build by GitHub Actions</p>
