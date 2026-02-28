@@ -133,12 +133,15 @@ jobs:
         run: |
           APK_ROWS=""
           COPY_ALL=""
+          ATTACH_LIST=""
           for f in apks/*.apk; do
             name=$(basename "$f")
             url="https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/${name}"
             app_label=$(echo "$name" | sed 's/-${{ env.TIMESTAMP }}\.apk//')
             APK_ROWS="${APK_ROWS}<tr><td style='padding:12px 16px;border-bottom:1px solid #e2e8f0;'><span style='font-weight:700;font-size:15px;color:#1e293b;'>${app_label}</span></td><td style='padding:12px 16px;border-bottom:1px solid #e2e8f0;text-align:right;'><a href='${url}' style='display:inline-block;background:#4f46e5;color:#fff;padding:8px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;'>Download</a></td></tr>"
             COPY_ALL="${COPY_ALL}${app_label} : ${url}\n"
+            [ -n "$ATTACH_LIST" ] && ATTACH_LIST="${ATTACH_LIST},"
+            ATTACH_LIST="${ATTACH_LIST}${f}"
           done
           # Use delimiter for multiline output
           echo "apk_rows<<APKEOF" >> $GITHUB_OUTPUT
@@ -147,6 +150,10 @@ jobs:
           echo "copy_all<<COPYEOF" >> $GITHUB_OUTPUT
           echo -e "$COPY_ALL" >> $GITHUB_OUTPUT
           echo "COPYEOF" >> $GITHUB_OUTPUT
+          echo "copy_all_encoded<<ENCEOF" >> $GITHUB_OUTPUT
+          echo -e "$COPY_ALL" | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip()))" >> $GITHUB_OUTPUT
+          echo "ENCEOF" >> $GITHUB_OUTPUT
+          echo "attachments=$ATTACH_LIST" >> $GITHUB_OUTPUT
 
       - name: Create Release with APKs
         uses: softprops/action-gh-release@v2
@@ -169,12 +176,13 @@ jobs:
           subject: "Android Build Complete - APKs Ready"
           to: ${{ secrets.MAIL_TO }}
           from: ${{ secrets.MAIL_USERNAME }}
+          attachments: ${{ steps.list-apks.outputs.attachments }}
           html_body: |
             <div style="max-width:600px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;padding:24px;">
               <div style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
                 <div style="background:linear-gradient(135deg,#4f46e5,#6366f1);padding:28px 24px;text-align:center;">
                   <h1 style="color:#fff;margin:0;font-size:22px;font-weight:800;">Build Successful</h1>
-                  <p style="color:#c7d2fe;margin:8px 0 0;font-size:13px;">Android APKs are ready to download</p>
+                  <p style="color:#c7d2fe;margin:8px 0 0;font-size:13px;">APKs attached to this email — no login needed</p>
                 </div>
                 <div style="padding:20px 24px;">
                   <table style="width:100%;margin-bottom:8px;" cellpadding="0" cellspacing="0">
@@ -198,15 +206,17 @@ jobs:
                 </div>
                 <div style="padding:0 24px 20px;">
                   <h3 style="margin:0 0 12px;font-size:16px;color:#1e293b;font-weight:700;">Download APKs</h3>
+                  <p style="margin:0 0 12px;font-size:12px;color:#64748b;">APK files are attached to this email. Download directly from the attachments below.</p>
                   <table style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:12px;overflow:hidden;" cellpadding="0" cellspacing="0">
                     ${{ steps.list-apks.outputs.apk_rows }}
                   </table>
                 </div>
-                <div style="padding:0 24px 24px;">
-                  <h3 style="margin:0 0 8px;font-size:14px;color:#64748b;font-weight:600;">Copy All Links</h3>
-                  <div style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;">
+                <div style="padding:0 24px 20px;">
+                  <h3 style="margin:0 0 8px;font-size:14px;color:#64748b;font-weight:600;">Share Links</h3>
+                  <div style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:12px;">
                     <pre style="margin:0;font-family:'SF Mono',Monaco,Consolas,monospace;font-size:12px;color:#334155;white-space:pre-wrap;word-break:break-all;line-height:1.8;">${{ steps.list-apks.outputs.copy_all }}</pre>
                   </div>
+                  <a href="mailto:?subject=APK%20Download%20Links&body=${{ steps.list-apks.outputs.copy_all_encoded }}" style="display:inline-block;background:#4f46e5;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;">Forward All Links</a>
                 </div>
                 <div style="padding:0 24px 24px;text-align:center;">
                   <a href="https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }}" style="display:inline-block;background:#0f172a;color:#fff;padding:12px 32px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;">View Release Page</a>
