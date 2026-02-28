@@ -191,6 +191,10 @@ jobs:
                       <td style="padding:8px 0;color:#1e293b;font-size:13px;font-weight:700;text-align:right;">${{ env.RELEASE_TAG }}</td>
                     </tr>
                   </table>
+                  <div style="background:#f1f5f9;border-radius:8px;padding:10px 14px;margin-top:4px;">
+                    <p style="margin:0 0 4px;color:#64748b;font-size:11px;font-weight:600;">COMMIT MESSAGE</p>
+                    <p style="margin:0;color:#1e293b;font-size:13px;font-weight:600;line-height:1.5;">${{ github.event.head_commit.message }}</p>
+                  </div>
                 </div>
                 <div style="padding:0 24px 20px;">
                   <h3 style="margin:0 0 12px;font-size:16px;color:#1e293b;font-weight:700;">Download APKs</h3>
