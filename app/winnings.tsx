@@ -3,11 +3,12 @@ import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
 import { getToday, getTommorow } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
+    StyleSheet,
     Switch,
     Text,
     TouchableOpacity,
@@ -17,7 +18,6 @@ import { Dropdown } from "react-native-element-dropdown";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Agent } from "./(tabs)/agent";
 
-// Update WinnerReport type to allow dealer/agent to be string or object (for type safety)
 type WinnerReport = {
     customer_name: string;
     bill_number: number;
@@ -26,22 +26,36 @@ type WinnerReport = {
     count: string;
     lsk: string;
     draw: string;
-    dealer: string | { id: number; username: string; user_type: string; commission: number; single_digit_number_commission: number; cap_amount: number };
-    agent: string | { id: number; username: string; user_type: string; commission: number; single_digit_number_commission: number; cap_amount: number } | null;
-    booking_datetime?: string; // Add this if your API returns a date field
+    dealer: string;
+    agent: string | null;
+    booking_datetime?: string;
 };
 
-type PaginatedResult<T> = {
+// Pre-computed display row to avoid expensive formatting during scroll
+type DisplayRow = {
+    key: string;
+    date: string;
+    time: string;
+    win_number: string;
+    lsk: string;
+    count: string;
+    dealer: string;
+    customer_name: string;
+    agent: string | null;
+    prize: string;
+};
+
+type OptimizedResult = {
     count: number;
-    next: string | null;
-    previous: string | null;
+    total_pages: number;
+    next: number | null;
+    previous: number | null;
     results: {
-        data: T[];
+        data: WinnerReport[];
         total_winning_prize: number;
     };
 };
 
-// Helper function to format date as dd/mm/yyyy
 function formatDateToDDMMYYYY(date: Date | string | undefined | null): string {
     if (!date) return "";
     let d: Date;
@@ -57,7 +71,101 @@ function formatDateToDDMMYYYY(date: Date | string | undefined | null): string {
     return `${day}/${month}/${year}`;
 }
 
-const PAGE_SIZE = 10;
+// Pre-compute all display strings once when data arrives
+function prepareDisplayRows(items: WinnerReport[], keyOffset: number = 0): DisplayRow[] {
+    return items.map((item, i) => {
+        let date = "";
+        let time = "";
+        if (item.booking_datetime) {
+            const d = new Date(item.booking_datetime);
+            if (!isNaN(d.getTime())) {
+                date = formatDateToDDMMYYYY(d);
+                time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+        }
+        return {
+            key: String(keyOffset + i),
+            date,
+            time,
+            win_number: item.win_number,
+            lsk: item.lsk,
+            count: item.count,
+            dealer: item.dealer,
+            customer_name: item.customer_name,
+            agent: item.agent,
+            prize: `₹${Number(item.prize).toLocaleString()}`,
+        };
+    });
+}
+
+const ROW_HEIGHT = 60;
+
+const rowStyles = StyleSheet.create({
+    rowEven: { height: ROW_HEIGHT, flexDirection: "row", alignItems: "center", paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: "#f3f4f6", backgroundColor: "#fff" },
+    rowOdd: { height: ROW_HEIGHT, flexDirection: "row", alignItems: "center", paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: "#f3f4f6", backgroundColor: "#f9fafb" },
+    dateCol: { flex: 1.1 },
+    dateText: { fontSize: 11, color: "#374151", fontWeight: "600" },
+    timeText: { fontSize: 10, color: "#6b7280" },
+    numCol: { flex: 1, alignItems: "center" },
+    winNum: { fontSize: 14, color: "#047857", fontWeight: "700", letterSpacing: 2, textAlign: "center" },
+    lsk: { fontSize: 11, color: "#6b7280", textAlign: "center" },
+    countText: { fontSize: 10, color: "#9ca3af", textAlign: "center" },
+    countBold: { fontWeight: "600" },
+    dealerCol: { flex: 1, alignItems: "center" },
+    dealerText: { fontSize: 11, color: "#374151", fontWeight: "600", textAlign: "center" },
+    customerText: { fontSize: 11, color: "#047857", textAlign: "center" },
+    agentText: { fontSize: 10, color: "#9ca3af", textAlign: "center" },
+    prizeCol: { flex: 1, alignItems: "flex-end" },
+    prizeText: { fontSize: 13, color: "#6d28d9", fontWeight: "700", textAlign: "center", width: "100%" },
+});
+
+const headerStyles = StyleSheet.create({
+    row: { flexDirection: "row", backgroundColor: "rgba(243,244,246,0.8)", borderBottomWidth: 1, borderBottomColor: "#e5e7eb", paddingHorizontal: 16, paddingVertical: 10 },
+    dateCol: { flex: 1.1 },
+    col: { flex: 1, alignItems: "center" },
+    text: { fontSize: 11, fontWeight: "600", color: "#4b5563", textTransform: "uppercase" },
+    textCenter: { fontSize: 11, fontWeight: "600", color: "#4b5563", textTransform: "uppercase", textAlign: "center" },
+    activeText: { color: "#7c3aed" },
+});
+
+const footerStyle = { paddingVertical: 12, alignItems: "center" as const };
+const emptyComponent = (
+    <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 64 }}>
+        <Text style={{ color: "#6b7280", fontSize: 14 }}>No Winner's data available.</Text>
+    </View>
+);
+
+const WinnerRow = React.memo(({ item, index }: { item: DisplayRow; index: number }) => (
+    <View style={index % 2 === 0 ? rowStyles.rowEven : rowStyles.rowOdd}>
+        <View style={rowStyles.dateCol}>
+            {item.date ? (
+                <>
+                    <Text style={rowStyles.dateText}>{item.date}</Text>
+                    <Text style={rowStyles.timeText}>{item.time}</Text>
+                </>
+            ) : null}
+        </View>
+        <View style={rowStyles.numCol}>
+            <Text style={rowStyles.winNum}>{item.win_number}</Text>
+            <Text style={rowStyles.lsk}>{item.lsk}</Text>
+            <Text style={rowStyles.countText}>
+                Count: <Text style={rowStyles.countBold}>{item.count}</Text>
+            </Text>
+        </View>
+        <View style={rowStyles.dealerCol}>
+            <Text style={rowStyles.dealerText}>{item.dealer}</Text>
+            {item.customer_name ? (
+                <Text numberOfLines={1} style={rowStyles.customerText}>{item.customer_name}</Text>
+            ) : null}
+            {item.agent ? (
+                <Text style={rowStyles.agentText}>Agent: {item.agent}</Text>
+            ) : null}
+        </View>
+        <View style={rowStyles.prizeCol}>
+            <Text style={rowStyles.prizeText}>{item.prize}</Text>
+        </View>
+    </View>
+));
 
 const WinnersReportScreen = () => {
     const { selectedDraw } = useDrawStore();
@@ -69,32 +177,9 @@ const WinnersReportScreen = () => {
     const [allGame, setAllGame] = useState(false);
     const [selectedAgent, setSelectedAgent] = useState("");
     const [selectedDealer, setSelectedDealer] = useState("");
-
-    // Pagination state
-    const [offset, setOffset] = useState(0);
-    const [data, setData] = useState<WinnerReport[]>([]);
-    const [count, setCount] = useState(0);
-    const [totalAmount, setTotalAmount] = useState(0);
-    const [fetchingMore, setFetchingMore] = useState(false);
-    const [loadingInitial, setLoadingInitial] = useState(false);
-    const [error, setError] = useState<any>(null);
-    const [refreshing, setRefreshing] = useState(false);
+    const [ordering, setOrdering] = useState<string>("");
 
     const { user, token } = useAuthStore();
-
-    // Reset pagination offset when filters change
-    useEffect(() => {
-        setOffset(0);
-        setData([]);
-        setCount(0);
-    }, [
-        fromDate?.toISOString?.(),
-        toDate?.toISOString?.(),
-        allGame,
-        selectedDraw?.id,
-        selectedAgent,
-        selectedDealer
-    ]);
     
     // QueryClient for caching
     const queryClient = useQueryClient();
@@ -123,123 +208,109 @@ const WinnersReportScreen = () => {
         initialData: user?.user_type === "ADMIN" ? cachedDealers : undefined,
     });
 
-    // Build query params
-    const buildQuery = (offsetVal: number = 0, limitVal: number = PAGE_SIZE) => {
+    // Build query params for optimized endpoint
+    const buildQuery = (page: number = 1) => {
         const params: Record<string, string> = {};
         if (fromDate) params["date_time__gte"] = fromDate.toISOString();
         if (toDate) params["date_time__lte"] = toDate.toISOString();
-        // if (fullView) params["full_view"] = "true";
         if (user?.user_type === "DEALER" && selectedAgent)
             params["booked_agent__id"] = selectedAgent;
         if (user?.user_type === "ADMIN" && selectedDealer)
             params["booked_dealer__id"] = selectedDealer;
         if (selectedDraw?.id && !allGame) params["booking_detail__booking__draw_session__draw__id"] = String(selectedDraw.id);
-
-        params["offset"] = String(offsetVal);
-        params["limit"] = String(limitVal);
+        if (ordering) params["ordering"] = ordering;
+        params["page"] = String(page);
 
         return Object.keys(params)
             .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(params[key]))
             .join("&");
     };
 
-    // Fetch data function for pagination (returns the response, not just .results)
-    const fetchPaginated = useCallback(
-        async (offsetVal: number = 0, append: boolean = false) => {
-            if (!selectedDraw?.id) {
-                setData([]);
-                setCount(0);
-                return;
-            }
-            try {
-                //TODO
-                // console.log("fetching..")
-                if (!append) setLoadingInitial(true);
-                setFetchingMore(append);
-                setError(null);
-                const res = await api.get<PaginatedResult<WinnerReport>>(`/draw-result/winners/?${buildQuery(offsetVal)}`);
-                const { results, count: total } = res.data;
-                setCount(total);
-                setTotalAmount(results?.total_winning_prize || 0)
-                if (append) {
-                    setData(prev => [...prev, ...results?.data || []]);
-                } else {
-                    setData(results?.data || []);
-                }
-            } catch (e) {
-                setError(e);
-            } finally {
-                setLoadingInitial(false);
-                setFetchingMore(false);
-                setRefreshing(false);
-            }
-        },
-        [
-            fromDate, toDate, allGame, selectedDraw?.id, 
-            selectedAgent, selectedDealer, user?.user_type
-        ]
-    );
+    const filterKeys = [
+        fromDate?.toISOString(),
+        toDate?.toISOString(),
+        allGame,
+        selectedDraw?.id,
+        selectedAgent,
+        selectedDealer,
+        ordering,
+    ];
 
-    // Fetch data whenever pagination or filter changes
+    // Infinite query for paginated data
+    const {
+        data: infiniteData,
+        isLoading,
+        error,
+        refetch,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+    } = useInfiniteQuery<OptimizedResult>({
+        queryKey: ["optimized-winners", ...filterKeys],
+        queryFn: ({ pageParam = 1 }) =>
+            api.get<OptimizedResult>(`/draw-result/optimized-winners/?${buildQuery(pageParam as number)}`).then((res) => res.data),
+        initialPageParam: 1,
+        getNextPageParam: (lastPage) => lastPage.next,
+        enabled: !!selectedDraw?.id,
+    });
+
+    // Prefetch next page as soon as current page loads
     useEffect(() => {
-        fetchPaginated(offset, offset > 0);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [
-        offset, fromDate?.toISOString?.(), toDate?.toISOString?.(), 
-        allGame, selectedDraw?.id, selectedAgent, selectedDealer
-    ]);
+        if (infiniteData && hasNextPage && !isFetchingNextPage) {
+            fetchNextPage();
+        }
+    }, [infiniteData?.pages.length, hasNextPage, isFetchingNextPage]);
 
-    // Load more handler
-    const handleLoadMore = () => {
-        // Only fetch more if there's potentially more data
-        if (fetchingMore || loadingInitial || data.length >= count) return;
-        setOffset(prev => prev + PAGE_SIZE);
-    };
+    const totalAmount = infiniteData?.pages[0]?.results?.total_winning_prize || 0;
 
-    // Refresh handler (pull-to-refresh)
-    const handleRefresh = () => {
-        setRefreshing(true);
-        setOffset(0);
-        fetchPaginated(0, false);
-    };
+    // Flatten all pages into pre-computed display rows
+    const displayRows = useMemo(() => {
+        if (!infiniteData?.pages) return [];
+        const allItems: WinnerReport[] = [];
+        for (const page of infiniteData.pages) {
+            if (page.results?.data) allItems.push(...page.results.data);
+        }
+        const filtered = search
+            ? allItems.filter(item => item.bill_number?.toString().includes(search))
+            : allItems;
+        return prepareDisplayRows(filtered);
+    }, [infiniteData?.pages, search]);
 
-    // Filter by search (bill number)
-    const filteredData = useMemo(() => {
-        if (!search) return data;
-        return data.filter(item =>
-            item.bill_number?.toString().includes(search)
-        );
-    }, [data, search]);
+    const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && displayRows.length > 0;
 
-    // Calculate totals (on ALL loaded so far)
-    const totals = useMemo(() => {
-        let totalPrize = 0;
-        let totalCount = 0;
-        let totalAmount = 0;
-        filteredData.forEach(item => {
-            const count = Number(item.count) || 0;
-            const prize = Number(item.prize) || 0;
-            totalPrize += prize;
-            totalCount += count;
-            totalAmount += prize;
+    const renderItem = useCallback(({ item, index }: { item: DisplayRow; index: number }) => (
+        <WinnerRow item={item} index={index} />
+    ), []);
+
+    const keyExtractor = useCallback((item: DisplayRow) => item.key, []);
+
+    const getItemLayout = useCallback((_: any, index: number) => ({
+        length: ROW_HEIGHT,
+        offset: ROW_HEIGHT * index,
+        index,
+    }), []);
+
+    // Trigger next page fetch when user scrolls near the end
+    const handleEndReached = useCallback(() => {
+        if (hasNextPage && !isFetchingNextPage) {
+            fetchNextPage();
+        }
+    }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+    // Toggle ordering: none -> asc -> desc -> none
+    const toggleOrdering = useCallback((field: string) => {
+        setOrdering(prev => {
+            if (prev === field) return `-${field}`;
+            if (prev === `-${field}`) return "";
+            return field;
         });
-        return {
-            totalPrize,
-            totalCount,
-            totalAmount,
-            totalBills: filteredData.length,
-        };
-    }, [filteredData]);
+    }, []);
 
-    const shouldShowTotalFooter = !!selectedDraw?.id && !loadingInitial && !error && filteredData.length > 0;
-
-    // Helper to safely get username from dealer/agent (string or object)
-    const getUsername = (userField: any) => {
-        if (!userField) return "";
-        if (typeof userField === "string") return userField;
-        if (typeof userField === "object" && userField.username) return userField.username;
+    const getArrow = useCallback((field: string) => {
+        if (ordering === field) return " \u2191";
+        if (ordering === `-${field}`) return " \u2193";
         return "";
-    };
+    }, [ordering]);
 
     return (
         <SafeAreaView className="flex-1 bg-white">
@@ -403,7 +474,7 @@ const WinnersReportScreen = () => {
                             No draw selected. Please choose one.
                         </Text>
                     </View>
-                ) : loadingInitial ? (
+                ) : isLoading ? (
                     <View className="flex-1 justify-center items-center">
                         <View className="bg-white rounded-xl px-6 py-8 shadow-md border border-gray-200 items-center">
                             <ActivityIndicator size="large" color="#7c3aed" />
@@ -422,7 +493,7 @@ const WinnersReportScreen = () => {
                                 There was a problem fetching the winners data.
                             </Text>
                             <TouchableOpacity
-                                onPress={() => fetchPaginated(offset, offset > 0)}
+                                onPress={() => refetch()}
                                 className="bg-violet-600 px-4 py-2 rounded-lg"
                             >
                                 <Text className="text-white font-semibold">Retry</Text>
@@ -432,111 +503,61 @@ const WinnersReportScreen = () => {
                 ) : (
                     <>
                         <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden">
+                            {/* Header outside FlatList so getItemLayout stays accurate */}
+                            <View style={headerStyles.row}>
+                                <TouchableOpacity
+                                    style={headerStyles.dateCol}
+                                    onPress={() => toggleOrdering("booking_detail__booking__date_time")}
+                                    activeOpacity={0.6}
+                                >
+                                    <Text style={[
+                                        headerStyles.text,
+                                        ordering.includes("date_time") && headerStyles.activeText
+                                    ]}>
+                                        DATE{getArrow("booking_detail__booking__date_time")}
+                                    </Text>
+                                </TouchableOpacity>
+                                <View style={headerStyles.col}>
+                                    <Text style={headerStyles.text}>NUMBER</Text>
+                                </View>
+                                <View style={headerStyles.col}>
+                                    <Text style={headerStyles.text}>DEALER</Text>
+                                </View>
+                                <TouchableOpacity
+                                    style={headerStyles.col}
+                                    onPress={() => toggleOrdering("prize")}
+                                    activeOpacity={0.6}
+                                >
+                                    <Text style={[
+                                        headerStyles.textCenter,
+                                        ordering.includes("prize") && headerStyles.activeText
+                                    ]}>
+                                        PRIZE{getArrow("prize")}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
                             <FlatList
-                                data={filteredData || []}
-                                keyExtractor={(item, index) => index?.toString()}
-                                ListHeaderComponent={() => (
-                                    <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
-                                        <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">Date</Text>
-                                        <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Number</Text>
-                                        <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Dealer</Text>
-                                        <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Prize</Text>
-                                    </View>
-                                )}
-                                renderItem={({ item, index }) => (
-                                    <View
-                                        className={[
-                                            "px-2 py-2 border-b border-gray-100",
-                                            index % 2 === 0 ? "bg-white" : "bg-gray-50"
-                                        ].join(" ")}
-                                    >
-                                        <View className="flex-row items-center">
-                                            {/* Date */}
-                                            <View className="flex-[1.1]">
-                                                <View>
-                                                    {item.booking_datetime && (
-                                                        <View className="flex">
-                                                            <Text className="text-xs text-gray-700 font-semibold">
-                                                                {formatDateToDDMMYYYY(item.booking_datetime)}
-                                                            </Text>
-                                                            <Text className="text-[10px] text-gray-500">
-                                                                {new Date(item.booking_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                            </Text>
-                                                        </View>
-                                                    )}
-                                                </View>
-                                            </View>
-                                            {/* Number */}
-                                            <View className="flex-1 items-center">
-                                                <Text className="text-base text-center text-emerald-700 font-bold tracking-widest">
-                                                    {item.win_number}
-                                                </Text>
-                                                <Text className="text-xs text-center text-gray-500">
-                                                    {item.lsk}
-                                                </Text>
-                                                <Text className="text-[11px] text-center text-gray-400">
-                                                    Count: <Text className="font-semibold">{item.count}</Text>
-                                                </Text>
-                                            </View>
-                                            {/* Dealer */}
-                                            <View className="flex-1 items-center">
-                                                <View>
-                                                    <Text className="text-xs text-center text-gray-700 font-semibold">
-                                                        {getUsername(item.dealer)}
-                                                    </Text>
-                                                    {item?.customer_name && (
-                                                        <Text
-                                                            className="text-xs text-center text-emerald-700"
-                                                            numberOfLines={1}
-                                                            ellipsizeMode="tail"
-                                                            style={{ minWidth: 0 }}
-                                                        >
-                                                            {item?.customer_name}
-                                                        </Text>
-                                                    )}
-                                                </View>
-                                                {item.agent && (
-                                                    <Text className="text-[10px] text-center text-gray-400">
-                                                        Agent: {getUsername(item.agent)}
-                                                    </Text>
-                                                )}
-                                            </View>
-                                            {/* Prize */}
-                                            <View className="flex-1 items-end">
-                                                <Text className="text-sm text-center w-full text-violet-700 font-bold">
-                                                    ₹{Number(item.prize).toLocaleString()}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    </View>
-                                )}
-                                ListEmptyComponent={
-                                    <View className="flex-1 justify-center items-center py-16">
-                                        <Text className="text-gray-500 text-base">
-                                            No Winner's data available.
-                                        </Text>
-                                    </View>
-                                }
-                                onEndReached={handleLoadMore}
+                                data={displayRows}
+                                keyExtractor={keyExtractor}
+                                renderItem={renderItem}
+                                initialNumToRender={30}
+                                maxToRenderPerBatch={100}
+                                updateCellsBatchingPeriod={16}
+                                windowSize={21}
+                                removeClippedSubviews={true}
+                                getItemLayout={getItemLayout}
+                                onEndReached={handleEndReached}
                                 onEndReachedThreshold={0.5}
-                                refreshing={refreshing}
-                                onRefresh={handleRefresh}
                                 ListFooterComponent={
-                                    fetchingMore && filteredData.length < count ? (
-                                        <View className="py-4 items-center">
+                                    isFetchingNextPage ? (
+                                        <View style={footerStyle}>
                                             <ActivityIndicator size="small" color="#7c3aed" />
-                                            <Text style={{ color: "#7c3aed", marginTop: 8 }}>Loading more...</Text>
                                         </View>
-                                    ) : filteredData.length < count ? (
-                                        <TouchableOpacity
-                                            onPress={handleLoadMore}
-                                            className="bg-violet-600 px-4 py-2 rounded-lg m-4 self-center"
-                                            style={{ minWidth: 110, alignItems: "center" }}
-                                        >
-                                            <Text style={{ color: "white", fontWeight: "bold" }}>Load more</Text>
-                                        </TouchableOpacity>
                                     ) : null
                                 }
+                                ListEmptyComponent={emptyComponent}
+                                refreshing={false}
+                                onRefresh={() => refetch()}
                             />
                         </View>
 
@@ -544,22 +565,8 @@ const WinnersReportScreen = () => {
                             <View className="border-t border-gray-200 py-3 bg-gray-100 px-4 mt-4 rounded-lg">
                                 <View className="flex-row">
                                     <Text className="flex-1 font-bold text-sm text-gray-800">TOTAL</Text>
-                                    {/* <Text className="flex-1 text-sm text-center font-semibold text-gray-700">
-                                        {totals.totalBills}
-                                    </Text>
-                                    <Text className="flex-1 text-sm text-center font-semibold text-gray-700">
-                                        {totals.totalCount}
-                                    </Text> */}
-                                    {/* <Text className="flex-1 text-sm text-center font-semibold text-gray-700"> */}
-                                        {/* (Unused column, could be left blank or used for something else) */}
-                                    {/* </Text> */}
-                                    {/* <Text className="flex-1 text-sm text-right font-semibold text-violet-700"> */}
-                                        {/* Total Prize */}
-                                        {/* ₹{totals.totalPrize.toLocaleString()} */}
-                                    {/* </Text> */}
                                     <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">
-                                        {/* Total Amount */}
-                                        ₹{totalAmount} 
+                                        ₹{totalAmount}
                                     </Text>
                                 </View>
                             </View>
