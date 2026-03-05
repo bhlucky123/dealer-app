@@ -130,8 +130,20 @@ jobs:
 
       - name: Upload APKs to GoFile
         id: gofile-upload
+        continue-on-error: true
         run: |
-          SERVER=$(curl -s https://api.gofile.io/servers | jq -r '.data.servers[0].name // "store1"')
+          # Get server with retry
+          SERVER=""
+          for attempt in 1 2 3; do
+            SERVERS_RESP=$(curl -s --max-time 15 https://api.gofile.io/servers 2>/dev/null || true)
+            if echo "$SERVERS_RESP" | jq -e '.data.servers[0].name' >/dev/null 2>&1; then
+              SERVER=$(echo "$SERVERS_RESP" | jq -r '.data.servers[0].name')
+              break
+            fi
+            echo "Server fetch attempt $attempt failed, retrying in 5s..."
+            sleep 5
+          done
+          SERVER="${SERVER:-store1}"
           echo "Using GoFile server: ${SERVER}"
 
           GOFILE_ROWS=""
@@ -140,17 +152,30 @@ jobs:
             name=$(basename "$f")
             app_label=$(echo "$name" | sed 's/-${{ env.TIMESTAMP }}\.apk//')
 
-            echo "Uploading ${name}..."
-            RESPONSE=$(curl -s -F "file=@${f}" "https://${SERVER}.gofile.io/uploadFile")
-            STATUS=$(echo "$RESPONSE" | jq -r '.status')
+            UPLOADED=false
+            for attempt in 1 2 3; do
+              echo "Uploading ${name} (attempt $attempt)..."
+              RESPONSE=$(curl -s --max-time 120 -F "file=@${f}" "https://${SERVER}.gofile.io/uploadFile" 2>/dev/null || true)
 
-            if [ "$STATUS" = "ok" ]; then
-              DL_PAGE=$(echo "$RESPONSE" | jq -r '.data.downloadPage')
-              echo "  OK -> ${DL_PAGE}"
-              GOFILE_ROWS="${GOFILE_ROWS}<tr><td style='padding:12px 16px;border-bottom:1px solid #e2e8f0;'><span style='font-weight:700;font-size:15px;color:#1e293b;'>${app_label}</span></td><td style='padding:12px 8px;border-bottom:1px solid #e2e8f0;text-align:right;'><a href='${DL_PAGE}' style='display:inline-block;background:#059669;color:#fff;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;'>Download</a></td><td style='padding:12px 8px;border-bottom:1px solid #e2e8f0;text-align:right;'><a href='${DL_PAGE}' style='display:inline-block;background:#f1f5f9;color:#334155;padding:8px 14px;border-radius:8px;text-decoration:none;font-weight:600;font-size:12px;border:1px solid #e2e8f0;'>Copy Link</a></td></tr>"
-              GOFILE_COPY="${GOFILE_COPY}${app_label} : ${DL_PAGE}\n"
-            else
-              echo "  FAILED -> ${RESPONSE}"
+              # Validate response is JSON before parsing
+              if echo "$RESPONSE" | jq -e '.status' >/dev/null 2>&1; then
+                STATUS=$(echo "$RESPONSE" | jq -r '.status')
+                if [ "$STATUS" = "ok" ]; then
+                  DL_PAGE=$(echo "$RESPONSE" | jq -r '.data.downloadPage')
+                  echo "  OK -> ${DL_PAGE}"
+                  GOFILE_ROWS="${GOFILE_ROWS}<tr><td style='padding:12px 16px;border-bottom:1px solid #e2e8f0;'><span style='font-weight:700;font-size:15px;color:#1e293b;'>${app_label}</span></td><td style='padding:12px 8px;border-bottom:1px solid #e2e8f0;text-align:right;'><a href='${DL_PAGE}' style='display:inline-block;background:#059669;color:#fff;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;'>Download</a></td><td style='padding:12px 8px;border-bottom:1px solid #e2e8f0;text-align:right;'><a href='${DL_PAGE}' style='display:inline-block;background:#f1f5f9;color:#334155;padding:8px 14px;border-radius:8px;text-decoration:none;font-weight:600;font-size:12px;border:1px solid #e2e8f0;'>Copy Link</a></td></tr>"
+                  GOFILE_COPY="${GOFILE_COPY}${app_label} : ${DL_PAGE}\n"
+                  UPLOADED=true
+                  break
+                fi
+              fi
+              echo "  Attempt $attempt failed (non-JSON or error response), retrying in 10s..."
+              echo "  Response preview: $(echo "$RESPONSE" | head -c 200)"
+              sleep 10
+            done
+
+            if [ "$UPLOADED" = false ]; then
+              echo "  FAILED after 3 attempts"
               GOFILE_ROWS="${GOFILE_ROWS}<tr><td style='padding:12px 16px;border-bottom:1px solid #e2e8f0;'><span style='font-weight:700;font-size:15px;color:#1e293b;'>${app_label}</span></td><td colspan='2' style='padding:12px 16px;border-bottom:1px solid #e2e8f0;text-align:right;color:#dc2626;font-size:13px;font-weight:600;'>Upload failed</td></tr>"
             fi
           done
