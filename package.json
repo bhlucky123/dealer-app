@@ -17,6 +17,7 @@
     "@react-navigation/bottom-tabs": "^7.3.10",
     "@react-navigation/elements": "^2.3.8",
     "@react-navigation/native": "^7.1.6",
+    "@shopify/flash-list": "1.7.6",
     "@tanstack/react-query": "^5.80.7",
     "axios": "^1.10.0",
     "expo": "53.0.20",
@@ -53,6 +54,7 @@
     "react-native-svg": "15.11.2",
     "react-native-web": "~0.20.0",
     "react-native-webview": "13.13.5",
+    "tslib": "^2.8.1",
     "zustand": "^5.0.5"
   },
   "devDependencies": {

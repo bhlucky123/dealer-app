@@ -7,13 +7,13 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
-    FlatList,
     StyleSheet,
     Switch,
     Text,
     TouchableOpacity,
     View
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
 import { Dropdown } from "react-native-element-dropdown";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Agent } from "./(tabs)/agent";
@@ -284,11 +284,10 @@ const WinnersReportScreen = () => {
 
     const keyExtractor = useCallback((item: DisplayRow) => item.key, []);
 
-    const getItemLayout = useCallback((_: any, index: number) => ({
-        length: ROW_HEIGHT,
-        offset: ROW_HEIGHT * index,
-        index,
-    }), []);
+
+    const overrideItemLayout = useCallback((layout: { span?: number; size?: number }) => {
+        layout.size = ROW_HEIGHT;
+    }, []);
 
     // Trigger next page fetch when user scrolls near the end
     const handleEndReached = useCallback(() => {
@@ -536,16 +535,13 @@ const WinnersReportScreen = () => {
                                     </Text>
                                 </TouchableOpacity>
                             </View>
-                            <FlatList
+                            <FlashList
                                 data={displayRows}
                                 keyExtractor={keyExtractor}
                                 renderItem={renderItem}
-                                initialNumToRender={30}
-                                maxToRenderPerBatch={100}
-                                updateCellsBatchingPeriod={16}
-                                windowSize={21}
-                                removeClippedSubviews={true}
-                                getItemLayout={getItemLayout}
+                                estimatedItemSize={ROW_HEIGHT}
+                                overrideItemLayout={overrideItemLayout}
+                                drawDistance={ROW_HEIGHT * 50}
                                 onEndReached={handleEndReached}
                                 onEndReachedThreshold={0.5}
                                 ListFooterComponent={
