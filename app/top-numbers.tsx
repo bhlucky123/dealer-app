@@ -53,7 +53,11 @@ export default function TopNumbers() {
   const { selectedDraw } = useDrawStore();
 
   const [selectedTypes, setSelectedTypes] = useState<string[]>(["single_digit", "double_digit", "triple_digit"]);
-  const [subType, setSubType] = useState<string>("");
+  const [selectedSubTypes, setSelectedSubTypes] = useState<Record<string, string[]>>({
+    single_digit: [],
+    double_digit: [],
+    triple_digit: [],
+  });
   const [drawId, setDrawId] = useState<number | "">(
     selectedDraw?.id ?? ""
   );
@@ -103,7 +107,8 @@ export default function TopNumbers() {
     }
 
     if (selectedTypes.length) params.type = selectedTypes.join(",");
-    if (subType) params.sub_type = subType;
+    const allSubTypes = selectedTypes.flatMap((t) => selectedSubTypes[t] || []);
+    if (allSubTypes.length) params.sub_type = allSubTypes.join(",");
     if (drawId) params.draw = drawId;
     if (dealerId) params.dealer = dealerId;
     if (minCount) params.min_count = Number(minCount);
@@ -188,7 +193,7 @@ export default function TopNumbers() {
 
   const resetFilters = () => {
     setSelectedTypes(["single_digit", "double_digit", "triple_digit"]);
-    setSubType("");
+    setSelectedSubTypes({ single_digit: [], double_digit: [], triple_digit: [] });
     setDrawId(selectedDraw?.id ?? "");
     setDealerId("");
     setExcludedDealerIds([]);
@@ -358,62 +363,100 @@ export default function TopNumbers() {
           {/* Game Type toggles with per-type min count */}
           <View className="mt-1">
             <Text className="text-[11px] text-gray-500 mb-1">
-              Game Type &amp; Min Count
+              Game Type, Min Count &amp; Sub Type
             </Text>
             {([
-              { label: "Single", value: "single_digit" as string, min: minCountSingle, setMin: setMinCountSingle },
-              { label: "Double", value: "double_digit" as string, min: minCountDouble, setMin: setMinCountDouble },
-              { label: "Triple", value: "triple_digit" as string, min: minCountTriple, setMin: setMinCountTriple },
+              { label: "Single", value: "single_digit" as string, min: minCountSingle, setMin: setMinCountSingle, subTypes: ["A", "B", "C"] },
+              { label: "Double", value: "double_digit" as string, min: minCountDouble, setMin: setMinCountDouble, subTypes: ["AB", "BC", "AC"] },
+              { label: "Triple", value: "triple_digit" as string, min: minCountTriple, setMin: setMinCountTriple, subTypes: ["BOX", "SUPER"] },
             ]).map((opt) => {
               const isActive = selectedTypes.includes(opt.value);
+              const activeSubTypes = selectedSubTypes[opt.value] || [];
               return (
-                <View key={opt.value} className="flex-row items-center gap-2 mb-2">
-                  <TouchableOpacity
-                    onPress={() => {
-                      setSelectedTypes((prev) =>
-                        isActive
-                          ? prev.filter((t) => t !== opt.value)
-                          : [...prev, opt.value]
-                      );
-                      setPage(1);
-                    }}
-                    className={`px-3 py-1.5 rounded-full border min-w-[70px] items-center ${
-                      isActive
-                        ? "bg-indigo-600 border-indigo-600"
-                        : "bg-white border-gray-300"
-                    }`}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      className={`text-[11px] font-semibold ${
-                        isActive ? "text-white" : "text-gray-700"
-                      }`}
-                    >
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                  {isActive && (
-                    <TextInput
-                      value={opt.min}
-                      onChangeText={(txt) => {
-                        opt.setMin(txt.replace(/[^0-9]/g, ""));
+                <View key={opt.value} className="mb-2">
+                  <View className="flex-row items-center gap-2">
+                    <TouchableOpacity
+                      onPress={() => {
+                        setSelectedTypes((prev) =>
+                          isActive
+                            ? prev.filter((t) => t !== opt.value)
+                            : [...prev, opt.value]
+                        );
                         setPage(1);
                       }}
-                      placeholder="Min count"
-                      keyboardType="numeric"
-                      style={{
-                        flex: 1,
-                        borderColor: "#d1d5db",
-                        borderWidth: 1,
-                        borderRadius: 8,
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        backgroundColor: "#fff",
-                        fontSize: 12,
-                        color: "#111827",
-                      }}
-                      placeholderTextColor="#9ca3af"
-                    />
+                      className={`px-3 py-1.5 rounded-full border min-w-[70px] items-center ${
+                        isActive
+                          ? "bg-indigo-600 border-indigo-600"
+                          : "bg-white border-gray-300"
+                      }`}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        className={`text-[11px] font-semibold ${
+                          isActive ? "text-white" : "text-gray-700"
+                        }`}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                    {isActive && (
+                      <TextInput
+                        value={opt.min}
+                        onChangeText={(txt) => {
+                          opt.setMin(txt.replace(/[^0-9]/g, ""));
+                          setPage(1);
+                        }}
+                        placeholder="Min count"
+                        keyboardType="numeric"
+                        style={{
+                          flex: 1,
+                          borderColor: "#d1d5db",
+                          borderWidth: 1,
+                          borderRadius: 8,
+                          paddingHorizontal: 10,
+                          paddingVertical: 6,
+                          backgroundColor: "#fff",
+                          fontSize: 12,
+                          color: "#111827",
+                        }}
+                        placeholderTextColor="#9ca3af"
+                      />
+                    )}
+                  </View>
+                  {isActive && (
+                    <View className="flex-row flex-wrap gap-1.5 mt-1.5 ml-1">
+                      {opt.subTypes.map((st) => {
+                        const isSubActive = activeSubTypes.includes(st);
+                        return (
+                          <TouchableOpacity
+                            key={st}
+                            onPress={() => {
+                              setSelectedSubTypes((prev) => ({
+                                ...prev,
+                                [opt.value]: isSubActive
+                                  ? prev[opt.value].filter((s) => s !== st)
+                                  : [...(prev[opt.value] || []), st],
+                              }));
+                              setPage(1);
+                            }}
+                            className={`px-2.5 py-1 rounded-full border ${
+                              isSubActive
+                                ? "bg-indigo-100 border-indigo-400"
+                                : "bg-white border-gray-200"
+                            }`}
+                            activeOpacity={0.7}
+                          >
+                            <Text
+                              className={`text-[10px] font-semibold ${
+                                isSubActive ? "text-indigo-700" : "text-gray-500"
+                              }`}
+                            >
+                              {st}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
                   )}
                 </View>
               );
@@ -421,73 +464,6 @@ export default function TopNumbers() {
           </View>
 
           <View className="flex-row gap-3 mt-3">
-            <View className="flex-1">
-              <Text className="text-[11px] text-gray-500 mb-1">
-                Sub Type
-              </Text>
-              <Dropdown
-                data={[
-                  { label: "A", value: "A" },
-                  { label: "B", value: "B" },
-                  { label: "C", value: "C" },
-                  { label: "AB", value: "AB" },
-                  { label: "BC", value: "BC" },
-                  { label: "AC", value: "AC" },
-                  { label: "SUPER", value: "SUPER" },
-                  { label: "BOX", value: "BOX" },
-                ]}
-                labelField="label"
-                valueField="value"
-                value={subType}
-                placeholder="All"
-                onChange={(item: any) => {
-                  setSubType(item.value);
-                  setPage(1);
-
-                }}
-                renderRightIcon={() =>
-                  subType ? (
-                    <TouchableOpacity
-                      onPress={() => {
-                        setSubType("");
-                        setPage(1);
-      
-                      }}
-                      style={{
-                        position: "absolute",
-                        right: 10,
-                        zIndex: 10,
-                        backgroundColor: "#fff",
-                        width: 24,
-                        height: 24,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        borderRadius: 12,
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={{ color: "#9ca3af", fontSize: 16 }}>✕</Text>
-                    </TouchableOpacity>
-                  ) : null
-                }
-                style={{
-                  borderColor: "#d1d5db",
-                  borderWidth: 1,
-                  borderRadius: 8,
-                  paddingHorizontal: 8,
-                  paddingVertical: 6,
-                  backgroundColor: "#fff",
-                }}
-                selectedTextStyle={{
-                  color: "#111827",
-                  fontSize: 12,
-                }}
-                itemTextStyle={{
-                  color: "#111827",
-                  fontSize: 12,
-                }}
-              />
-            </View>
             <View className="flex-1">
               <Text className="text-[11px] text-gray-500 mb-1">
                 Dealer
