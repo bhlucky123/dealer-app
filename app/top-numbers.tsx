@@ -99,7 +99,6 @@ export default function TopNumbers() {
     const params: Record<string, any> = {};
 
     if (forPage) {
-      params.json = true;
       params.page = page;
     }
 
@@ -131,9 +130,9 @@ export default function TopNumbers() {
     error,
     refetch,
   } = useQuery<InsightsResponse>({
-    queryKey: ["/booking/insights/numbers/", buildParams()],
+    queryKey: ["/draw-booking/top-numbers/", buildParams()],
     queryFn: async () => {
-      const res = await api.get("/draw-booking/insights/numbers/", {
+      const res = await api.get("/draw-booking/top-numbers/", {
         params: buildParams(),
       });
       return res.data;
@@ -289,7 +288,7 @@ export default function TopNumbers() {
   const handleCopyAll = async () => {
     setCopyLoading(true);
     try {
-      const res = await api.get("/draw-booking/insights/numbers/all/", {
+      const res = await api.get("/draw-booking/top-numbers/all/", {
         params: buildParams(false),
       });
       const lines: string[] = res.data || [];
