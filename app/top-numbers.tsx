@@ -52,7 +52,7 @@ export default function TopNumbers() {
   const { user } = useAuthStore();
   const { selectedDraw } = useDrawStore();
 
-  const [type, setType] = useState<string>("");
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(["single_digit", "double_digit", "triple_digit"]);
   const [subType, setSubType] = useState<string>("");
   const [drawId, setDrawId] = useState<number | "">(
     selectedDraw?.id ?? ""
@@ -60,6 +60,9 @@ export default function TopNumbers() {
   const [dealerId, setDealerId] = useState<number | "">("");
   const [excludedDealerIds, setExcludedDealerIds] = useState<number[]>([]);
   const [minCount, setMinCount] = useState<string>("");
+  const [minCountSingle, setMinCountSingle] = useState<string>("");
+  const [minCountDouble, setMinCountDouble] = useState<string>("");
+  const [minCountTriple, setMinCountTriple] = useState<string>("");
   const [page, setPage] = useState<number>(1);
   const [refreshing, setRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string>("");
@@ -72,9 +75,10 @@ export default function TopNumbers() {
   
   // Exclude dealers expand/collapse
   const [excludeDealersExpanded, setExcludeDealersExpanded] = useState(false);
-  
+
   // Selected items for copying
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+
 
   // Fetch dealers for filters / exclusion list
   const { data: dealers = [] as Dealer[] } = useQuery<Dealer[]>({
@@ -91,17 +95,22 @@ export default function TopNumbers() {
     queryFn: () => api.get("/draw/list/").then((res) => res.data || []),
   });
 
-  const buildParams = () => {
-    const params: Record<string, any> = {
-      json: true,
-      page,
-    };
+  const buildParams = (forPage = true) => {
+    const params: Record<string, any> = {};
 
-    if (type) params.type = type;
+    if (forPage) {
+      params.json = true;
+      params.page = page;
+    }
+
+    if (selectedTypes.length) params.type = selectedTypes.join(",");
     if (subType) params.sub_type = subType;
     if (drawId) params.draw = drawId;
     if (dealerId) params.dealer = dealerId;
     if (minCount) params.min_count = Number(minCount);
+    if (minCountSingle) params.min_count_single_digit = Number(minCountSingle);
+    if (minCountDouble) params.min_count_double_digit = Number(minCountDouble);
+    if (minCountTriple) params.min_count_triple_digit = Number(minCountTriple);
     if (excludedDealerIds.length) {
       params.exclude_dealer = excludedDealerIds.join(",");
     }
@@ -111,8 +120,6 @@ export default function TopNumbers() {
       const day = String(selectedDate.getDate()).padStart(2, "0");
       params.date = `${year}-${month}-${day}`;
     }
-
-    console.log("params", params);
 
     return params;
   };
@@ -168,7 +175,7 @@ export default function TopNumbers() {
       prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]
     );
     setPage(1);
-    setSelectedItems(new Set());
+
   };
 
   const onRefresh = async () => {
@@ -181,15 +188,18 @@ export default function TopNumbers() {
   };
 
   const resetFilters = () => {
-    setType("");
+    setSelectedTypes(["single_digit", "double_digit", "triple_digit"]);
     setSubType("");
     setDrawId(selectedDraw?.id ?? "");
     setDealerId("");
     setExcludedDealerIds([]);
     setMinCount("");
+    setMinCountSingle("");
+    setMinCountDouble("");
+    setMinCountTriple("");
     setSelectedDate(null);
     setPage(1);
-    setSelectedItems(new Set());
+
   };
 
   const formatCopyText = (item: InsightItem): string => {
@@ -256,39 +266,47 @@ export default function TopNumbers() {
   };
 
   const selectAllItems = () => {
-    const allKeys = new Set(items.map((item) => getItemKey(item)));
-    setSelectedItems(allKeys);
+    setSelectedItems(new Set(items.map((item) => getItemKey(item))));
   };
 
   const deselectAllItems = () => {
     setSelectedItems(new Set());
   };
 
-  const handleCopyAll = () => {
-    if (items.length === 0) {
-      showToastMessage("No items to copy");
-      return;
-    }
-    
-    // If items are selected, copy only selected items
-    // Otherwise, copy all items
-    const itemsToCopy = selectedItems.size > 0
-      ? items.filter((item) => selectedItems.has(getItemKey(item)))
-      : items;
-    
+  const handleCopySelected = () => {
+    const itemsToCopy = items.filter((item) => selectedItems.has(getItemKey(item)));
     if (itemsToCopy.length === 0) {
-      showToastMessage("No items selected to copy");
+      showToastMessage("No items selected");
       return;
     }
-    
-    const allTexts = itemsToCopy.map((item) => formatCopyText(item));
-    const combinedText = allTexts.join("\n");
-    Clipboard.setString(combinedText);
-    showToastMessage(
-      selectedItems.size > 0
-        ? `Copied ${itemsToCopy.length} selected item${itemsToCopy.length > 1 ? "s" : ""}`
-        : `Copied ${itemsToCopy.length} item${itemsToCopy.length > 1 ? "s" : ""}`
-    );
+    const text = itemsToCopy.map((item) => formatCopyText(item)).join("\n");
+    Clipboard.setString(text);
+    showToastMessage(`Copied ${itemsToCopy.length} item${itemsToCopy.length > 1 ? "s" : ""}`);
+  };
+
+  const [copyLoading, setCopyLoading] = useState(false);
+
+  const handleCopyAll = async () => {
+    setCopyLoading(true);
+    try {
+      const res = await api.get("/draw-booking/insights/numbers/all/", {
+        params: buildParams(false),
+      });
+      const lines: string[] = res.data || [];
+
+      if (lines.length === 0) {
+        showToastMessage("No items to copy");
+        return;
+      }
+
+      const text = lines.join("\n");
+      Clipboard.setString(text);
+      showToastMessage(`Copied ${lines.length} item${lines.length > 1 ? "s" : ""}`);
+    } catch (err) {
+      showToastMessage("Failed to copy");
+    } finally {
+      setCopyLoading(false);
+    }
   };
 
   return (
@@ -338,71 +356,72 @@ export default function TopNumbers() {
             </TouchableOpacity>
           </View>
 
-          {/* Row 1: Type / Sub-type */}
-          <View className="flex-row gap-3 mt-1">
-            <View className="flex-1">
-              <Text className="text-[11px] text-gray-500 mb-1">
-                Game Type
-              </Text>
-              <Dropdown
-                data={[
-                  { label: "Single Digit", value: "single_digit" },
-                  { label: "Double Digit", value: "double_digit" },
-                  { label: "Triple Digit", value: "triple_digit" },
-                ]}
-                labelField="label"
-                valueField="value"
-                value={type}
-                placeholder="All"
-                onChange={(item: any) => {
-                  setType(item.value);
-                  setPage(1);
-                  setSelectedItems(new Set());
-                }}
-                renderRightIcon={() =>
-                  type ? (
-                    <TouchableOpacity
-                      onPress={() => {
-                        setType("");
-                        setPage(1);
-                        setSelectedItems(new Set());
-                      }}
-                      style={{
-                        position: "absolute",
-                        right: 10,
-                        zIndex: 10,
-                        backgroundColor: "#fff",
-                        width: 24,
-                        height: 24,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        borderRadius: 12,
-                      }}
-                      activeOpacity={0.8}
+          {/* Game Type toggles with per-type min count */}
+          <View className="mt-1">
+            <Text className="text-[11px] text-gray-500 mb-1">
+              Game Type &amp; Min Count
+            </Text>
+            {([
+              { label: "Single", value: "single_digit" as string, min: minCountSingle, setMin: setMinCountSingle },
+              { label: "Double", value: "double_digit" as string, min: minCountDouble, setMin: setMinCountDouble },
+              { label: "Triple", value: "triple_digit" as string, min: minCountTriple, setMin: setMinCountTriple },
+            ]).map((opt) => {
+              const isActive = selectedTypes.includes(opt.value);
+              return (
+                <View key={opt.value} className="flex-row items-center gap-2 mb-2">
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedTypes((prev) =>
+                        isActive
+                          ? prev.filter((t) => t !== opt.value)
+                          : [...prev, opt.value]
+                      );
+                      setPage(1);
+                    }}
+                    className={`px-3 py-1.5 rounded-full border min-w-[70px] items-center ${
+                      isActive
+                        ? "bg-indigo-600 border-indigo-600"
+                        : "bg-white border-gray-300"
+                    }`}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      className={`text-[11px] font-semibold ${
+                        isActive ? "text-white" : "text-gray-700"
+                      }`}
                     >
-                      <Text style={{ color: "#9ca3af", fontSize: 16 }}>✕</Text>
-                    </TouchableOpacity>
-                  ) : null
-                }
-                style={{
-                  borderColor: "#d1d5db",
-                  borderWidth: 1,
-                  borderRadius: 8,
-                  paddingHorizontal: 8,
-                  paddingVertical: 6,
-                  backgroundColor: "#fff",
-                }}
-                selectedTextStyle={{
-                  color: "#111827",
-                  fontSize: 12,
-                }}
-                itemTextStyle={{
-                  color: "#111827",
-                  fontSize: 12,
-                }}
-              />
-            </View>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                  {isActive && (
+                    <TextInput
+                      value={opt.min}
+                      onChangeText={(txt) => {
+                        opt.setMin(txt.replace(/[^0-9]/g, ""));
+                        setPage(1);
+                      }}
+                      placeholder="Min count"
+                      keyboardType="numeric"
+                      style={{
+                        flex: 1,
+                        borderColor: "#d1d5db",
+                        borderWidth: 1,
+                        borderRadius: 8,
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        backgroundColor: "#fff",
+                        fontSize: 12,
+                        color: "#111827",
+                      }}
+                      placeholderTextColor="#9ca3af"
+                    />
+                  )}
+                </View>
+              );
+            })}
+          </View>
 
+          <View className="flex-row gap-3 mt-3">
             <View className="flex-1">
               <Text className="text-[11px] text-gray-500 mb-1">
                 Sub Type
@@ -425,7 +444,7 @@ export default function TopNumbers() {
                 onChange={(item: any) => {
                   setSubType(item.value);
                   setPage(1);
-                  setSelectedItems(new Set());
+
                 }}
                 renderRightIcon={() =>
                   subType ? (
@@ -433,7 +452,7 @@ export default function TopNumbers() {
                       onPress={() => {
                         setSubType("");
                         setPage(1);
-                        setSelectedItems(new Set());
+      
                       }}
                       style={{
                         position: "absolute",
@@ -470,70 +489,6 @@ export default function TopNumbers() {
                 }}
               />
             </View>
-          </View>
-
-          {/* Row 2: Draw / Dealer */}
-          <View className="flex-row gap-3 mt-3">
-            <View className="flex-1">
-              <Text className="text-[11px] text-gray-500 mb-1">Draw</Text>
-              <Dropdown
-                data={draws.map((d) => ({
-                  label: d.name,
-                  value: d.id,
-                }))}
-                labelField="label"
-                valueField="value"
-                value={drawId}
-                placeholder="All draws"
-                onChange={(item: any) => {
-                  setDrawId(item.value);
-                  setPage(1);
-                  setSelectedItems(new Set());
-                }}
-                renderRightIcon={() =>
-                  drawId ? (
-                    <TouchableOpacity
-                      onPress={() => {
-                        setDrawId("");
-                        setPage(1);
-                        setSelectedItems(new Set());
-                      }}
-                      style={{
-                        position: "absolute",
-                        right: 10,
-                        zIndex: 10,
-                        backgroundColor: "#fff",
-                        width: 24,
-                        height: 24,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        borderRadius: 12,
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={{ color: "#9ca3af", fontSize: 16 }}>✕</Text>
-                    </TouchableOpacity>
-                  ) : null
-                }
-                style={{
-                  borderColor: "#d1d5db",
-                  borderWidth: 1,
-                  borderRadius: 8,
-                  paddingHorizontal: 8,
-                  paddingVertical: 6,
-                  backgroundColor: "#fff",
-                }}
-                selectedTextStyle={{
-                  color: "#111827",
-                  fontSize: 12,
-                }}
-                itemTextStyle={{
-                  color: "#111827",
-                  fontSize: 12,
-                }}
-              />
-            </View>
-
             <View className="flex-1">
               <Text className="text-[11px] text-gray-500 mb-1">
                 Dealer
@@ -551,7 +506,7 @@ export default function TopNumbers() {
                   setDealerId(item.value);
                   setExcludedDealerIds([]);
                   setPage(1);
-                  setSelectedItems(new Set());
+
                 }}
                 renderRightIcon={() =>
                   dealerId ? (
@@ -559,7 +514,7 @@ export default function TopNumbers() {
                       onPress={() => {
                         setDealerId("");
                         setPage(1);
-                        setSelectedItems(new Set());
+      
                       }}
                       style={{
                         position: "absolute",
@@ -618,7 +573,7 @@ export default function TopNumbers() {
                 onPress={() => {
                   setSelectedDate(null);
                   setPage(1);
-                  setSelectedItems(new Set());
+
                 }}
                     className="px-2 py-2 rounded-lg bg-red-50 border border-red-200"
                     activeOpacity={0.7}
@@ -639,9 +594,9 @@ export default function TopNumbers() {
                   const clean = txt.replace(/[^0-9]/g, "");
                   setMinCount(clean);
                   setPage(1);
-                  setSelectedItems(new Set());
+
                 }}
-                placeholder="e.g. 10"
+                placeholder="Global"
                 keyboardType="numeric"
                 style={{
                   borderColor: "#d1d5db",
@@ -658,6 +613,7 @@ export default function TopNumbers() {
             </View>
           </View>
 
+
           {/* Row 4: Pagination */}
           <View className="mt-3">
             <Text className="text-[11px] text-gray-500 mb-1">Page</Text>
@@ -666,7 +622,7 @@ export default function TopNumbers() {
                 disabled={page <= 1}
                 onPress={() => {
                   setPage((p) => Math.max(1, p - 1));
-                  setSelectedItems(new Set());
+
                 }}
                 className={`px-2 py-1 rounded-full ${
                   page <= 1 ? "bg-gray-100" : "bg-indigo-50"
@@ -692,7 +648,7 @@ export default function TopNumbers() {
                   setPage((p) =>
                     data?.num_pages ? Math.min(data.num_pages, p + 1) : p + 1
                   );
-                  setSelectedItems(new Set());
+
                 }}
                 className={`px-2 py-1 rounded-full ${
                   !data?.num_pages ||
@@ -959,7 +915,7 @@ export default function TopNumbers() {
                 </View>
                 {items.length > 0 && (
                   <View className="flex-row items-center gap-2 ml-2">
-                    {selectedItems.size > 0 && (
+                    {selectedItems.size > 0 ? (
                       <TouchableOpacity
                         onPress={deselectAllItems}
                         className="px-2 py-1.5 rounded-full bg-gray-200 active:bg-gray-300"
@@ -969,8 +925,7 @@ export default function TopNumbers() {
                           Clear ({selectedItems.size})
                         </Text>
                       </TouchableOpacity>
-                    )}
-                    {selectedItems.size === 0 && (
+                    ) : (
                       <TouchableOpacity
                         onPress={selectAllItems}
                         className="px-2 py-1.5 rounded-full bg-gray-200 active:bg-gray-300"
@@ -981,14 +936,32 @@ export default function TopNumbers() {
                         </Text>
                       </TouchableOpacity>
                     )}
+                    {selectedItems.size > 0 && (
+                      <TouchableOpacity
+                        onPress={handleCopySelected}
+                        className="flex-row items-center px-3 py-1.5 rounded-full bg-emerald-600 active:bg-emerald-700"
+                        activeOpacity={0.8}
+                      >
+                        <Copy size={12} color="#fff" />
+                        <Text className="ml-1.5 text-[11px] font-semibold text-white">
+                          Copy ({selectedItems.size})
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity
                       onPress={handleCopyAll}
+                      disabled={copyLoading}
                       className="flex-row items-center px-3 py-1.5 rounded-full bg-indigo-600 active:bg-indigo-700"
                       activeOpacity={0.8}
+                      style={copyLoading ? { opacity: 0.7 } : undefined}
                     >
-                      <Copy size={12} color="#fff" />
+                      {copyLoading ? (
+                        <ActivityIndicator size={12} color="#fff" />
+                      ) : (
+                        <Copy size={12} color="#fff" />
+                      )}
                       <Text className="ml-1.5 text-[11px] font-semibold text-white">
-                        {selectedItems.size > 0 ? `Copy (${selectedItems.size})` : "Copy All"}
+                        {copyLoading ? "Copying..." : "Copy All"}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -1009,6 +982,7 @@ export default function TopNumbers() {
                     <TouchableOpacity
                       key={itemKey}
                       onPress={() => toggleItemSelection(item)}
+                      onLongPress={() => handleCopy(item)}
                       className="flex-row items-center py-2 px-3 border-b border-gray-100 active:bg-gray-50"
                       activeOpacity={0.7}
                     >
@@ -1052,9 +1026,9 @@ export default function TopNumbers() {
                         </Text>
                       }
                       <Text className="w-14 text-[11px] text-right text-gray-800 ">
-                      {item.total_count} &nbsp; &nbsp; &nbsp; &nbsp; 
+                      {item.total_count} &nbsp; &nbsp; &nbsp; &nbsp;
                       </Text>
-                      
+
                       <Text className="w-18 text-[11px] text-right text-gray-800">
                         ₹{item.total_amount} &nbsp;
                       </Text>
@@ -1069,7 +1043,7 @@ export default function TopNumbers() {
                     disabled={page <= 1}
                     onPress={() => {
                       setPage((p) => Math.max(1, p - 1));
-                      setSelectedItems(new Set());
+    
                     }}
                     className={`px-3 py-1.5 rounded-full ${
                       page <= 1 ? "bg-gray-100" : "bg-white border border-gray-300"
@@ -1093,7 +1067,7 @@ export default function TopNumbers() {
                       setPage((p) =>
                         data?.num_pages ? Math.min(data.num_pages, p + 1) : p + 1
                       );
-                      setSelectedItems(new Set());
+    
                     }}
                     className={`px-3 py-1.5 rounded-full ${
                       data.page >= data.num_pages
@@ -1149,7 +1123,7 @@ export default function TopNumbers() {
             if (event.type === "set" && date) {
               setSelectedDate(date);
               setPage(1);
-              setSelectedItems(new Set());
+          
             }
           }}
         />

@@ -204,6 +204,22 @@ export default function RootLayout() {
             headerShadowVisible: false,
           }} />
 
+          <Stack.Screen
+            name="booking-details"
+            options={{
+              headerShown: true,
+              title: "Booking Details",
+              headerStyle: { backgroundColor: themeColors.headerBackground },
+              headerTitleStyle: {
+                color: themeColors.headerTitle,
+                fontWeight: "bold",
+                fontSize: 22,
+              },
+              headerTintColor: themeColors.headerTint,
+              headerShadowVisible: false,
+            }}
+          />
+
           <Stack.Screen name="+not-found" />
         </Stack>
       </AlertNotificationRoot>
