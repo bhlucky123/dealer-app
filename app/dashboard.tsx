@@ -208,7 +208,7 @@ function DealerPendingModal({
       setOffset(nextOffset);
       setTotalCount(data.count);
       setNext(data.next);
-    } catch {}
+    } catch { }
     setLoadingMore(false);
   }, [loadingMore, next, offset, fetchPage]);
 
@@ -221,7 +221,7 @@ function DealerPendingModal({
       setTotalCount(data.count);
       setTotalPending(data.total_pending_amount);
       setNext(data.next);
-    } catch {}
+    } catch { }
     setRefreshing(false);
   };
 
@@ -686,9 +686,8 @@ export default function AdminDashboard() {
                         }}
                       >
                         <Text
-                          className={`text-xs font-bold ${
-                            active ? "text-white" : "text-gray-600"
-                          }`}
+                          className={`text-xs font-bold ${active ? "text-white" : "text-gray-600"
+                            }`}
                         >
                           {option} days
                         </Text>
@@ -714,9 +713,8 @@ export default function AdminDashboard() {
                   >
                     <Calendar size={13} color={dateRangeMode === "custom" ? "#fff" : "#64748b"} />
                     <Text
-                      className={`text-xs font-bold ${
-                        dateRangeMode === "custom" ? "text-white" : "text-gray-600"
-                      }`}
+                      className={`text-xs font-bold ${dateRangeMode === "custom" ? "text-white" : "text-gray-600"
+                        }`}
                     >
                       Custom
                     </Text>
