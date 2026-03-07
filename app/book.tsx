@@ -622,8 +622,8 @@ const BookingScreen: React.FC = () => {
         return;
       }
 
-      // For BOX, only require bCount and must be 3-digit
-      if (subType === "BOX") {
+      // For BOX, only require bCount and must be 3-digit (skip for Different range - handled below)
+      if (subType === "BOX" && selectedRange !== "Different") {
         if (num.length !== 3) {
           invalids.push(num);
           return;
@@ -642,8 +642,8 @@ const BookingScreen: React.FC = () => {
       }
       console.log("invalids2", invalids);
 
-      // Validate countInput is a valid number
-      if (!isValidNumberString(countInput) || !isValidPositiveNumber(countInput)) {
+      // Validate countInput is a valid number (skip for Different+BOX since BOX uses bCount)
+      if (!(selectedRange === "Different" && subType === "BOX") && (!isValidNumberString(countInput) || !isValidPositiveNumber(countInput))) {
         Alert.alert(
           "Invalid input",
           "Please enter a valid count."
@@ -651,21 +651,8 @@ const BookingScreen: React.FC = () => {
         return;
       }
 
-      // Validate bCountInput if needed
-      // if (subType === "BOTH") {
-      //   if (num.length !== 3) {
-      //     invalids.push(num);
-      //     return;
-      //   }
-      //   if (!isValidNumberString(bCountInput) || !isValidPositiveNumber(bCountInput)) {
-      //     Alert.alert(
-      //       "Invalid input",
-      //       "Please enter a valid box count."
-      //     );
-      //     return;
-      //   }
-      // }
-      if (subType === "BOTH") {
+      // For BOTH, handle single-number booking (skip for Different range - handled below)
+      if (subType === "BOTH" && selectedRange !== "Different") {
         // --- New Logic for BOTH ---
 
         // 1. Check if SUPER count is valid (still required via countInput)
@@ -790,9 +777,11 @@ const BookingScreen: React.FC = () => {
               ["A", "B", "C"].forEach((lsk) => {
                 if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, lsk, lsk, bookingType));
               });
+            } else if (subType === "BOX") {
+              const boxCount = bCountVal > 0 ? bCountVal : countVal;
+              if (boxCount > 0) newEntries.push(createEntry(paddedNum, boxCount, "BOX", undefined, bookingType));
             } else {
-              const actualCount = subType === "BOX" ? bCountVal : countVal;
-              if (actualCount > 0) newEntries.push(createEntry(paddedNum, actualCount, subType, undefined, bookingType));
+              if (countVal > 0) newEntries.push(createEntry(paddedNum, countVal, subType, undefined, bookingType));
             }
             addedAny = true;
           }
