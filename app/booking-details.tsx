@@ -1,12 +1,11 @@
 import { useAuthStore } from "@/store/auth";
-import useDrawStore from "@/store/draw";
 import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
 import { Ionicons } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -15,76 +14,67 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
-import { Dropdown } from "react-native-element-dropdown";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type BookingDetail = {
     id: number;
-    bill_number: number;
-    draw: string;
-    booked_by_name: string;
     number: string;
     count: number;
     amount: number;
     type: string;
     sub_type: string;
     is_main_box_number: boolean;
+    dealer_amount: number;
+    agent_amount: number;
+    customer_amount: number;
 };
 
-type BookingDetailsResponse = {
-    count: number;
-    total_pages: number;
-    next: number | null;
-    previous: number | null;
-    results: BookingDetail[];
-    total_count: number;
+type BookingRetrieveResponse = {
+    bill_number: number;
+    date_time: string;
+    customer_name: string | null;
+    booked_by_name: string | null;
+    booked_by_type: string | null;
+    total_booking_count: number;
+    total_booking_amount: number;
+    calculated_dealer_amount: number;
+    calculated_agent_amount: number;
+    booking_details: BookingDetail[];
+    total_bill_count: number;
+    total_dealer_amount: number;
+    total_agent_amount: number;
+    total_customer_amount: number;
     total_amount: number;
 };
 
 type DisplayRow = {
     key: string;
     id: number;
-    bill_number: number;
-    draw: string;
-    booked_by_name: string;
     number: string;
     count: number;
     amount: string;
     type: string;
     sub_type: string;
+    dealer_amount: number;
+    agent_amount: number;
+    customer_amount: number;
 };
 
 function prepareDisplayRows(items: BookingDetail[]): DisplayRow[] {
     return items.map((item, i) => ({
         key: `bd_${item.id}_${i}`,
         id: item.id,
-        bill_number: item.bill_number,
-        draw: item.draw,
-        booked_by_name: item.booked_by_name,
         number: item.number,
         count: item.count,
         amount: `₹${amountHandler(Number(item.amount))}`,
         type: item.type,
         sub_type: item.sub_type,
+        dealer_amount: item.dealer_amount,
+        agent_amount: item.agent_amount,
+        customer_amount: item.customer_amount,
     }));
 }
-
-const typeOptions = [
-    { label: "Single Digit", value: "single_digit" },
-    { label: "Double Digit", value: "double_digit" },
-    { label: "Triple Digit", value: "triple_digit" },
-];
-
-const subTypeOptions = [
-    { label: "A", value: "A" },
-    { label: "B", value: "B" },
-    { label: "C", value: "C" },
-    { label: "AB", value: "AB" },
-    { label: "BC", value: "BC" },
-    { label: "AC", value: "AC" },
-    { label: "SUPER", value: "SUPER" },
-    { label: "BOX", value: "BOX" },
-];
 
 const ROW_HEIGHT = 50;
 
@@ -100,10 +90,8 @@ const rowStyles = StyleSheet.create({
     countText: { fontSize: 12, color: "#374151", textAlign: "center" },
     amtCol: { flex: 1, alignItems: "flex-end", justifyContent: "center" },
     amtText: { fontSize: 12, color: "#6d28d9", fontWeight: "700", textAlign: "right" },
-    billCol: { flex: 0.8, alignItems: "center", justifyContent: "center" },
-    billText: { fontSize: 11, color: "#374151", textAlign: "center" },
-    bookedCol: { flex: 1, alignItems: "center", justifyContent: "center" },
-    bookedText: { fontSize: 11, color: "#374151", textAlign: "center" },
+    custAmtCol: { flex: 1, alignItems: "flex-end", justifyContent: "center" },
+    custAmtText: { fontSize: 12, color: "#047857", fontWeight: "700", textAlign: "right" },
     deleteCol: { width: 24, alignItems: "flex-end", justifyContent: "center" },
 });
 
@@ -111,7 +99,6 @@ const headerStyles = StyleSheet.create({
     row: { flexDirection: "row", backgroundColor: "rgba(243,244,246,0.8)", borderBottomWidth: 1, borderBottomColor: "#e5e7eb", paddingHorizontal: 10, paddingVertical: 10 },
     col: { flex: 1, alignItems: "center" },
     countCol: { flex: 0.6, alignItems: "center" },
-    billCol: { flex: 0.8, alignItems: "center" },
     amtCol: { flex: 1, alignItems: "flex-end" },
     text: { fontSize: 10, fontWeight: "600", color: "#4b5563", textTransform: "uppercase" },
     deleteCol: { width: 24 },
@@ -141,11 +128,8 @@ const DetailRow = React.memo(({ item, index, isSuperuser, onDelete }: {
         <View style={rowStyles.amtCol}>
             <Text style={rowStyles.amtText}>{item.amount}</Text>
         </View>
-        <View style={rowStyles.billCol}>
-            <Text style={rowStyles.billText}>{item.bill_number}</Text>
-        </View>
-        <View style={rowStyles.bookedCol}>
-            <Text numberOfLines={1} style={rowStyles.bookedText}>{item.booked_by_name}</Text>
+        <View style={rowStyles.custAmtCol}>
+            <Text style={rowStyles.custAmtText}>₹{amountHandler(Number(item.customer_amount))}</Text>
         </View>
         {isSuperuser && (
             <View style={rowStyles.deleteCol}>
@@ -158,81 +142,31 @@ const DetailRow = React.memo(({ item, index, isSuperuser, onDelete }: {
 ));
 
 const BookingDetailsScreen = () => {
-    const { selectedDraw } = useDrawStore();
     const { user } = useAuthStore();
     const queryClient = useQueryClient();
     const params = useLocalSearchParams();
     const billNumber = params.bill_number as string | undefined;
 
-    const [search, setSearch] = useState(billNumber || "");
-    const [debouncedSearch, setDebouncedSearch] = useState(billNumber || "");
-    const [selectedType, setSelectedType] = useState("");
-    const [selectedSubType, setSelectedSubType] = useState("");
-    const [filtersOpen, setFiltersOpen] = useState(true);
-
     const isSuperuser = !!user?.superuser;
 
-    useEffect(() => {
-        const handle = setTimeout(() => setDebouncedSearch(search.trim()), 300);
-        return () => clearTimeout(handle);
-    }, [search]);
-
-    const buildQuery = useCallback((page: number = 1) => {
-        const p: Record<string, string> = {};
-        if (selectedDraw?.id) p["draw_session__draw__id"] = String(selectedDraw.id);
-        if (debouncedSearch) p["search"] = debouncedSearch;
-        if (selectedType) p["type"] = selectedType;
-        if (selectedSubType) p["sub_type"] = selectedSubType;
-        p["page"] = String(page);
-
-        return Object.keys(p)
-            .map(key => encodeURIComponent(key) + "=" + encodeURIComponent(p[key]))
-            .join("&");
-    }, [selectedDraw, debouncedSearch, selectedType, selectedSubType]);
-
-    const filterKeys = [selectedDraw?.id, debouncedSearch, selectedType, selectedSubType];
-
     const {
-        data: infiniteData,
+        data,
         isLoading,
         error,
         refetch,
-        fetchNextPage,
-        hasNextPage,
-        isFetchingNextPage,
-    } = useInfiniteQuery<BookingDetailsResponse>({
-        queryKey: ["booking-details", ...filterKeys],
-        queryFn: ({ pageParam = 1 }) =>
-            api.get<BookingDetailsResponse>(`/draw-booking/booking-details/?${buildQuery(pageParam as number)}`).then(res => res.data),
-        initialPageParam: 1,
-        getNextPageParam: (lastPage) => lastPage.next,
-        enabled: !!selectedDraw?.id,
+    } = useQuery<BookingRetrieveResponse>({
+        queryKey: ["booking-report-detail", billNumber],
+        queryFn: () =>
+            api.get<BookingRetrieveResponse>(`/draw-booking/booking-report/${billNumber}/`).then(res => res.data),
+        enabled: !!billNumber,
     });
 
-    // Prefetch next page
-    useEffect(() => {
-        if (infiniteData && hasNextPage && !isFetchingNextPage) {
-            fetchNextPage();
-        }
-    }, [infiniteData?.pages.length, hasNextPage, isFetchingNextPage]);
-
-    const totalCount = infiniteData?.pages[0]?.total_count ?? 0;
-    const totalAmount = infiniteData?.pages[0]?.total_amount ?? 0;
-
     const displayRows = useMemo(() => {
-        if (!infiniteData?.pages) return [];
-        const allItems: BookingDetail[] = [];
-        for (const page of infiniteData.pages) {
-            if (page.results) allItems.push(...page.results);
-        }
-        return prepareDisplayRows(allItems);
-    }, [infiniteData?.pages]);
+        if (!data?.booking_details) return [];
+        return prepareDisplayRows(data.booking_details);
+    }, [data?.booking_details]);
 
-    const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && displayRows.length > 0;
-
-    const handleEndReached = useCallback(() => {
-        if (hasNextPage && !isFetchingNextPage) fetchNextPage();
-    }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+    const shouldShowTotalFooter = !!billNumber && !isLoading && !error && displayRows.length > 0;
 
     const overrideItemLayout = useCallback((layout: { span?: number; size?: number }) => {
         layout.size = ROW_HEIGHT;
@@ -251,8 +185,8 @@ const BookingDetailsScreen = () => {
                     onPress: async () => {
                         try {
                             await api.delete(`/draw-booking/booking-detail-manage/${item.id}/`);
-                            queryClient.invalidateQueries({ queryKey: ["booking-details"] });
-                            queryClient.invalidateQueries({ queryKey: ["bookings"] });
+                            queryClient.invalidateQueries({ queryKey: ["booking-report-detail"] });
+                            queryClient.invalidateQueries({ queryKey: ["/draw-booking/booking-report/"] });
                             refetch();
                         } catch (err) {
                             Alert.alert("Delete Failed", "Could not delete booking detail.");
@@ -272,74 +206,24 @@ const BookingDetailsScreen = () => {
     return (
         <SafeAreaView className="flex-1 bg-white" edges={["bottom"]}>
             <View className="flex-1 p-4">
-                {/* Filters toggle */}
-                <TouchableOpacity
-                    onPress={() => setFiltersOpen(prev => !prev)}
-                    className="flex-row items-center justify-between py-2 px-1 mb-1"
-                    activeOpacity={0.7}
-                >
-                    <Text className="text-sm font-semibold text-gray-700">Filters</Text>
-                    <Ionicons name={filtersOpen ? "chevron-up" : "chevron-down"} size={18} color="#6b7280" />
-                </TouchableOpacity>
-                {filtersOpen && <View className="gap-3 mb-3">
-
-
-                    <View className="flex-row gap-3">
-                        <View className="flex-1">
-                            <Dropdown
-                                data={typeOptions}
-                                labelField="label"
-                                valueField="value"
-                                value={selectedType}
-                                onChange={item => setSelectedType(item.value)}
-                                placeholder="Type"
-                                style={{ borderColor: "#9ca3af", borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, padding: 10 }}
-                                containerStyle={{ borderRadius: 6 }}
-                                itemTextStyle={{ color: "#000" }}
-                                selectedTextStyle={{ color: "#000" }}
-                                renderRightIcon={() =>
-                                    selectedType ? (
-                                        <TouchableOpacity
-                                            onPress={() => setSelectedType("")}
-                                            style={{ position: "absolute", right: 10, zIndex: 10, backgroundColor: "#fff", width: 24, height: 24, alignItems: "center", justifyContent: "center", borderRadius: 12 }}
-                                        >
-                                            <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
-                                        </TouchableOpacity>
-                                    ) : null
-                                }
-                            />
+                {/* Booking Header */}
+                {data && (
+                    <View className="mb-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                        <View className="flex-row justify-between mb-1">
+                            <Text className="text-sm font-bold text-gray-800">Bill #{data.bill_number}</Text>
+                            <Text className="text-xs text-gray-500">{data.booked_by_name}{data.booked_by_type ? ` (${data.booked_by_type})` : ""}</Text>
                         </View>
-                        <View className="flex-1">
-                            <Dropdown
-                                data={subTypeOptions}
-                                labelField="label"
-                                valueField="value"
-                                value={selectedSubType}
-                                onChange={item => setSelectedSubType(item.value)}
-                                placeholder="Sub Type"
-                                style={{ borderColor: "#9ca3af", borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, padding: 10 }}
-                                containerStyle={{ borderRadius: 6 }}
-                                itemTextStyle={{ color: "#000" }}
-                                selectedTextStyle={{ color: "#000" }}
-                                renderRightIcon={() =>
-                                    selectedSubType ? (
-                                        <TouchableOpacity
-                                            onPress={() => setSelectedSubType("")}
-                                            style={{ position: "absolute", right: 10, zIndex: 10, backgroundColor: "#fff", width: 24, height: 24, alignItems: "center", justifyContent: "center", borderRadius: 12 }}
-                                        >
-                                            <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
-                                        </TouchableOpacity>
-                                    ) : null
-                                }
-                            />
+                        <View className="flex-row justify-between">
+                            <Text className="text-xs text-gray-500">{data.customer_name || ""}</Text>
+                            <Text className="text-xs text-gray-500">{data.date_time ? new Date(data.date_time).toLocaleString() : ""}</Text>
                         </View>
                     </View>
-                </View>}
+                )}
 
                 {/* Main Content */}
-                {!selectedDraw?.id ? (
+                {!billNumber ? (
                     <View className="flex-1 justify-center items-center">
-                        <Text className="text-base text-gray-500">No draw selected.</Text>
+                        <Text className="text-base text-gray-500">No booking selected.</Text>
                     </View>
                 ) : isLoading ? (
                     <View className="flex-1 justify-center items-center">
@@ -372,11 +256,8 @@ const BookingDetailsScreen = () => {
                                 <View style={headerStyles.amtCol}>
                                     <Text style={headerStyles.text}>AMT</Text>
                                 </View>
-                                <View style={headerStyles.billCol}>
-                                    <Text style={headerStyles.text}>BILL</Text>
-                                </View>
-                                <View style={headerStyles.col}>
-                                    <Text style={headerStyles.text}>BOOKED</Text>
+                                <View style={headerStyles.amtCol}>
+                                    <Text style={headerStyles.text}>C.AMT</Text>
                                 </View>
                                 {isSuperuser && <View style={headerStyles.deleteCol} />}
                             </View>
@@ -386,31 +267,24 @@ const BookingDetailsScreen = () => {
                                 renderItem={renderItem}
                                 estimatedItemSize={ROW_HEIGHT}
                                 overrideItemLayout={overrideItemLayout}
-                                drawDistance={ROW_HEIGHT * 50}
-                                onEndReached={handleEndReached}
-                                onEndReachedThreshold={0.5}
-                                ListFooterComponent={
-                                    isFetchingNextPage ? (
-                                        <View style={footerStyle}>
-                                            <ActivityIndicator size="small" color="#7c3aed" />
-                                        </View>
-                                    ) : null
-                                }
                                 ListEmptyComponent={emptyComponent}
                                 refreshing={false}
                                 onRefresh={() => refetch()}
                             />
                         </View>
 
-                        {shouldShowTotalFooter && (
+                        {shouldShowTotalFooter && data && (
                             <View className="border-t border-gray-200 py-3 bg-gray-100 px-4 mt-4 rounded-lg">
                                 <View className="flex-row">
                                     <Text className="flex-1 font-bold text-sm text-gray-800">TOTAL</Text>
                                     <Text className="flex-1 text-sm text-center font-semibold text-gray-700">
-                                        {totalCount}
+                                        {data.total_bill_count}
                                     </Text>
                                     <Text className="flex-1 text-sm text-right font-semibold text-violet-700">
-                                        ₹{amountHandler(Number(totalAmount))}
+                                        ₹{amountHandler(Number(data.total_dealer_amount))}
+                                    </Text>
+                                    <Text className="flex-1 text-sm text-right font-semibold text-emerald-700">
+                                        ₹{amountHandler(Number(data.total_customer_amount))}
                                     </Text>
                                 </View>
                             </View>
