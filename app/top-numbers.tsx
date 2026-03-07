@@ -54,9 +54,8 @@ export default function TopNumbers() {
 
   const [selectedTypes, setSelectedTypes] = useState<string[]>(["single_digit", "double_digit", "triple_digit"]);
   const [selectedSubTypes, setSelectedSubTypes] = useState<Record<string, string[]>>({
-    single_digit: [],
-    double_digit: [],
-    triple_digit: [],
+    single_digit: ["A", "B", "C"],
+    double_digit: ["AB", "BC", "AC"],
   });
   const [drawId, setDrawId] = useState<number | "">(
     selectedDraw?.id ?? ""
@@ -66,17 +65,20 @@ export default function TopNumbers() {
   const [minCount, setMinCount] = useState<string>("");
   const [minCountSingle, setMinCountSingle] = useState<string>("");
   const [minCountDouble, setMinCountDouble] = useState<string>("");
-  const [minCountTriple, setMinCountTriple] = useState<string>("");
+  const [minCountSuper, setMinCountSuper] = useState<string>("");
+  const [minCountBox, setMinCountBox] = useState<string>("");
+  const [superActive, setSuperActive] = useState(true);
+  const [boxActive, setBoxActive] = useState(true);
   const [page, setPage] = useState<number>(1);
   const [refreshing, setRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string>("");
   const [showToast, setShowToast] = useState(false);
   const toastOpacity = useMemo(() => new Animated.Value(0), []);
-  
+
   // Date filter state
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  
+
   // Exclude dealers expand/collapse
   const [excludeDealersExpanded, setExcludeDealersExpanded] = useState(false);
 
@@ -91,7 +93,6 @@ export default function TopNumbers() {
     enabled: user?.user_type === "ADMIN" || user?.user_type === "DEALER",
   });
 
-  console.log("dealers", dealers.length);
 
   // Fetch draws for filter
   const { data: draws = [] as Draw[] } = useQuery<Draw[]>({
@@ -106,15 +107,20 @@ export default function TopNumbers() {
       params.page = page;
     }
 
-    if (selectedTypes.length) params.type = selectedTypes.join(",");
-    const allSubTypes = selectedTypes.flatMap((t) => selectedSubTypes[t] || []);
+    // Only include triple_digit if super or box is active
+    const types = (superActive || boxActive)
+      ? selectedTypes
+      : selectedTypes.filter((t) => t !== "triple_digit");
+    if (types.length) params.type = types.join(",");
+    const allSubTypes = types.flatMap((t) => selectedSubTypes[t] || []);
     if (allSubTypes.length) params.sub_type = allSubTypes.join(",");
     if (drawId) params.draw = drawId;
     if (dealerId) params.dealer = dealerId;
     if (minCount) params.min_count = Number(minCount);
     if (minCountSingle) params.min_count_single_digit = Number(minCountSingle);
     if (minCountDouble) params.min_count_double_digit = Number(minCountDouble);
-    if (minCountTriple) params.min_count_triple_digit = Number(minCountTriple);
+    if (superActive && minCountSuper) params.min_count_super = Number(minCountSuper);
+    if (boxActive && minCountBox) params.min_count_box = Number(minCountBox);
     if (excludedDealerIds.length) {
       params.exclude_dealer = excludedDealerIds.join(",");
     }
@@ -124,6 +130,9 @@ export default function TopNumbers() {
       const day = String(selectedDate.getDate()).padStart(2, "0");
       params.date = `${year}-${month}-${day}`;
     }
+
+    console.log("top-numbers params", params);
+
 
     return params;
   };
@@ -137,14 +146,13 @@ export default function TopNumbers() {
   } = useQuery<InsightsResponse>({
     queryKey: ["/draw-booking/top-numbers/", buildParams()],
     queryFn: async () => {
-      const res = await api.get("/draw-booking/top-numbers/", {
-        params: buildParams(),
-      });
+      const params = buildParams();
+      const res = await api.get("/draw-booking/top-numbers/", { params });
+      console.log("top-numbers response", res.data);
       return res.data;
     },
   });
 
-  console.log("data", data);
 
   const items = data?.results || [];
 
@@ -193,14 +201,17 @@ export default function TopNumbers() {
 
   const resetFilters = () => {
     setSelectedTypes(["single_digit", "double_digit", "triple_digit"]);
-    setSelectedSubTypes({ single_digit: [], double_digit: [], triple_digit: [] });
+    setSelectedSubTypes({ single_digit: ["A", "B", "C"], double_digit: ["AB", "BC", "AC"] });
     setDrawId(selectedDraw?.id ?? "");
     setDealerId("");
     setExcludedDealerIds([]);
     setMinCount("");
     setMinCountSingle("");
     setMinCountDouble("");
-    setMinCountTriple("");
+    setMinCountSuper("");
+    setMinCountBox("");
+    setSuperActive(true);
+    setBoxActive(true);
     setSelectedDate(null);
     setPage(1);
 
@@ -208,17 +219,17 @@ export default function TopNumbers() {
 
   const formatCopyText = (item: InsightItem): string => {
     const { number, type, sub_type, total_count, extra_count } = item;
-    
+
     // super = "number count"
     if (sub_type?.toUpperCase() === "SUPER") {
       return `${number} ${extra_count || total_count}`;
     }
-    
+
     // 3digit number = "number count subtype"
     if (type === "triple_digit") {
       return `${number} ${extra_count || total_count} ${sub_type || ""}`.trim();
     }
-    
+
     // other = "subtype number count"
     return `${sub_type || ""} ${number} ${extra_count || total_count}`.trim();
   };
@@ -226,14 +237,14 @@ export default function TopNumbers() {
   const showToastMessage = (message: string) => {
     setToastMessage(message);
     setShowToast(true);
-    
+
     // Fade in
     Animated.timing(toastOpacity, {
       toValue: 1,
       duration: 200,
       useNativeDriver: true,
     }).start();
-    
+
     // Fade out after 2 seconds
     setTimeout(() => {
       Animated.timing(toastOpacity, {
@@ -368,13 +379,12 @@ export default function TopNumbers() {
             {([
               { label: "Single", value: "single_digit" as string, min: minCountSingle, setMin: setMinCountSingle, subTypes: ["A", "B", "C"] },
               { label: "Double", value: "double_digit" as string, min: minCountDouble, setMin: setMinCountDouble, subTypes: ["AB", "BC", "AC"] },
-              { label: "Triple", value: "triple_digit" as string, min: minCountTriple, setMin: setMinCountTriple, subTypes: ["BOX", "SUPER"] },
             ]).map((opt) => {
               const isActive = selectedTypes.includes(opt.value);
               const activeSubTypes = selectedSubTypes[opt.value] || [];
               return (
                 <View key={opt.value} className="mb-2">
-                  <View className="flex-row items-center gap-2">
+                  <View className="flex-row items-center gap-1.5">
                     <TouchableOpacity
                       onPress={() => {
                         setSelectedTypes((prev) =>
@@ -384,21 +394,49 @@ export default function TopNumbers() {
                         );
                         setPage(1);
                       }}
-                      className={`px-3 py-1.5 rounded-full border min-w-[70px] items-center ${
-                        isActive
-                          ? "bg-indigo-600 border-indigo-600"
-                          : "bg-white border-gray-300"
-                      }`}
+                      style={{ width: 60 }}
+                      className={`py-1.5 rounded-full border items-center ${isActive
+                        ? "bg-indigo-600 border-indigo-600"
+                        : "bg-white border-gray-300"
+                        }`}
                       activeOpacity={0.7}
                     >
                       <Text
-                        className={`text-[11px] font-semibold ${
-                          isActive ? "text-white" : "text-gray-700"
-                        }`}
+                        className={`text-[11px] font-semibold ${isActive ? "text-white" : "text-gray-700"
+                          }`}
                       >
                         {opt.label}
                       </Text>
                     </TouchableOpacity>
+                    {isActive && opt.subTypes.map((st) => {
+                      const isSubActive = activeSubTypes.includes(st);
+                      return (
+                        <TouchableOpacity
+                          key={st}
+                          onPress={() => {
+                            setSelectedSubTypes((prev) => ({
+                              ...prev,
+                              [opt.value]: isSubActive
+                                ? prev[opt.value].filter((s) => s !== st)
+                                : [...(prev[opt.value] || []), st],
+                            }));
+                            setPage(1);
+                          }}
+                          className={`px-2 py-1 rounded-full border ${isSubActive
+                            ? "bg-indigo-100 border-indigo-400"
+                            : "bg-white border-gray-200"
+                            }`}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            className={`text-[10px] font-semibold ${isSubActive ? "text-indigo-700" : "text-gray-500"
+                              }`}
+                          >
+                            {st}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                     {isActive && (
                       <TextInput
                         value={opt.min}
@@ -406,61 +444,115 @@ export default function TopNumbers() {
                           opt.setMin(txt.replace(/[^0-9]/g, ""));
                           setPage(1);
                         }}
-                        placeholder="Min count"
+                        placeholder="Min"
                         keyboardType="numeric"
                         style={{
                           flex: 1,
                           borderColor: "#d1d5db",
                           borderWidth: 1,
                           borderRadius: 8,
-                          paddingHorizontal: 10,
-                          paddingVertical: 6,
+                          paddingHorizontal: 6,
+                          paddingVertical: 4,
                           backgroundColor: "#fff",
-                          fontSize: 12,
+                          fontSize: 11,
                           color: "#111827",
+                          textAlign: "center",
                         }}
                         placeholderTextColor="#9ca3af"
                       />
                     )}
                   </View>
-                  {isActive && (
-                    <View className="flex-row flex-wrap gap-1.5 mt-1.5 ml-1">
-                      {opt.subTypes.map((st) => {
-                        const isSubActive = activeSubTypes.includes(st);
-                        return (
-                          <TouchableOpacity
-                            key={st}
-                            onPress={() => {
-                              setSelectedSubTypes((prev) => ({
-                                ...prev,
-                                [opt.value]: isSubActive
-                                  ? prev[opt.value].filter((s) => s !== st)
-                                  : [...(prev[opt.value] || []), st],
-                              }));
-                              setPage(1);
-                            }}
-                            className={`px-2.5 py-1 rounded-full border ${
-                              isSubActive
-                                ? "bg-indigo-100 border-indigo-400"
-                                : "bg-white border-gray-200"
-                            }`}
-                            activeOpacity={0.7}
-                          >
-                            <Text
-                              className={`text-[10px] font-semibold ${
-                                isSubActive ? "text-indigo-700" : "text-gray-500"
-                              }`}
-                            >
-                              {st}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  )}
                 </View>
               );
             })}
+
+            {/* Super */}
+            <View className="mb-2">
+              <View className="flex-row items-center gap-1.5">
+                <TouchableOpacity
+                  onPress={() => {
+                    setSuperActive((prev) => !prev);
+                    setPage(1);
+                  }}
+                  style={{ width: 60 }}
+                  className={`py-1.5 rounded-full border items-center ${superActive
+                    ? "bg-indigo-600 border-indigo-600"
+                    : "bg-white border-gray-300"
+                    }`}
+                  activeOpacity={0.7}
+                >
+                  <Text className={`text-[11px] font-semibold ${superActive ? "text-white" : "text-gray-700"}`}>Super</Text>
+                </TouchableOpacity>
+                {superActive && (
+                  <TextInput
+                    value={minCountSuper}
+                    onChangeText={(txt) => {
+                      setMinCountSuper(txt.replace(/[^0-9]/g, ""));
+                      setPage(1);
+                    }}
+                    placeholder="Min"
+                    keyboardType="numeric"
+                    style={{
+                      flex: 1,
+                      borderColor: "#d1d5db",
+                      borderWidth: 1,
+                      borderRadius: 8,
+                      paddingHorizontal: 6,
+                      paddingVertical: 4,
+                      backgroundColor: "#fff",
+                      fontSize: 11,
+                      color: "#111827",
+                      textAlign: "center",
+                    }}
+                    placeholderTextColor="#9ca3af"
+                  />
+                )}
+              </View>
+            </View>
+
+            {/* Box */}
+            <View className="mb-2">
+              <View className="flex-row items-center gap-1.5">
+                <TouchableOpacity
+                  onPress={() => {
+                    setBoxActive((prev) => !prev);
+                    setPage(1);
+                  }}
+                  style={{ width: 60 }}
+                  className={`py-1.5 rounded-full border items-center ${boxActive
+                    ? "bg-indigo-600 border-indigo-600"
+                    : "bg-white border-gray-300"
+                    }`}
+                  activeOpacity={0.7}
+                >
+                  <Text className={`text-[11px] font-semibold ${boxActive ? "text-white" : "text-gray-700"}`}>Box</Text>
+                </TouchableOpacity>
+                {boxActive && (
+                  <TextInput
+                    value={minCountBox}
+                    onChangeText={(txt) => {
+                      setMinCountBox(txt.replace(/[^0-9]/g, ""));
+                      setPage(1);
+                    }}
+                    placeholder="Min"
+                    keyboardType="numeric"
+                    style={{
+                      flex: 1,
+                      borderColor: "#d1d5db",
+                      borderWidth: 1,
+                      borderRadius: 8,
+                      paddingHorizontal: 6,
+                      paddingVertical: 4,
+                      backgroundColor: "#fff",
+                      fontSize: 11,
+                      color: "#111827",
+                      textAlign: "center",
+                    }}
+                    placeholderTextColor="#9ca3af"
+                  />
+                )}
+              </View>
+            </View>
           </View>
 
           <View className="flex-row gap-3 mt-3">
@@ -489,7 +581,7 @@ export default function TopNumbers() {
                       onPress={() => {
                         setDealerId("");
                         setPage(1);
-      
+
                       }}
                       style={{
                         position: "absolute",
@@ -545,11 +637,11 @@ export default function TopNumbers() {
                 </TouchableOpacity>
                 {selectedDate && (
                   <TouchableOpacity
-                onPress={() => {
-                  setSelectedDate(null);
-                  setPage(1);
+                    onPress={() => {
+                      setSelectedDate(null);
+                      setPage(1);
 
-                }}
+                    }}
                     className="px-2 py-2 rounded-lg bg-red-50 border border-red-200"
                     activeOpacity={0.7}
                   >
@@ -599,15 +691,13 @@ export default function TopNumbers() {
                   setPage((p) => Math.max(1, p - 1));
 
                 }}
-                className={`px-2 py-1 rounded-full ${
-                  page <= 1 ? "bg-gray-100" : "bg-indigo-50"
-                }`}
+                className={`px-2 py-1 rounded-full ${page <= 1 ? "bg-gray-100" : "bg-indigo-50"
+                  }`}
                 activeOpacity={0.8}
               >
                 <Text
-                  className={`text-[11px] font-semibold ${
-                    page <= 1 ? "text-gray-400" : "text-indigo-600"
-                  }`}
+                  className={`text-[11px] font-semibold ${page <= 1 ? "text-gray-400" : "text-indigo-600"
+                    }`}
                 >
                   Prev
                 </Text>
@@ -625,21 +715,19 @@ export default function TopNumbers() {
                   );
 
                 }}
-                className={`px-2 py-1 rounded-full ${
-                  !data?.num_pages ||
+                className={`px-2 py-1 rounded-full ${!data?.num_pages ||
                   (data?.page || page) >= (data?.num_pages || 0)
-                    ? "bg-gray-100"
-                    : "bg-indigo-50"
-                }`}
+                  ? "bg-gray-100"
+                  : "bg-indigo-50"
+                  }`}
                 activeOpacity={0.8}
               >
                 <Text
-                  className={`text-[11px] font-semibold ${
-                    !data?.num_pages ||
+                  className={`text-[11px] font-semibold ${!data?.num_pages ||
                     (data?.page || page) >= (data?.num_pages || 0)
-                      ? "text-gray-400"
-                      : "text-indigo-600"
-                  }`}
+                    ? "text-gray-400"
+                    : "text-indigo-600"
+                    }`}
                 >
                   Next
                 </Text>
@@ -816,14 +904,13 @@ export default function TopNumbers() {
                         <View
                           className="h-3 rounded-full bg-indigo-500"
                           style={{
-                            width: `${
-                              maxCount
-                                ? Math.max(
-                                    6,
-                                    (item.total_count / maxCount) * 100
-                                  )
-                                : 0
-                            }%`,
+                            width: `${maxCount
+                              ? Math.max(
+                                6,
+                                (item.total_count / maxCount) * 100
+                              )
+                              : 0
+                              }%`,
                           }}
                         />
                       </View>
@@ -831,7 +918,7 @@ export default function TopNumbers() {
                   ))
                 )}
               </View>
-{/* 
+              {/* 
               <View className="bg-white border border-gray-200 rounded-2xl p-3">
                 <Text className="text-xs font-semibold text-gray-800 mb-2">
                   Top Numbers by Amount
@@ -1001,7 +1088,7 @@ export default function TopNumbers() {
                         </Text>
                       }
                       <Text className="w-14 text-[11px] text-right text-gray-800 ">
-                      {item.total_count} &nbsp; &nbsp; &nbsp; &nbsp;
+                        {item.total_count} &nbsp; &nbsp; &nbsp; &nbsp;
                       </Text>
 
                       <Text className="w-18 text-[11px] text-right text-gray-800">
@@ -1018,17 +1105,15 @@ export default function TopNumbers() {
                     disabled={page <= 1}
                     onPress={() => {
                       setPage((p) => Math.max(1, p - 1));
-    
+
                     }}
-                    className={`px-3 py-1.5 rounded-full ${
-                      page <= 1 ? "bg-gray-100" : "bg-white border border-gray-300"
-                    }`}
+                    className={`px-3 py-1.5 rounded-full ${page <= 1 ? "bg-gray-100" : "bg-white border border-gray-300"
+                      }`}
                     activeOpacity={0.8}
                   >
                     <Text
-                      className={`text-[11px] font-semibold ${
-                        page <= 1 ? "text-gray-400" : "text-gray-700"
-                      }`}
+                      className={`text-[11px] font-semibold ${page <= 1 ? "text-gray-400" : "text-gray-700"
+                        }`}
                     >
                       Previous
                     </Text>
@@ -1042,21 +1127,19 @@ export default function TopNumbers() {
                       setPage((p) =>
                         data?.num_pages ? Math.min(data.num_pages, p + 1) : p + 1
                       );
-    
+
                     }}
-                    className={`px-3 py-1.5 rounded-full ${
-                      data.page >= data.num_pages
-                        ? "bg-gray-100"
-                        : "bg-white border border-gray-300"
-                    }`}
+                    className={`px-3 py-1.5 rounded-full ${data.page >= data.num_pages
+                      ? "bg-gray-100"
+                      : "bg-white border border-gray-300"
+                      }`}
                     activeOpacity={0.8}
                   >
                     <Text
-                      className={`text-[11px] font-semibold ${
-                        data.page >= data.num_pages
-                          ? "text-gray-400"
-                          : "text-gray-700"
-                      }`}
+                      className={`text-[11px] font-semibold ${data.page >= data.num_pages
+                        ? "text-gray-400"
+                        : "text-gray-700"
+                        }`}
                     >
                       Next
                     </Text>
@@ -1098,7 +1181,7 @@ export default function TopNumbers() {
             if (event.type === "set" && date) {
               setSelectedDate(date);
               setPage(1);
-          
+
             }
           }}
         />
