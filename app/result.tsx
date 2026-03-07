@@ -6,8 +6,9 @@ import api from "@/utils/axios";
 import { formatDateDDMMYYYY } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertCircle, AlertTriangle, Ban, Calendar, Clock, Pencil, Plus, X } from "lucide-react-native";
-import React, { useState } from "react";
+import * as Sharing from "expo-sharing";
+import { AlertCircle, AlertTriangle, Ban, Calendar, Clock, Pencil, Plus, Share2, X } from "lucide-react-native";
+import React, { useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -17,6 +18,7 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import ViewShot, { captureRef } from "react-native-view-shot";
 
 /** Prize row colours to match screenshot */
 const PRIZE_COLOURS = [
@@ -124,6 +126,22 @@ const ResultPage: React.FC = () => {
     const [formError, setFormError] = useState<string | null>(null);
 
     const { user } = useAuthStore();
+
+    const resultViewRef = useRef<any>(null);
+
+    const handleShare = async () => {
+        if (!data || !resultViewRef.current) return;
+        try {
+            const uri = await captureRef(resultViewRef, { format: "png", quality: 1 });
+            if (!(await Sharing.isAvailableAsync())) {
+                Alert.alert("Error", "Sharing is not available on this device.");
+                return;
+            }
+            await Sharing.shareAsync(uri, { mimeType: "image/png" });
+        } catch (e) {
+            Alert.alert("Error", "Failed to share the result.");
+        }
+    };
 
     // Helper to format date as yyyy-mm-dd
     function formatDateServer(date: Date | null): string | null {
@@ -404,200 +422,223 @@ const ResultPage: React.FC = () => {
         !isSkipped;
 
     return (
-        <ScrollView className="flex-1">
-            <SafeAreaView>
-            {/* Date filter */}
-            <View className="px-4 pt-4 flex-row items-end justify-between">
-                {/* Date filter section */}
-                <View className="flex-1 mr-4">
-                    <Text className="text-xs font-semibold text-gray-600 mb-1 ml-1 tracking-wider">
-                        Date
-                    </Text>
-                    <TouchableOpacity
-                        onPress={() => setShowDatePicker(true)}
-                        className="flex-row items-center justify-between border border-gray-300 rounded-xl px-4 py-2 bg-white shadow-sm"
-                        activeOpacity={0.85}
-                    >
-                        <Text className="text-base text-gray-800 font-medium">
-                            {formatDateDDMMYYYY(filterDate || new Date())}
+        <ScrollView className="flex-1" >
+            <SafeAreaView edges={["bottom"]}>
+                {/* Date filter */}
+                <View className="px-4 pt-4 flex-row items-end justify-between">
+                    {/* Date filter section */}
+                    <View className="flex-1 mr-4">
+                        <Text className="text-xs font-semibold text-gray-600 mb-1 ml-1 tracking-wider">
+                            Date
                         </Text>
-                        <View className="ml-2">
-                            <Calendar size={20} color="#2563eb" />
-                        </View>
-                    </TouchableOpacity>
-                </View>
-
-                {/* FAB to add */}
-                {canAdd && (
-                    <TouchableOpacity
-                        onPress={() => {
-                            setFormData({ complementary_prizes: [] });
-                            setMode("edit");
-                            setFormError(null);
-                        }}
-                        className="w-14 h-14 rounded-full bg-blue-600 items-center justify-center shadow-lg border-4 border-white"
-                        style={{
-                            elevation: 6,
-                            shadowColor: "#2563eb",
-                            shadowOffset: { width: 0, height: 2 },
-                            shadowOpacity: 0.2,
-                            shadowRadius: 4,
-                        }}
-                        activeOpacity={0.85}
-                    >
-                        <Plus size={26} color="#fff" />
-                    </TouchableOpacity>
-                )}
-
-                {/* Edit icon for update, only if result is updated within 1 hour */}
-                {canEditIcon && (
-                    <TouchableOpacity
-                        onPress={() => {
-                            setFormData(data || { complementary_prizes: [] });
-                            setMode("edit");
-                            setFormError(null);
-                        }}
-                        className="w-14 h-14 rounded-full bg-yellow-500 items-center justify-center shadow-lg border-4 border-white ml-2"
-                        style={{
-                            elevation: 6,
-                            shadowColor: "#fbbf24",
-                            shadowOffset: { width: 0, height: 2 },
-                            shadowOpacity: 0.2,
-                            shadowRadius: 4,
-                        }}
-                        activeOpacity={0.85}
-                    >
-                        <Pencil size={26} color="#fff" />
-                    </TouchableOpacity>
-                )}
-            </View>
-
-            {/* Loading state */}
-            {isLoading && (
-                <View className="flex-1 items-center justify-center bg-gray-50 py-8">
-                    <ActivityIndicator size="large" color="#15803d" />
-                    <Text className="mt-2 text-base text-gray-500">Loading…</Text>
-                </View>
-            )}
-
-            {/* Show "No result published" if not loading and no data */}
-            {!isLoading && !data && (
-                <View className="flex-1 items-center justify-center bg-gray-50 py-8">
-                    <AlertTriangle size={40} color="#f59e42" />
-                    <Text className="mt-2 text-base font-semibold text-yellow-700">
-                        No result published yet for this draw
-                    </Text>
-                    {canSkip && (
                         <TouchableOpacity
-                            onPress={handleSkipResult}
-                            className="w-48 h-12 rounded-full bg-gray-400 items-center justify-center shadow-lg border-4 border-white mt-4"
+                            onPress={() => setShowDatePicker(true)}
+                            className="flex-row items-center justify-between border border-gray-300 rounded-xl px-4 py-2 bg-white shadow-sm"
+                            activeOpacity={0.85}
+                        >
+                            <Text className="text-base text-gray-800 font-medium">
+                                {formatDateDDMMYYYY(filterDate || new Date())}
+                            </Text>
+                            <View className="ml-2">
+                                <Calendar size={20} color="#2563eb" />
+                            </View>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* FAB to add */}
+                    {canAdd && (
+                        <TouchableOpacity
+                            onPress={() => {
+                                setFormData({ complementary_prizes: [] });
+                                setMode("edit");
+                                setFormError(null);
+                            }}
+                            className="w-14 h-14 rounded-full bg-blue-600 items-center justify-center shadow-lg border-4 border-white"
                             style={{
                                 elevation: 6,
-                                shadowColor: "#6b7280",
+                                shadowColor: "#2563eb",
                                 shadowOffset: { width: 0, height: 2 },
                                 shadowOpacity: 0.2,
                                 shadowRadius: 4,
-                                opacity: skipLoading ? 0.6 : 1,
                             }}
                             activeOpacity={0.85}
-                            disabled={skipLoading}
                         >
-                            {skipLoading ? (
-                                <ActivityIndicator size="small" color="#fff" />
-                            ) : (
-                                <Text className="text-white font-semibold text-base">
-                                    Skip this result
-                                </Text>
-                            )}
+                            <Plus size={26} color="#fff" />
+                        </TouchableOpacity>
+                    )}
+
+                    {/* Edit icon for update, only if result is updated within 1 hour */}
+                    {canEditIcon && (
+                        <TouchableOpacity
+                            onPress={() => {
+                                setFormData(data || { complementary_prizes: [] });
+                                setMode("edit");
+                                setFormError(null);
+                            }}
+                            className="w-14 h-14 rounded-full bg-yellow-500 items-center justify-center shadow-lg border-4 border-white ml-2"
+                            style={{
+                                elevation: 6,
+                                shadowColor: "#fbbf24",
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.2,
+                                shadowRadius: 4,
+                            }}
+                            activeOpacity={0.85}
+                        >
+                            <Pencil size={26} color="#fff" />
                         </TouchableOpacity>
                     )}
                 </View>
-            )}
 
-            {/* Error handling for other errors */}
-            {!isLoading && error && data && (
-                <View className="flex-1 items-center justify-center bg-gray-50 py-8">
-                    <AlertTriangle size={40} color="#f59e42" />
-                    <Text className="mt-2 text-base font-semibold text-red-600">
-                        Failed to load result
-                    </Text>
-                </View>
-            )}
+                {/* Loading state */}
+                {isLoading && (
+                    <View className="flex-1 items-center justify-center bg-gray-50 py-8">
+                        <ActivityIndicator size="large" color="#15803d" />
+                        <Text className="mt-2 text-base text-gray-500">Loading…</Text>
+                    </View>
+                )}
 
-            {/* Prize table and draw time */}
-            {!isLoading && data && (
-                <View className="mx-4 mt-6 border border-gray-300 rounded-lg overflow-hidden">
-                    {/* Draw time row */}
-                    <View className="flex-row items-center bg-gray-100 border-b border-gray-300 px-3 py-2">
-                        <Clock size={22} color="#2563eb" />
-                        <Text className="ml-2 text-[15px] font-semibold text-gray-700">
-                            Draw Time:
+                {/* Show "No result published" if not loading and no data */}
+                {!isLoading && !data && (
+                    <View className="flex-1 items-center justify-center bg-gray-50 py-8">
+                        <AlertTriangle size={40} color="#f59e42" />
+                        <Text className="mt-2 text-base font-semibold text-yellow-700">
+                            No result published yet for this draw
                         </Text>
-                        <Text className="ml-2 text-[22px] font-mono font-extrabold text-gray-900">
-                            {formatDrawTime(data.draw_time)}
+                        {canSkip && (
+                            <TouchableOpacity
+                                onPress={handleSkipResult}
+                                className="w-48 h-12 rounded-full bg-gray-400 items-center justify-center shadow-lg border-4 border-white mt-4"
+                                style={{
+                                    elevation: 6,
+                                    shadowColor: "#6b7280",
+                                    shadowOffset: { width: 0, height: 2 },
+                                    shadowOpacity: 0.2,
+                                    shadowRadius: 4,
+                                    opacity: skipLoading ? 0.6 : 1,
+                                }}
+                                activeOpacity={0.85}
+                                disabled={skipLoading}
+                            >
+                                {skipLoading ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text className="text-white font-semibold text-base">
+                                        Skip this result
+                                    </Text>
+                                )}
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                )}
+
+                {/* Error handling for other errors */}
+                {!isLoading && error && data && (
+                    <View className="flex-1 items-center justify-center bg-gray-50 py-8">
+                        <AlertTriangle size={40} color="#f59e42" />
+                        <Text className="mt-2 text-base font-semibold text-red-600">
+                            Failed to load result
                         </Text>
                     </View>
-                    {(
-                        [
-                            { label: "First Price", value: data.first_prize },
-                            { label: "Second Price", value: data.second_prize },
-                            { label: "Third Price", value: data.third_prize },
-                            { label: "Fourth Price", value: data.fourth_prize },
-                            { label: "Fifth Price", value: data.fifth_prize },
-                        ] as const
-                    ).map((row, idx) => (
-                        <View key={row.label} className={`flex-row ${PRIZE_COLOURS[idx]} border-b border-gray-300`}>
-                            <Text className="w-10 text-center py-1.5 text-[11px] font-medium border-r border-gray-300 bg-white/20">
-                                {idx + 1}
-                            </Text>
-                            <Text className="flex-1 py-1.5 text-[16px] font-bold text-center text-gray-800">
-                                {row.label}
-                            </Text>
-                            <Text className="w-20 py-1.5 text-[17px] font-mono font-bold text-center border-l border-gray-300">
-                                {row.value}
-                            </Text>
-                        </View>
-                    ))}
-                </View>
-            )}
+                )}
 
-            {/* Complementary grid */}
-            {!isLoading && data && (
-                <View className="mx-4 mt-6 mb-10 border border-gray-300 rounded-lg overflow-hidden">
-                    {/* Top-to-bottom grid, 3 columns */}
-                    <View className="flex-row border-b border-gray-200">
-                        {Array.from({ length: 3 }).map((_, colIdx) => (
-                            <View key={`col-${colIdx}`} className="flex-1">
-                                {Array.from({ length: Math.ceil(data.complementary_prizes.length / 3) }).map((_, rowIdx) => {
-                                    const idx = rowIdx + colIdx * Math.ceil(data.complementary_prizes.length / 3);
-                                    const prize = data.complementary_prizes[idx];
-                                    return (
-                                        <Text
-                                            key={`prize-${colIdx}-${rowIdx}`}
-                                            className={`py-2 text-center text-[15px] font-mono font-bold border-b border-gray-200 ${colIdx < 2 ? "border-r border-gray-200" : ""}`}
-                                        >
-                                            {prize || ""}
-                                        </Text>
-                                    );
-                                })}
+                {/* Result area */}
+                {!isLoading && data && (
+                    <ViewShot ref={resultViewRef} options={{ format: "png", quality: 1 }}>
+                        <View className="bg-white pb-4">
+                            {/* Date & Draw info header for screenshot */}
+                            <View className="mx-4 mt-4 mb-2 flex-row items-center justify-between">
+                                <Text className="text-sm font-semibold text-gray-700">
+                                    {formatDateDDMMYYYY(filterDate || new Date())}
+                                </Text>
+                                <Text className="text-sm font-semibold text-gray-700">
+                                    {selectedDraw?.name || ""}
+                                </Text>
                             </View>
-                        ))}
-                    </View>
-                </View>
-            )}
 
-            {/* Date picker modal */}
-            {showDatePicker && (
-                <DateTimePicker
-                    mode="date"
-                    value={filterDate || new Date()}
-                    onChange={(_e, d) => {
-                        if (d) setFilterDate(d);
-                        setShowDatePicker(false);
-                    }}
-                />
-            )}
-        </SafeAreaView>
+                            {/* Prize table and draw time */}
+                            <View className="mx-4 border border-gray-300 rounded-lg overflow-hidden">
+                                {/* Draw time row */}
+                                <View className="flex-row items-center justify-between bg-gray-100 border-b border-gray-300 px-3 py-2">
+                                    <View className="flex-row items-center">
+                                        <Clock size={22} color="#2563eb" />
+                                        <Text className="ml-2 text-[15px] font-semibold text-gray-700">
+                                            Draw Time:
+                                        </Text>
+                                        <Text className="ml-2 text-[22px] font-mono font-extrabold text-gray-900">
+                                            {formatDrawTime(data.draw_time)}
+                                        </Text>
+                                    </View>
+                                    <TouchableOpacity
+                                        onPress={handleShare}
+                                        className="flex-row items-center bg-green-600 rounded-lg px-3 py-1.5 gap-1"
+                                        activeOpacity={0.85}
+                                    >
+                                        <Share2 size={16} color="#fff" />
+                                        <Text className="text-white font-semibold text-sm">Share</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                {(
+                                    [
+                                        { label: "First Price", value: data.first_prize },
+                                        { label: "Second Price", value: data.second_prize },
+                                        { label: "Third Price", value: data.third_prize },
+                                        { label: "Fourth Price", value: data.fourth_prize },
+                                        { label: "Fifth Price", value: data.fifth_prize },
+                                    ] as const
+                                ).map((row, idx) => (
+                                    <View key={row.label} className={`flex-row ${PRIZE_COLOURS[idx]} border-b border-gray-300`}>
+                                        <Text className="w-10 text-center py-1.5 text-[11px] font-medium border-r border-gray-300 bg-white/20">
+                                            {idx + 1}
+                                        </Text>
+                                        <Text className="flex-1 py-1.5 text-[16px] font-bold text-center text-gray-800">
+                                            {row.label}
+                                        </Text>
+                                        <Text className="w-20 py-1.5 text-[17px] font-mono font-bold text-center border-l border-gray-300">
+                                            {row.value}
+                                        </Text>
+                                    </View>
+                                ))}
+                            </View>
+
+                            {/* Complementary grid */}
+                            <View className="mx-4 mt-4 border border-gray-300 rounded-lg overflow-hidden">
+                                {/* Top-to-bottom grid, 3 columns */}
+                                <View className="flex-row border-b border-gray-200">
+                                    {Array.from({ length: 3 }).map((_, colIdx) => (
+                                        <View key={`col-${colIdx}`} className="flex-1">
+                                            {Array.from({ length: Math.ceil(data.complementary_prizes.length / 3) }).map((_, rowIdx) => {
+                                                const idx = rowIdx + colIdx * Math.ceil(data.complementary_prizes.length / 3);
+                                                const prize = data.complementary_prizes[idx];
+                                                return (
+                                                    <Text
+                                                        key={`prize-${colIdx}-${rowIdx}`}
+                                                        className={`py-2 text-center text-[15px] font-mono font-bold border-b border-gray-200 ${colIdx < 2 ? "border-r border-gray-200" : ""}`}
+                                                    >
+                                                        {prize || ""}
+                                                    </Text>
+                                                );
+                                            })}
+                                        </View>
+                                    ))}
+                                </View>
+                            </View>
+                        </View>
+                    </ViewShot>
+                )}
+
+                {/* Date picker modal */}
+                {showDatePicker && (
+                    <DateTimePicker
+                        mode="date"
+                        value={filterDate || new Date()}
+                        onChange={(_e, d) => {
+                            if (d) setFilterDate(d);
+                            setShowDatePicker(false);
+                        }}
+                    />
+                )}
+            </SafeAreaView>
         </ScrollView>
     );
 };
