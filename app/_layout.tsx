@@ -49,7 +49,7 @@ export default function RootLayout() {
           <Stack.Screen
             name="book"
             options={{
-              headerShown: true,
+              headerShown: false,
               title: "Book Ticket",
               headerStyle: { backgroundColor: themeColors.headerBackground },
               headerTitleStyle: {

@@ -1,6 +1,7 @@
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
+import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Clipboard } from "lucide-react-native";
@@ -87,6 +88,7 @@ const BookingScreen: React.FC = () => {
 
   // Modal for failed lines in paste
   const [failedPasteModalVisible, setFailedPasteModalVisible] = useState(false);
+  const [inputsCollapsed, setInputsCollapsed] = useState(false);
   const [failedPasteLines, setFailedPasteLines] = useState<string[]>([]);
   const [selectedDealer, setSelectedDealer] = useState("");
   const [selectedAgent, setSelectedAgent] = useState("");
@@ -1744,11 +1746,11 @@ const BookingScreen: React.FC = () => {
   }, [])
 
   return (
-    <SafeAreaView className="flex-1">
+    <SafeAreaView className="flex-1" edges={["bottom", "top"]}>
       <KeyboardAvoidingView
         className="flex-1"
-        behavior="padding"
-        keyboardVerticalOffset={80}
+      // behavior="padding"
+      // keyboardVerticalOffset={80}
       >
         {/* Show error message as overlay if error exists */}
         {drawSessionError && (
@@ -1782,49 +1784,123 @@ const BookingScreen: React.FC = () => {
           </View>
         )}
 
-        <View className="p-4 flex-1 mb-10" pointerEvents={drawSessionError ? "none" : "auto"} style={drawSessionError ? { opacity: 0.5 } : undefined}>
-          <View className="flex-row items-center mb-4 gap-2">
+        <View className="px-3 pt-2 flex-1 mb-0" pointerEvents={drawSessionError ? "none" : "auto"} style={drawSessionError ? { opacity: 0.5 } : undefined}>
+          {/* Back button + Title + Collapse/Expand toggle */}
+          <View className="flex-row items-center py-2 px-1 mb-1">
+            <TouchableOpacity
+              onPress={handleBackClick}
+              className="p-1.5 rounded-full bg-gray-100 mr-3"
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={22} color="#374151" />
+            </TouchableOpacity>
+            <Text className="text-base font-bold text-gray-800 flex-1">Book Ticket</Text>
+            <TouchableOpacity
+              onPress={() => setInputsCollapsed(prev => !prev)}
+              className="flex-row items-center bg-gray-100 px-3 py-1.5 rounded-full"
+              activeOpacity={0.7}
+            >
+              <Text className="text-xs font-semibold text-gray-600 mr-1">{inputsCollapsed ? "Show" : "Hide"}</Text>
+              <Ionicons name={inputsCollapsed ? "chevron-down" : "chevron-up"} size={14} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
+
+          {!inputsCollapsed && <><View className="flex-row items-center mb-2 gap-2">
             <TextInput
               placeholder="Customer Name"
               value={customerName}
               onChangeText={setCustomerName}
-              className="flex-1 border border-gray-400 rounded px-3 py-2 bg-white text-base"
+              className="flex-1 border border-gray-400 rounded px-3 py-1.5 bg-white text-sm"
               placeholderTextColor="#9ca3af"
               editable={!drawSessionError}
             />
             <TouchableOpacity
               onPress={handlePastBookings}
-              className="ml-2 p-2 bg-gray-100 rounded border border-gray-300 active:bg-gray-200"
+              className="ml-1 p-2 bg-gray-100 rounded border border-gray-300 active:bg-gray-200"
               accessibilityLabel="Paste from clipboard"
               disabled={!!drawSessionError}
             >
-              <Clipboard width={24} height={24} color="#374151" />
+              <Clipboard width={22} height={22} color="#374151" />
             </TouchableOpacity>
           </View>
 
+            <View className="flex flex-row gap-2 mb-2">
+              {
+                user?.user_type === "ADMIN" && (
+                  <View className="flex-1">
+                    <Dropdown
+                      data={dealers.map((dealer) => ({
+                        label: dealer.username,
+                        value: dealer.id,
+                      }))}
+                      labelField="label"
+                      valueField="value"
+                      value={selectedDealer}
+                      onChange={item => {
+                        setSelectedDealer(item.value)
+                      }}
+                      placeholder="Select Dealer"
+                      style={{
+                        borderColor: "#9ca3af",
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        paddingHorizontal: 8,
+                        padding: 8
+                      }}
+                      containerStyle={{
+                        borderRadius: 6,
+                      }}
+                      itemTextStyle={{
+                        color: "#000",
+                      }}
+                      selectedTextStyle={{
+                        color: "#000",
+                        fontSize: 14,
+                      }}
+                      placeholderStyle={{ fontSize: 14 }}
+                      renderRightIcon={() =>
+                        selectedDealer ? (
+                          <TouchableOpacity
+                            onPress={() => setSelectedDealer("")}
+                            style={{
+                              position: "absolute",
+                              right: 10,
+                              zIndex: 10,
+                              width: 24,
+                              height: 24,
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: 12,
+                            }}
+                          >
+                            <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
+                          </TouchableOpacity>
+                        ) : null
+                      }
+                    />
+                  </View>
+                )}
 
-          <View className="flex flex-row gap-3">
-            {
-              user?.user_type === "ADMIN" && (
-                <View className="mb-2 flex-1">
+              {(selectedDealer || user?.user_type === "ADMIN" || user?.user_type === "DEALER") && (
+                <View className="flex-1">
                   <Dropdown
-                    data={dealers.map((dealer) => ({
-                      label: dealer.username,
-                      value: dealer.id,
+                    data={agents.map((agent) => ({
+                      label: agent.username,
+                      value: agent.id,
                     }))}
                     labelField="label"
                     valueField="value"
-                    value={selectedDealer}
+                    value={selectedAgent}
                     onChange={item => {
-                      setSelectedDealer(item.value)
+                      setSelectedAgent(item.value)
                     }}
-                    placeholder="Select Dealer"
+                    placeholder="Select Agent"
                     style={{
                       borderColor: "#9ca3af",
                       borderWidth: 1,
                       borderRadius: 6,
                       paddingHorizontal: 8,
-                      padding: 10
+                      padding: 8
                     }}
                     containerStyle={{
                       borderRadius: 6,
@@ -1834,16 +1910,17 @@ const BookingScreen: React.FC = () => {
                     }}
                     selectedTextStyle={{
                       color: "#000",
+                      fontSize: 14,
                     }}
+                    placeholderStyle={{ fontSize: 14 }}
                     renderRightIcon={() =>
-                      selectedDealer ? (
+                      selectedAgent ? (
                         <TouchableOpacity
-                          onPress={() => setSelectedDealer("")}
+                          onPress={() => setSelectedAgent("")}
                           style={{
                             position: "absolute",
                             right: 10,
                             zIndex: 10,
-                            // backgroundColor: "#fff",
                             width: 24,
                             height: 24,
                             alignItems: "center",
@@ -1859,161 +1936,75 @@ const BookingScreen: React.FC = () => {
                 </View>
               )}
 
-            {(selectedDealer || user?.user_type === "ADMIN" || user?.user_type === "DEALER") && (
-              <View className="mb-2 flex-1">
-                <Dropdown
-                  data={agents.map((agent) => ({
-                    label: agent.username,
-                    value: agent.id,
-                  }))}
-                  labelField="label"
-                  valueField="value"
-                  value={selectedAgent}
-                  onChange={item => {
-                    setSelectedAgent(item.value)
-                  }}
-                  placeholder="Select Agent"
-                  style={{
-                    borderColor: "#9ca3af",
-                    borderWidth: 1,
-                    borderRadius: 6,
-                    paddingHorizontal: 8,
-                    padding: 10
-                  }}
-                  containerStyle={{
-                    borderRadius: 6,
-                  }}
-                  itemTextStyle={{
-                    color: "#000",
-                  }}
-                  selectedTextStyle={{
-                    color: "#000",
-                  }}
-                  renderRightIcon={() =>
-                    selectedAgent ? (
+            </View>
+
+            <View className="flex-row items-center mb-2 gap-2">
+              {[1, 2, 3].map((num) => (
+                <TouchableOpacity
+                  key={num}
+                  onPress={() => handleDrawSession(num.toString())}
+                  className={`px-4 py-1 rounded-full border ${drawSession === num.toString() ? "bg-black" : "border-gray-400"
+                    }`}
+                  disabled={!!drawSessionError}
+                >
+                  <Text
+                    className={`text-sm ${drawSession === num.toString() ? "text-white" : "text-black"
+                      }`}
+                  >
+                    {num}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              <View className="flex-1 ml-1">
+                <View style={{ flexDirection: "row", gap: 6 }}>
+                  {rangeOptions
+                    .filter(option => option.value !== "Book") // Exclude 'Book'
+                    .map(option => (
                       <TouchableOpacity
-                        onPress={() => setSelectedAgent("")}
+                        key={option.value}
+                        onPress={() => {
+                          if (selectedRange === option.value) {
+                            setSelectedRange("Book"); // Deselect, fallback to 'Book'
+                          } else {
+                            setSelectedRange(option.value as any);
+                          }
+                        }}
                         style={{
-                          position: "absolute",
-                          right: 10,
-                          zIndex: 10,
-                          // backgroundColor: "#fff",
-                          width: 24,
-                          height: 24,
+                          backgroundColor: selectedRange === option.value ? "#2563eb" : "#fff",
+                          borderColor: "#9ca3af",
+                          borderWidth: 1.5,
+                          borderRadius: 18,
+                          paddingVertical: 5,
+                          paddingHorizontal: 14,
+                          minWidth: 44,
                           alignItems: "center",
                           justifyContent: "center",
-                          borderRadius: 12,
-
                         }}
+                        disabled={!!drawSessionError}
                       >
-                        <Text style={{ color: "#9ca3af", fontSize: 18 }}>✕</Text>
+                        <Text style={{ color: selectedRange === option.value ? "#fff" : "#2563eb", fontWeight: "bold", fontSize: 13 }}>
+                          {option.label}
+                        </Text>
                       </TouchableOpacity>
-                    ) : null
-                  }
-                />
-              </View>
-            )}
-
-          </View>
-
-          <View className="flex-row items-center mb-4 gap-2">
-            {[1, 2, 3].map((num) => (
-              <TouchableOpacity
-                key={num}
-                onPress={() => handleDrawSession(num.toString())}
-                className={`px-4 py-1 rounded-full border ${drawSession === num.toString() ? "bg-black" : "border-gray-400"
-                  }`}
-                disabled={!!drawSessionError}
-              >
-                <Text
-                  className={`${drawSession === num.toString() ? "text-white" : "text-black"
-                    }`}
-                >
-                  {num}
-                </Text>
-              </TouchableOpacity>
-            ))}
-            <View className="flex-1 ml-2">
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                {rangeOptions
-                  .filter(option => option.value !== "Book") // Exclude 'Book'
-                  .map(option => (
-                    <TouchableOpacity
-                      key={option.value}
-                      onPress={() => {
-                        if (selectedRange === option.value) {
-                          setSelectedRange("Book"); // Deselect, fallback to 'Book'
-                        } else {
-                          setSelectedRange(option.value as any);
-                        }
-                      }}
-                      style={{
-                        backgroundColor: selectedRange === option.value ? "#2563eb" : "#fff",
-                        borderColor: "#9ca3af",
-                        borderWidth: 1.5,
-                        borderRadius: 20,
-                        paddingVertical: 8,
-                        paddingHorizontal: 18,
-                        marginRight: 6,
-                        minWidth: 50,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                      disabled={!!drawSessionError}
-                    >
-                      <Text style={{ color: selectedRange === option.value ? "#fff" : "#2563eb", fontWeight: "bold" }}>
-                        {option.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                    ))}
+                </View>
               </View>
             </View>
-          </View>
 
-          {/* Inputs for Book, Range, Set, Different */}
-          <View className="flex-row gap-2 mb-3">
-            {/* Start/Number input */}
-            <TextInput
-              ref={numInputRef}
-              value={numberInput}
-              onChangeText={(text) => {
-                const formatted = text.replace(/[^0-9]/g, "");
-                setNumberInput(formatted);
-
-                const requiredLength = parseInt(drawSession);
-                if (formatted.length >= requiredLength) {
-                  if (selectedRange === "Range" || selectedRange === "Different") {
-                    endNumInputRef.current?.focus();
-                  } else {
-                    countInputRef.current?.focus();
-                  }
-                }
-              }}
-              maxLength={3}
-              keyboardType="numeric"
-              placeholder={
-                selectedRange === "Range" || selectedRange === "Different"
-                  ? "Start"
-                  : "Number"
-              }
-              className="flex-1 border border-gray-400 px-3 py-2 rounded"
-              placeholderTextColor="#9ca3af"
-              editable={!drawSessionError}
-            />
-
-            {/* End input for Range and Different */}
-            {(selectedRange === "Range" || selectedRange === "Different") && (
+            {/* Inputs for Book, Range, Set, Different */}
+            <View className="flex-row gap-2 mb-2">
+              {/* Start/Number input */}
               <TextInput
-                ref={endNumInputRef}
-                value={endNumberInput}
+                ref={numInputRef}
+                value={numberInput}
                 onChangeText={(text) => {
                   const formatted = text.replace(/[^0-9]/g, "");
-                  setEndNumberInput(formatted);
+                  setNumberInput(formatted);
 
                   const requiredLength = parseInt(drawSession);
                   if (formatted.length >= requiredLength) {
-                    if (selectedRange === "Different") {
-                      differenceInputRef.current?.focus();
+                    if (selectedRange === "Range" || selectedRange === "Different") {
+                      endNumInputRef.current?.focus();
                     } else {
                       countInputRef.current?.focus();
                     }
@@ -2021,84 +2012,114 @@ const BookingScreen: React.FC = () => {
                 }}
                 maxLength={3}
                 keyboardType="numeric"
-                placeholder="End"
-                className="flex-1 border border-gray-400 px-3 py-2 rounded"
+                placeholder={
+                  selectedRange === "Range" || selectedRange === "Different"
+                    ? "Start"
+                    : "Number"
+                }
+                className="flex-1 border border-gray-400 px-3 py-1.5 rounded text-sm"
                 placeholderTextColor="#9ca3af"
                 editable={!drawSessionError}
               />
-            )}
 
-            {/* Difference input for Different */}
-            {selectedRange === "Different" && (
+              {/* End input for Range and Different */}
+              {(selectedRange === "Range" || selectedRange === "Different") && (
+                <TextInput
+                  ref={endNumInputRef}
+                  value={endNumberInput}
+                  onChangeText={(text) => {
+                    const formatted = text.replace(/[^0-9]/g, "");
+                    setEndNumberInput(formatted);
+
+                    const requiredLength = parseInt(drawSession);
+                    if (formatted.length >= requiredLength) {
+                      if (selectedRange === "Different") {
+                        differenceInputRef.current?.focus();
+                      } else {
+                        countInputRef.current?.focus();
+                      }
+                    }
+                  }}
+                  maxLength={3}
+                  keyboardType="numeric"
+                  placeholder="End"
+                  className="flex-1 border border-gray-400 px-3 py-1.5 rounded text-sm"
+                  placeholderTextColor="#9ca3af"
+                  editable={!drawSessionError}
+                />
+              )}
+
+              {/* Difference input for Different */}
+              {selectedRange === "Different" && (
+                <TextInput
+                  ref={differenceInputRef}
+                  value={differenceInput}
+                  onChangeText={(text) => {
+                    const formatted = text.replace(/[^0-9]/g, "");
+                    setDifferenceInput(formatted);
+                  }}
+                  maxLength={3}
+                  keyboardType="numeric"
+                  placeholder="Diff"
+                  className="flex-1 border border-gray-400 px-3 py-1.5 rounded text-sm"
+                  placeholderTextColor="#9ca3af"
+                  editable={!drawSessionError}
+                />
+              )}
+
+              {/* Count input */}
               <TextInput
-                ref={differenceInputRef}
-                value={differenceInput}
-                onChangeText={(text) => {
-                  const formatted = text.replace(/[^0-9]/g, "");
-                  setDifferenceInput(formatted);
-                }}
-                maxLength={3}
-                keyboardType="numeric"
-                placeholder="Difference"
-                className="flex-1 border border-gray-400 px-3 py-2 rounded"
-                placeholderTextColor="#9ca3af"
-                editable={!drawSessionError}
-              />
-            )}
-
-            {/* Count input */}
-            <TextInput
-              ref={countInputRef}
-              value={countInput}
-              onChangeText={(text) => {
-                // Only allow up to 3 digits
-                const formatted = text.replace(/[^0-9]/g, "").slice(0, 3);
-                setCountInput(formatted);
-              }}
-              keyboardType="numeric"
-              placeholder="Count"
-              className="flex-1 border border-gray-400 px-3 py-2 rounded"
-              placeholderTextColor="#9ca3af"
-              editable={!drawSessionError}
-              maxLength={3}
-            />
-
-            {/* B.Count input for 3-digit only */}
-            {drawSession === "3" && (
-              <TextInput
-                value={bCountInput}
+                ref={countInputRef}
+                value={countInput}
                 onChangeText={(text) => {
                   // Only allow up to 3 digits
                   const formatted = text.replace(/[^0-9]/g, "").slice(0, 3);
-                  setBCountInput(formatted);
+                  setCountInput(formatted);
                 }}
                 keyboardType="numeric"
-                placeholder="B.Count"
-                className="flex-1 border border-gray-400 px-3 py-2 rounded"
+                placeholder="Count"
+                className="flex-1 border border-gray-400 px-3 py-1.5 rounded text-sm"
                 placeholderTextColor="#9ca3af"
                 editable={!drawSessionError}
                 maxLength={3}
               />
-            )}
-          </View>
 
-          <View className="flex-row flex-wrap mb-3 gap-2">
-            {buttonsMap[drawSession]?.map((btn) => (
-              <TouchableOpacity
-                key={btn}
-                onPress={() => addBooking(btn)}
-                className="bg-green-700 py-2 rounded items-center"
-                style={{ flexGrow: 1, margin: 4 }}
-                disabled={!!drawSessionError}
-              >
-                <Text className="text-white font-semibold">{btn}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+              {/* B.Count input for 3-digit only */}
+              {drawSession === "3" && (
+                <TextInput
+                  value={bCountInput}
+                  onChangeText={(text) => {
+                    // Only allow up to 3 digits
+                    const formatted = text.replace(/[^0-9]/g, "").slice(0, 3);
+                    setBCountInput(formatted);
+                  }}
+                  keyboardType="numeric"
+                  placeholder="B.Cnt"
+                  className="flex-1 border border-gray-400 px-3 py-1.5 rounded text-sm"
+                  placeholderTextColor="#9ca3af"
+                  editable={!drawSessionError}
+                  maxLength={3}
+                />
+              )}
+            </View>
+
+            <View className="flex-row flex-wrap mb-2 gap-1">
+              {buttonsMap[drawSession]?.map((btn) => (
+                <TouchableOpacity
+                  key={btn}
+                  onPress={() => addBooking(btn)}
+                  className="bg-green-700 py-2 rounded items-center"
+                  style={{ flexGrow: 1, margin: 3 }}
+                  disabled={!!drawSessionError}
+                >
+                  <Text className="text-white font-semibold text-sm">{btn}</Text>
+                </TouchableOpacity>
+              ))}
+            </View></>}
 
           {/* Table Header */}
           <View className="border border-gray-400 rounded overflow-hidden flex-1">
-            <View className="flex-row bg-gray-200 border-gray-400 py-2 items-center">
+            <View className="flex-row bg-gray-200 border-gray-400 py-1.5 items-center">
               <Text className="w-[12%] text-xs font-bold text-center">LSK</Text>
               <Text className="w-[16%] text-xs font-bold text-center">
                 NUMBER
