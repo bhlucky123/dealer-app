@@ -9,7 +9,7 @@ import * as FileSystem from 'expo-file-system';
 import { printToFileAsync } from 'expo-print';
 import { useRouter } from "expo-router";
 import { shareAsync } from "expo-sharing";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -23,6 +23,57 @@ import {
 import { Dropdown } from "react-native-element-dropdown";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Agent } from "./(tabs)/agent";
+
+// --- Memoized Row Component for FlatList performance ---
+const ROW_HEIGHT = 58;
+
+const SalesRow = React.memo(({ item, index, userType, isSuperuser, onPress, onDelete }: {
+    item: any; index: number; userType: string | undefined; isSuperuser: boolean;
+    onPress: (item: any) => void; onDelete: (item: any) => void;
+}) => (
+    <TouchableOpacity
+        className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
+        activeOpacity={0.7}
+        onPress={() => onPress(item)}
+    >
+        <View className="flex-row px-4 py-3 items-center border-b border-gray-100">
+            <View className="flex-[1.1] flex-col justify-center">
+                <Text className="text-[10px] text-gray-800 font-medium">{formatDate(new Date(item.date_time))}</Text>
+                <Text className="text-[9px] text-gray-500 mt-0.5">
+                    {new Date(item.date_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}
+                </Text>
+            </View>
+            {userType !== 'AGENT' && (
+                <View className="flex-[1.2]">
+                    <Text className="flex-[1.2] text-sm text-center text-gray-700" numberOfLines={1} ellipsizeMode="tail" style={{ minWidth: 0 }}>
+                        {item.booked_by_name}
+                    </Text>
+                    {item?.booked_by_type && (
+                        <Text className="text-xs text-center text-violet-700" numberOfLines={1} ellipsizeMode="tail" style={{ minWidth: 0 }}>
+                            {item.booked_by_type}
+                        </Text>
+                    )}
+                    {item?.customer_name && (
+                        <Text className="text-xs text-center text-emerald-700" numberOfLines={1} ellipsizeMode="tail" style={{ minWidth: 0 }}>
+                            {item?.customer_name}
+                        </Text>
+                    )}
+                </View>
+            )}
+            <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_number}</Text>
+            <Text className="flex-1 text-sm text-center text-gray-700">{item.total_booking_count}</Text>
+            <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{amountHandler(Number(userType === 'AGENT' ? item.calculated_agent_amount : item.calculated_dealer_amount))}</Text>
+            <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{amountHandler(Number(item.total_booking_amount))}</Text>
+            {isSuperuser && (
+                <View className="w-4 items-end">
+                    <TouchableOpacity onPress={() => onDelete(item)} hitSlop={10}>
+                        <Ionicons name="trash-outline" size={17} color="#ef4444" />
+                    </TouchableOpacity>
+                </View>
+            )}
+        </View>
+    </TouchableOpacity>
+));
 
 // Always use local time for today (midnight)
 const getToday = () => {
@@ -99,7 +150,14 @@ const SalesReportScreen = () => {
 
     // Pagination state
     const [page, setPage] = useState(1);
+    const [allData, setAllData] = useState<any[]>([]);
     const [isFetchingMore, setIsFetchingMore] = useState(false);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const [totalBillCount, setTotalBillCount] = useState(0);
+    const [totalDealerAmount, setTotalDealerAmount] = useState(0);
+    const [totalAgentAmount, setTotalAgentAmount] = useState(0);
+    const [totalCustomerAmount, setTotalCustomerAmount] = useState(0);
 
     const { user } = useAuthStore();
     const router = useRouter();
@@ -159,37 +217,16 @@ const SalesReportScreen = () => {
             .join("&");
     }, [fromDate, toDate, selectedDraw, allGame, user?.user_type, selectedFilter, debouncedSearch]);
 
-    const query = buildQuery();
-
-    // Store all loaded pages' data
-    const [allData, setAllData] = useState<any[]>([]);
-    const [totalCount, setTotalCount] = useState<number>(0);
-    const [totalBillCount, setTotalBillCount] = useState<number>(0);
-    const [totalDealerAmount, setTotalDealerAmount] = useState<number>(0);
-    const [totalAgentAmount, setTotalAgentAmount] = useState<number>(0);
-    const [totalCustomerAmount, setTotalCustomerAmount] = useState<number>(0);
-
-    // Reset pagination and data when filters change
-    const resetPagination = () => {
-        setPage(1);
-        setAllData([]);
-        setTotalCount(0);
-        setTotalBillCount(0);
-        setTotalDealerAmount(0);
-        setTotalAgentAmount(0);
-        setTotalCustomerAmount(0);
-    };
-
     // Reset on filter change
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const filterDeps = [fromDate, toDate, selectedDraw?.id, allGame, user?.user_type, selectedFilter, debouncedSearch];
-    // Reset when any filter changes
     useMemo(() => {
-        resetPagination();
+        setPage(1);
+        setAllData([]);
         // eslint-disable-next-line
     }, filterDeps);
 
-    // Fetch paginated data
+    // Fetch first page
     const {
         data,
         isLoading,
@@ -205,25 +242,12 @@ const SalesReportScreen = () => {
         enabled: !!selectedDraw?.id,
     });
 
-    console.log("data", data)
-
-    // Handle query result side effects (mimic onSuccess)
+    // Sync first page data
     useMemo(() => {
         if (!data) return;
-        if (page === 1) {
-            setAllData(data.results || []);
-        } else {
-            setAllData((prev) => {
-                const prevMap = new Map<string, any>();
-                prev.forEach((item: any) => {
-                    prevMap.set(getBillKey(item), item);
-                });
-                (data.results || []).forEach((item: any) => {
-                    prevMap.set(getBillKey(item), item);
-                });
-                return Array.from(prevMap.values());
-            });
-        }
+        setAllData(data.results || []);
+        setPage(1);
+        setTotalPages(data.total_pages || 1);
         setTotalCount(data.count || 0);
         setTotalBillCount(data.total_bill_count ?? 0);
         setTotalDealerAmount(data.total_dealer_amount ?? 0);
@@ -232,43 +256,35 @@ const SalesReportScreen = () => {
         // eslint-disable-next-line
     }, [data]);
 
-    const filteredResult = allData;
+    const hasMore = page < totalPages;
+    const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && allData.length > 0;
 
-    const shouldShowTotalFooter = !!selectedDraw?.id && !isLoading && !error && (allData.length > 0);
+    // Use ref to guard against multiple simultaneous onEndReached calls
+    const loadingMoreRef = useRef(false);
 
-    // Pagination: load more handler
-    const handleLoadMore = async () => {
-        if (isFetchingMore || isLoading) return;
-        if (!hasMore) return;
+    const handleLoadMore = useCallback(async () => {
+        if (loadingMoreRef.current || isLoading || !hasMore) return;
+        loadingMoreRef.current = true;
         setIsFetchingMore(true);
         try {
             const nextPage = page + 1;
             const res = await api.get(`/draw-booking/booking-report/?${buildQuery(nextPage)}`);
-            const newData = res.data.results || [];
+            const newResults = res.data.results || [];
 
             setAllData(prev => {
-                const prevMap = new Map<string, any>();
-                prev.forEach((item: any) => {
-                    prevMap.set(getBillKey(item), item);
-                });
-                newData.forEach((item: any) => {
-                    prevMap.set(getBillKey(item), item);
-                });
-                return Array.from(prevMap.values());
+                const prevKeys = new Set(prev.map(getBillKey));
+                const unique = newResults.filter((item: any) => !prevKeys.has(getBillKey(item)));
+                return [...prev, ...unique];
             });
-
             setPage(nextPage);
-            setTotalCount(res.data.count || 0);
-            setTotalBillCount(res.data.total_bill_count ?? totalBillCount);
-            setTotalDealerAmount(res.data.total_dealer_amount ?? totalDealerAmount);
-            setTotalAgentAmount(res.data.total_agent_amount ?? totalAgentAmount);
-            setTotalCustomerAmount(res.data.total_customer_amount ?? totalCustomerAmount);
+            setTotalPages(res.data.total_pages || totalPages);
         } catch (err) {
-            // Optionally handle error
+            // silently fail
         } finally {
+            loadingMoreRef.current = false;
             setIsFetchingMore(false);
         }
-    };
+    }, [isLoading, hasMore, page, buildQuery, totalPages]);
 
     // For PDF, use same local time logic for date filters
     const printBuildQuery = useCallback(() => {
@@ -467,6 +483,12 @@ const SalesReportScreen = () => {
     };
 
     // Delete a booking (entire bill) with confirmation
+    const isSuperuser = !!user?.superuser;
+
+    const handleRowPress = useCallback((item: any) => {
+        router.push({ pathname: "/booking-details", params: { bill_number: String(item.bill_number), ...(debouncedSearch ? { search: debouncedSearch } : {}) } });
+    }, [router, debouncedSearch]);
+
     const handleDeleteBooking = (booking: any) => {
         if (!booking?.bill_number) return;
         Alert.alert(
@@ -494,8 +516,36 @@ const SalesReportScreen = () => {
         );
     };
 
-    // Determine if there are more items to load
-    const hasMore = allData.length < totalCount;
+    const renderItem = useCallback(({ item, index }: { item: any; index: number }) => (
+        <SalesRow
+            item={item}
+            index={index}
+            userType={user?.user_type}
+            isSuperuser={isSuperuser}
+            onPress={handleRowPress}
+            onDelete={handleDeleteBooking}
+        />
+    ), [user?.user_type, isSuperuser, handleRowPress, handleDeleteBooking]);
+
+    const getItemLayout = useCallback((_data: any, index: number) => ({
+        length: ROW_HEIGHT,
+        offset: ROW_HEIGHT * index,
+        index,
+    }), []);
+
+    const listHeader = useMemo(() => (
+        <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
+            <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">Date</Text>
+            {user?.user_type !== 'AGENT' && (
+                <Text className="flex-[1.2] text-xs font-semibold text-center text-gray-600 uppercase">Booked</Text>
+            )}
+            <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Bill No.</Text>
+            <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Cnt</Text>
+            <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">{user?.user_type === 'AGENT' ? 'D. Amt' : 'Amt'}</Text>
+            <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">C. Amt</Text>
+            <Text className="w-1 text-xs font-semibold text-right text-gray-600 uppercase"></Text>
+        </View>
+    ), [user?.user_type]);
 
     return (
         <SafeAreaView className="flex-1 bg-white" edges={["bottom"]}>
@@ -694,7 +744,7 @@ const SalesReportScreen = () => {
                             No draw selected. Please choose one.
                         </Text>
                     </View>
-                ) : (isLoading && !isFetchingMore) ? (
+                ) : isLoading ? (
                     <View className="flex-1 justify-center items-center">
                         <ActivityIndicator size="large" color="#7c3aed" />
                         <Text className="mt-3 text-gray-600">Loading sales data...</Text>
@@ -712,119 +762,48 @@ const SalesReportScreen = () => {
                     <>
                         <View className="flex-1 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden mt-4">
                             <FlatList
-                                data={filteredResult || []}
+                                data={allData}
                                 keyExtractor={getBillKey}
-                                ListHeaderComponent={() => (
-                                    <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-4 py-3">
-                                        <Text className="flex-[1.1] text-xs font-semibold text-gray-600 uppercase">Date</Text>
-                                        {
-                                            user?.user_type !== 'AGENT' && (
-                                                <Text className="flex-[1.2] text-xs font-semibold text-center text-gray-600 uppercase">Booked</Text>)}
-                                        <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Bill No.</Text>
-                                        <Text className="flex-1 text-xs font-semibold text-center text-gray-600 uppercase">Cnt</Text>
-                                        <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">{user?.user_type === 'AGENT' ? 'D. Amt' : 'Amt'}</Text>
-                                        <Text className="flex-1 text-xs font-semibold text-right text-gray-600 uppercase">C. Amt</Text>
-                                        <Text className="w-1 text-xs font-semibold text-right text-gray-600 uppercase"></Text>
-                                    </View>
-                                )}
-                                renderItem={({ item, index }) => (
-                                    <TouchableOpacity
-                                        className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
-                                        activeOpacity={0.7}
-                                        onPress={() => router.push({ pathname: "/booking-details", params: { bill_number: String(item.bill_number), ...(debouncedSearch ? { search: debouncedSearch } : {}) } })}
-                                    >
-                                        <View className="flex-row px-4 py-3 items-center border-b border-gray-100">
-                                            <View className="flex-[1.1] flex-col justify-center">
-                                                <Text className="text-[10px] text-gray-800 font-medium">{formatDate(new Date(item.date_time))}</Text>
-                                                <Text className="text-[9px] text-gray-500 mt-0.5">
-                                                    {new Date(item.date_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true, })}
-                                                </Text>
-                                            </View>
-                                            {
-                                                user?.user_type !== 'AGENT' && (
-                                                    <View className="flex-[1.2]">
-                                                        <Text
-                                                            className="flex-[1.2] text-sm text-center text-gray-700"
-                                                            numberOfLines={1}
-                                                            ellipsizeMode="tail"
-                                                            style={{ minWidth: 0 }}
-                                                        >
-                                                            {item.booked_by_name}
-                                                        </Text>
-                                                        {item?.booked_by_type && (
-                                                            <Text
-                                                                className="text-xs text-center text-violet-700"
-                                                                numberOfLines={1}
-                                                                ellipsizeMode="tail"
-                                                                style={{ minWidth: 0 }}
-                                                            >
-                                                                {item.booked_by_type}
-                                                            </Text>
-                                                        )}
-
-                                                        {item?.customer_name && (
-                                                            <Text
-                                                                className="text-xs text-center text-emerald-700"
-                                                                numberOfLines={1}
-                                                                ellipsizeMode="tail"
-                                                                style={{ minWidth: 0 }}
-                                                            >
-                                                                {item?.customer_name}
-                                                            </Text>
-                                                        )}
-                                                    </View>
-                                                )
-                                            }
-                                            <Text className="flex-1 text-sm text-center text-gray-700">{item.bill_number}</Text>
-                                            <Text className="flex-1 text-sm text-center text-gray-700">{item.total_booking_count}</Text>
-                                            <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{amountHandler(Number(user?.user_type === 'AGENT' ? item.calculated_agent_amount : item.calculated_dealer_amount))}</Text>
-                                            <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{amountHandler(Number(item.total_booking_amount))}</Text>
-                                            {
-                                                user?.superuser && (
-                                                    <View className="w-4 items-end">
-                                                        <TouchableOpacity onPress={() => handleDeleteBooking(item)} hitSlop={10}>
-                                                            <Ionicons name="trash-outline" size={17} color="#ef4444" />
-                                                        </TouchableOpacity>
-                                                    </View>
-                                                )
-                                            }
-                                        </View>
-
-                                    </TouchableOpacity>
-                                )}
+                                renderItem={renderItem}
+                                getItemLayout={getItemLayout}
+                                ListHeaderComponent={listHeader}
                                 ListEmptyComponent={
                                     <View className="flex-1 justify-center items-center py-16">
                                         <Text className="text-gray-500 text-base">No sales data for current filters.</Text>
                                     </View>
                                 }
-                                // Remove infinite scroll
-                                // onEndReached={handleLoadMore}
-                                // onEndReachedThreshold={0.5}
-
+                                onEndReached={handleLoadMore}
+                                onEndReachedThreshold={0.3}
+                                initialNumToRender={20}
+                                maxToRenderPerBatch={20}
+                                windowSize={11}
+                                removeClippedSubviews={true}
                                 ListFooterComponent={
-                                    <>
-                                        {isFetchingMore && (
-                                            <View className="py-4 items-center">
-                                                <ActivityIndicator size="small" color="#7c3aed" />
-                                            </View>
-                                        )}
-                                        {!isFetchingMore && hasMore && (
-                                            <View className="py-4 items-center">
-                                                <TouchableOpacity
-                                                    onPress={handleLoadMore}
-                                                    className="bg-violet-600 px-6 py-2 rounded-lg"
-                                                    disabled={isFetchingMore}
-                                                    style={isFetchingMore ? { opacity: 0.7 } : undefined}
-                                                >
-                                                    <Text className="text-white font-bold">Load More</Text>
-                                                </TouchableOpacity>
-                                            </View>
-                                        )}
-                                    </>
+                                    isFetchingMore ? (
+                                        <View className="py-4 items-center">
+                                            <ActivityIndicator size="small" color="#7c3aed" />
+                                            <Text className="text-xs text-gray-500 mt-1">
+                                                Loading page {page + 1} of {totalPages}...
+                                            </Text>
+                                        </View>
+                                    ) : hasMore ? (
+                                        <View className="py-3 items-center">
+                                            <Text className="text-xs text-gray-400">
+                                                {allData.length} of {totalCount} bookings loaded
+                                            </Text>
+                                        </View>
+                                    ) : allData.length > 0 ? (
+                                        <View className="py-3 items-center">
+                                            <Text className="text-xs text-gray-400">
+                                                All {totalCount} bookings loaded
+                                            </Text>
+                                        </View>
+                                    ) : null
                                 }
                                 refreshing={isFetching}
                                 onRefresh={() => {
                                     setPage(1);
+                                    setAllData([]);
                                     refetch();
                                 }}
                             />
