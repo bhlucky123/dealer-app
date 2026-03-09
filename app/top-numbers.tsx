@@ -153,6 +153,7 @@ export default function TopNumbers() {
     },
   });
 
+  // console.log("top-numbers data", data);
 
   const items = data?.results || [];
 
