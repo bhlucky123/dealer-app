@@ -5,12 +5,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View
 } from "react-native";
@@ -146,6 +147,15 @@ const BookingDetailsScreen = () => {
     const queryClient = useQueryClient();
     const params = useLocalSearchParams();
     const billNumber = params.bill_number as string | undefined;
+    const initialSearch = (params.search as string) || "";
+
+    const [search, setSearch] = useState(initialSearch);
+    const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
+
+    useEffect(() => {
+        const handle = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+        return () => clearTimeout(handle);
+    }, [search]);
 
     const isSuperuser = !!user?.superuser;
 
@@ -155,9 +165,11 @@ const BookingDetailsScreen = () => {
         error,
         refetch,
     } = useQuery<BookingRetrieveResponse>({
-        queryKey: ["booking-report-detail", billNumber],
-        queryFn: () =>
-            api.get<BookingRetrieveResponse>(`/draw-booking/booking-report/${billNumber}/`).then(res => res.data),
+        queryKey: ["booking-report-detail", billNumber, debouncedSearch],
+        queryFn: () => {
+            const searchParam = debouncedSearch ? `?search=${encodeURIComponent(debouncedSearch)}` : "";
+            return api.get<BookingRetrieveResponse>(`/draw-booking/booking-report/${billNumber}/${searchParam}`).then(res => res.data);
+        },
         enabled: !!billNumber,
     });
 
@@ -206,6 +218,27 @@ const BookingDetailsScreen = () => {
     return (
         <SafeAreaView className="flex-1 bg-white" edges={["bottom"]}>
             <View className="flex-1 p-4">
+                {/* Search */}
+                <View className="mb-3 flex-row items-center gap-2">
+                    <TextInput
+                        value={search}
+                        onChangeText={setSearch}
+                        placeholder="Search by number..."
+                        keyboardType="numeric"
+                        className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 text-sm"
+                        placeholderTextColor="#9ca3af"
+                    />
+                    {search.length > 0 && (
+                        <TouchableOpacity
+                            onPress={() => setSearch("")}
+                            className="px-3 py-2.5 rounded-lg bg-red-50 border border-red-200"
+                            activeOpacity={0.7}
+                        >
+                            <Text className="text-sm font-semibold text-red-600">✕</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+
                 {/* Booking Header */}
                 {data && (
                     <View className="mb-3 p-3 bg-gray-50 rounded-xl border border-gray-200">

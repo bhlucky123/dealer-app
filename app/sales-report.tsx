@@ -731,7 +731,7 @@ const SalesReportScreen = () => {
                                     <TouchableOpacity
                                         className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
                                         activeOpacity={0.7}
-                                        onPress={() => router.push({ pathname: "/booking-details", params: { bill_number: String(item.bill_number) } })}
+                                        onPress={() => router.push({ pathname: "/booking-details", params: { bill_number: String(item.bill_number), ...(debouncedSearch ? { search: debouncedSearch } : {}) } })}
                                     >
                                         <View className="flex-row px-4 py-3 items-center border-b border-gray-100">
                                             <View className="flex-[1.1] flex-col justify-center">
