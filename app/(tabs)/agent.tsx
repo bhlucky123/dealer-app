@@ -60,6 +60,17 @@ export type Agent = {
   created_user: number;
   groups: any[];
   user_permissions: any[];
+  is_prize_set: boolean;
+  single_digit_prize: number | null;
+  double_digit_prize: number | null;
+  box_direct: number | null;
+  box_indirect: number | null;
+  super_first_prize: number | null;
+  super_second_prize: number | null;
+  super_third_prize: number | null;
+  super_fourth_prize: number | null;
+  super_fifth_prize: number | null;
+  super_complementary_prize: number | null;
 };
 
 // Enhanced Form component with better animations and styling
@@ -68,13 +79,11 @@ const AgentForm = ({
   defaultValues = {},
   onCancel,
   loading = false,
-  prizeConfig = null,
 }: {
   onSubmit: (data: any, setApiErrors: (errs: Record<string, string>) => void, setGeneralError: (msg: string) => void) => void;
   defaultValues?: Partial<Agent>;
   onCancel: () => void;
   loading?: boolean;
-  prizeConfig?: any;
 }) => {
   const { user } = useAuthStore()
   const [form, setForm] = useState({
@@ -92,17 +101,17 @@ const AgentForm = ({
         ? defaultValues.assigned_dealer.toString()
         : user?.id?.toString() || ""
     ),
-    is_prize_set: !!prizeConfig,
-    single_digit_prize: prizeConfig?.single_digit_prize?.toString() || "",
-    double_digit_prize: prizeConfig?.double_digit_prize?.toString() || "",
-    box_direct: prizeConfig?.box_direct?.toString() || "",
-    box_indirect: prizeConfig?.box_indirect?.toString() || "",
-    super_first_prize: prizeConfig?.super_first_prize?.toString() || "",
-    super_second_prize: prizeConfig?.super_second_prize?.toString() || "",
-    super_third_prize: prizeConfig?.super_third_prize?.toString() || "",
-    super_fourth_prize: prizeConfig?.super_fourth_prize?.toString() || "",
-    super_fifth_prize: prizeConfig?.super_fifth_prize?.toString() || "",
-    super_complementary_prize: prizeConfig?.super_complementary_prize?.toString() || "",
+    is_prize_set: defaultValues.is_prize_set ?? false,
+    single_digit_prize: defaultValues.single_digit_prize?.toString() || "",
+    double_digit_prize: defaultValues.double_digit_prize?.toString() || "",
+    box_direct: defaultValues.box_direct?.toString() || "",
+    box_indirect: defaultValues.box_indirect?.toString() || "",
+    super_first_prize: defaultValues.super_first_prize?.toString() || "",
+    super_second_prize: defaultValues.super_second_prize?.toString() || "",
+    super_third_prize: defaultValues.super_third_prize?.toString() || "",
+    super_fourth_prize: defaultValues.super_fourth_prize?.toString() || "",
+    super_fifth_prize: defaultValues.super_fifth_prize?.toString() || "",
+    super_complementary_prize: defaultValues.super_complementary_prize?.toString() || "",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -201,7 +210,9 @@ const AgentForm = ({
     if (!validate()) return;
 
     const preparedData: any = {
-      ...form,
+      username: form.username,
+      is_active: form.is_active,
+      calculate_str: form.calculate_str,
       secret_pin: Number(form.secret_pin),
       commission: Number(form.commission),
       single_digit_number_commission: Number(form.single_digit_number_commission),
@@ -209,23 +220,20 @@ const AgentForm = ({
       assigned_dealer: Number(form.assigned_dealer),
     };
 
-    // Attach prize config data separately
-    if (form.is_prize_set) {
-      preparedData._prizeConfig = {};
-      PRIZE_CONFIG_FIELDS.forEach(({ key }) => {
-        preparedData._prizeConfig[key] = Number(form[key]) || null;
-      });
+    if (form.password) {
+      preparedData.password = form.password;
     }
-    preparedData._isPrizeSet = form.is_prize_set;
-    preparedData._hadPrizeConfig = !!prizeConfig;
 
-    // Clean prize fields from main payload
-    delete preparedData.is_prize_set;
-    PRIZE_CONFIG_FIELDS.forEach(({ key }) => {
-      delete preparedData[key];
-    });
+    // Prize fields: include inline per API golden rules
+    if (form.is_prize_set) {
+      preparedData.is_prize_set = true;
+      PRIZE_CONFIG_FIELDS.forEach(({ key }) => {
+        preparedData[key] = Number((form as any)[key]) || null;
+      });
+    } else {
+      preparedData.is_prize_set = false;
+    }
 
-    // Pass setErrors and setGeneralError to onSubmit for error handling
     onSubmit(preparedData, setErrors, setGeneralError);
   };
 
@@ -671,9 +679,7 @@ export default function AgentTab({ id }: { id?: string }) {
     }
   });
 
-  const { createAgent, editAgent, deleteAgent, saveAgentPrizeConfig, updateAgentPrizeConfig } = useAgent();
-  const [editPrizeConfig, setEditPrizeConfig] = useState<any>(null);
-  const [loadingPrizeConfig, setLoadingPrizeConfig] = useState(false);
+  const { createAgent, editAgent, deleteAgent } = useAgent();
 
   // Filter agents based on search
   const filteredAgents = agents.filter(agent => {
@@ -711,45 +717,14 @@ export default function AgentTab({ id }: { id?: string }) {
     return false;
   });
 
-  // Enhanced handleCreate and handleEdit to handle API errors
+  // handleCreate — prize fields are sent inline with /agent/manage/
   const handleCreate = (data: any, setApiErrors: (errs: Record<string, string>) => void, setGeneralError: (msg: string) => void) => {
-    const { _prizeConfig, _isPrizeSet, _hadPrizeConfig, ...agentData } = data;
     setLoading(true)
-    createAgent(agentData, {
-      onSuccess: (newAgent: any) => {
-        if (_isPrizeSet && _prizeConfig) {
-          saveAgentPrizeConfig(
-            { agent: newAgent.id, ..._prizeConfig },
-            {
-              onSuccess: () => {
-                setShowForm(false);
-                refetch();
-                setLoading(false);
-              },
-              onError: (err: any) => {
-                setLoading(false);
-                // Stay on form and show prize config errors
-                let errorData = err?.response?.data ?? err?.message ?? err;
-                if (errorData && typeof errorData === "object" && "message" in errorData) {
-                  errorData = errorData.message;
-                }
-                if (errorData && typeof errorData === "object") {
-                  const apiErrors = parseApiErrors(errorData);
-                  setApiErrors(apiErrors);
-                  setGeneralError("Agent created but prize config has errors. Please fix and update.");
-                } else {
-                  setGeneralError("Agent created but prize config failed to save.");
-                }
-                // Refetch so the new agent shows up, but keep form open for prize fix
-                refetch();
-              },
-            }
-          );
-        } else {
-          setShowForm(false);
-          refetch();
-          setLoading(false);
-        }
+    createAgent(data, {
+      onSuccess: () => {
+        setShowForm(false);
+        refetch();
+        setLoading(false);
       },
       onError: (err: any) => {
         setLoading(false);
@@ -805,74 +780,37 @@ export default function AgentTab({ id }: { id?: string }) {
     });
   };
 
+  // handleEdit — prize fields sent inline with /agent/manage/{id}/
   const handleEdit = (data: any, setApiErrors: (errs: Record<string, string>) => void, setGeneralError: (msg: string) => void) => {
-    const { _prizeConfig, _isPrizeSet, _hadPrizeConfig, ...restData } = data;
-
-    if (!restData?.password) {
-      delete restData.password
+    if (!data.password) {
+      delete data.password
     }
 
     setLoading(true)
 
     // Fix: If assigned_dealer is an object, extract its id
-    let assigned_dealer = restData.assigned_dealer;
+    let assigned_dealer = data.assigned_dealer;
     if (assigned_dealer && typeof assigned_dealer === "object" && "id" in assigned_dealer) {
       assigned_dealer = assigned_dealer.id;
     }
-    // Ensure assigned_dealer is a number
     assigned_dealer = Number(assigned_dealer);
 
     editAgent(
-      { ...restData, id: editData?.id, assigned_dealer },
+      { ...data, id: editData?.id, assigned_dealer },
       {
         onSuccess: () => {
-          if (_isPrizeSet && _prizeConfig) {
-            const savePrizeFn = _hadPrizeConfig ? updateAgentPrizeConfig : saveAgentPrizeConfig;
-            const prizePayload = _hadPrizeConfig
-              ? { agentId: editData?.id, ..._prizeConfig }
-              : { agent: editData?.id, ..._prizeConfig };
-            savePrizeFn(prizePayload, {
-              onSuccess: () => {
-                setShowForm(false);
-                refetch();
-                setEditData(null);
-                setEditPrizeConfig(null);
-                setLoading(false);
-              },
-              onError: (err: any) => {
-                setLoading(false);
-                // Stay on form and show prize config errors
-                let errorData = err?.response?.data ?? err?.message ?? err;
-                if (errorData && typeof errorData === "object" && "message" in errorData) {
-                  errorData = errorData.message;
-                }
-                if (errorData && typeof errorData === "object") {
-                  const apiErrors = parseApiErrors(errorData);
-                  setApiErrors(apiErrors);
-                  setGeneralError("Agent updated but prize config has errors. Please fix and save again.");
-                } else {
-                  setGeneralError("Agent updated but prize config failed to save.");
-                }
-              },
-            });
-          } else {
-            setShowForm(false);
-            refetch();
-            setEditData(null);
-            setEditPrizeConfig(null);
-            setLoading(false);
-          }
+          setShowForm(false);
+          refetch();
+          setEditData(null);
+          setLoading(false);
         },
         onError: (err: any) => {
           setLoading(false);
-          // Handle error response for agent edit — stay on form
           let errorData = err?.response?.data ?? err?.message ?? err;
-          // If errorData is an object with a "message" key, use that as the error object
           if (errorData && typeof errorData === "object" && "message" in errorData) {
             errorData = errorData.message;
           }
 
-          // Check if errorData is an HTML page (string containing <html or <!DOCTYPE)
           if (
             typeof errorData === "string" &&
             (errorData.includes("<html") || errorData.includes("<!DOCTYPE"))
@@ -885,7 +823,6 @@ export default function AgentTab({ id }: { id?: string }) {
             const apiErrors = parseApiErrors(errorData);
             setApiErrors(apiErrors);
 
-            // Handle non_field_errors or general error messages
             if (errorData.non_field_errors) {
               setGeneralError(
                 Array.isArray(errorData.non_field_errors)
@@ -954,26 +891,15 @@ export default function AgentTab({ id }: { id?: string }) {
     }
   };
 
-  if (loadingPrizeConfig) {
-    return (
-      <View className="flex-1 justify-center items-center bg-gray-50">
-        <ActivityIndicator size="large" color="#3B82F6" />
-        <Text className="text-gray-500 mt-4 font-medium">Loading...</Text>
-      </View>
-    );
-  }
-
   if (showForm) {
     return (
       <AgentForm
         onSubmit={editData ? handleEdit : handleCreate}
         defaultValues={editData || {}}
         loading={loading}
-        prizeConfig={editPrizeConfig}
         onCancel={() => {
           setShowForm(false);
           setEditData(null);
-          setEditPrizeConfig(null);
         }}
       />
     );
@@ -1005,7 +931,6 @@ export default function AgentTab({ id }: { id?: string }) {
               (user?.user_type === "DEALER") && <TouchableOpacity
                 onPress={() => {
                   setEditData(null);
-                  setEditPrizeConfig(null);
                   setShowForm(true);
                 }}
                 className="w-16 h-16 bg-blue-600 rounded-full shadow-xl items-center justify-center active:scale-95"
@@ -1142,8 +1067,8 @@ export default function AgentTab({ id }: { id?: string }) {
                     ? item.assigned_dealer.id
                     : item.assigned_dealer,
               }}
-              onEdit={async () => {
-                // Fix: If assigned_dealer is an object, extract its id for the form
+              onEdit={() => {
+                // Prize fields are already on the agent object from /agent/manage/
                 const agentForEdit = {
                   ...item,
                   assigned_dealer:
@@ -1152,15 +1077,6 @@ export default function AgentTab({ id }: { id?: string }) {
                       : item.assigned_dealer,
                 };
                 setEditData(agentForEdit);
-                // Fetch existing prize config
-                setLoadingPrizeConfig(true);
-                try {
-                  const res = await api.get(`/agent/prize-configuration/${item.id}/`);
-                  setEditPrizeConfig(res.data);
-                } catch {
-                  setEditPrizeConfig(null);
-                }
-                setLoadingPrizeConfig(false);
                 setShowForm(true);
               }}
               onDelete={() => handleDelete(item.id.toString())}
