@@ -101,7 +101,7 @@ const LastSaleReportScreen = () => {
             <TouchableOpacity
                 className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
                 activeOpacity={0.7}
-                onPress={() => router.push({ pathname: "/booking-details", params: { bill_number: String(item.bill_number) } })}
+                onPress={() => router.push({ pathname: "/booking-details", params: { bill_number: String(item.bill_number), editable: "true" } })}
             >
                 <View className="flex-row ps-3 pe-2 py-3 items-center border-b border-gray-100">
                     <View className="flex-[1.1] flex-col justify-center">
