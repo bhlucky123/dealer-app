@@ -91,28 +91,32 @@ const LimitCountRow = memo(
             ? { single_digit: "1D", double_digit: "2D", triple_digit: "3D" }[item.number_type]
             : "";
 
+        const colWidths = showDealer
+            ? { number: "25%", type: "12%", dealer: "20%", count: "18%", actions: "25%" }
+            : { number: "30%", type: "15%", count: "20%", actions: "30%" };
+
         return (
-            <View className="flex-row items-center border-b border-gray-100 bg-white px-4 py-4"
-                style={{ minHeight: 56 }}
+            <View className="flex-row items-center border-b border-gray-100 bg-white px-3 py-3"
+                style={{ minHeight: 52 }}
             >
-                {/* Number — takes all available space */}
-                <View className="flex-1 mr-3">
-                    <Text className="text-lg font-bold text-gray-900">{displayNumber}</Text>
+                {/* Number */}
+                <View style={{ width: colWidths.number }}>
+                    <Text className="text-base font-bold text-gray-900">{displayNumber}</Text>
                 </View>
                 {/* Type */}
-                <View style={{ width: 40 }}>
+                <View style={{ width: colWidths.type }}>
                     <Text className="text-sm font-semibold text-gray-500">{typeLabel}</Text>
                 </View>
                 {/* Dealer */}
                 {showDealer && (
-                    <View className="flex-1 mr-3" style={{ minWidth: 60 }}>
+                    <View style={{ width: colWidths.dealer }}>
                         <Text className="text-sm text-gray-500" numberOfLines={1}>
                             {item.dealer_details?.username || "—"}
                         </Text>
                     </View>
                 )}
                 {/* Count */}
-                <View style={{ width: 65 }}>
+                <View style={{ width: colWidths.count }}>
                     {isEditing ? (
                         <TextInput
                             className="text-center text-sm font-bold bg-blue-50 rounded-lg px-2 py-2 border border-blue-200"
@@ -124,13 +128,13 @@ const LimitCountRow = memo(
                             returnKeyType="done"
                         />
                     ) : (
-                        <Text className="text-lg font-bold text-green-600 text-center">
+                        <Text className="text-base font-bold text-green-600 text-center">
                             {item.count}
                         </Text>
                     )}
                 </View>
                 {/* Actions */}
-                <View style={{ width: 80 }} className="flex-row justify-end gap-2">
+                <View style={{ width: colWidths.actions }} className="flex-row justify-end gap-2">
                     {isEditing ? (
                         <>
                             <TouchableOpacity
@@ -661,24 +665,28 @@ const LimitCountScreen = () => {
         [updateLimitMutation, handleDeletePress, isAdmin]
     );
 
+    const headerColWidths = isAdmin
+        ? { number: "25%", type: "12%", dealer: "20%", count: "18%", actions: "25%" }
+        : { number: "30%", type: "15%", count: "20%", actions: "30%" };
+
     const TableHeader = () => (
-        <View className="flex-row items-center bg-gray-50 px-4 py-3 border-b border-gray-200 rounded-t-lg">
-            <View className="flex-1 mr-3">
-                <Text className="text-sm font-bold text-gray-500 uppercase">Number</Text>
+        <View className="flex-row items-center bg-gray-50 px-3 py-3 border-b border-gray-200 rounded-t-lg">
+            <View style={{ width: headerColWidths.number }}>
+                <Text className="text-xs font-bold text-gray-500 uppercase">Number</Text>
             </View>
-            <View style={{ width: 40 }}>
-                <Text className="text-sm font-bold text-gray-500 uppercase">Type</Text>
+            <View style={{ width: headerColWidths.type }}>
+                <Text className="text-xs font-bold text-gray-500 uppercase">Type</Text>
             </View>
             {isAdmin && (
-                <View className="flex-1 mr-3" style={{ minWidth: 60 }}>
-                    <Text className="text-sm font-bold text-gray-500 uppercase">Dealer</Text>
+                <View style={{ width: headerColWidths.dealer }}>
+                    <Text className="text-xs font-bold text-gray-500 uppercase">Dealer</Text>
                 </View>
             )}
-            <View style={{ width: 65 }}>
-                <Text className="text-sm font-bold text-gray-500 uppercase text-center">Count</Text>
+            <View style={{ width: headerColWidths.count }}>
+                <Text className="text-xs font-bold text-gray-500 uppercase text-center">Count</Text>
             </View>
-            <View style={{ width: 80 }}>
-                <Text className="text-sm font-bold text-gray-500 uppercase text-right">Actions</Text>
+            <View style={{ width: headerColWidths.actions }}>
+                <Text className="text-xs font-bold text-gray-500 uppercase text-right">Actions</Text>
             </View>
         </View>
     );

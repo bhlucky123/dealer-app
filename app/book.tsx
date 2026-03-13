@@ -90,6 +90,10 @@ const BookingScreen: React.FC = () => {
   const [failedPasteModalVisible, setFailedPasteModalVisible] = useState(false);
   const [inputsCollapsed, setInputsCollapsed] = useState(false);
   const [failedPasteLines, setFailedPasteLines] = useState<string[]>([]);
+
+  // Modal for removed numbers (force_create)
+  const [removedNumbersModalVisible, setRemovedNumbersModalVisible] = useState(false);
+  const [removedNumbers, setRemovedNumbers] = useState<any[]>([]);
   const [selectedDealer, setSelectedDealer] = useState("");
   const [selectedAgent, setSelectedAgent] = useState("");
 
@@ -224,13 +228,23 @@ const BookingScreen: React.FC = () => {
   }, [isError, error, DrawSessionDetails]);
 
   const { mutate, isPending } = useMutation({
-    mutationFn: async (data: any) => api.post("/draw-booking/create/", data),
-    onSuccess: () => {
-      ToastAndroid.show("Booking submitted.", 300)
+    mutationFn: async (data: any) => {
+      const response = await api.post("/draw-booking/create/", data);
+      return response.data;
+    },
+    onSuccess: (data) => {
       setBookingDetails([]);
       clearInputs();
       setEditIndex(null);
-      setCustomerName("")
+      setCustomerName("");
+
+      if (data && data.removed_numbers && data.removed_numbers.length > 0) {
+        setRemovedNumbers(data.removed_numbers);
+        setRemovedNumbersModalVisible(true);
+        ToastAndroid.show("Booking created with some numbers removed.", 300);
+      } else {
+        ToastAndroid.show("Booking submitted.", 300);
+      }
     },
     onError: (error: any) => {
       let errorMessage = "Failed to submit.";
@@ -913,6 +927,7 @@ const BookingScreen: React.FC = () => {
       const data = {
         customer_name: customerName,
         draw_session: DrawSessionDetails?.session?.active_session_id,
+        force_create: true,
         booked_agent: bookedAgent,
         booked_dealer: user?.user_type === "ADMIN" ? booked_dealer : undefined,
         booking_details: bookingDetails.map(
@@ -2395,6 +2410,50 @@ const BookingScreen: React.FC = () => {
                   <Text className="text-white font-semibold">Edit</Text>
                 </TouchableOpacity>
               </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Modal for removed numbers (force_create) */}
+        <Modal
+          visible={removedNumbersModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setRemovedNumbersModalVisible(false)}
+        >
+          <View className="flex-1 justify-center items-center bg-black/50 px-4">
+            <View className="bg-white p-6 rounded-2xl w-full max-w-md shadow-lg">
+              <Text className="text-xl font-bold mb-4 text-center text-orange-700">
+                Some Numbers Not Booked
+              </Text>
+              <Text className="mb-3 text-gray-700 text-center text-sm">
+                Booking was created, but the following numbers could not be booked:
+              </Text>
+              <View className="max-h-60 mb-4">
+                <FlatList
+                  data={removedNumbers}
+                  keyExtractor={(_, idx) => idx.toString()}
+                  renderItem={({ item }) => (
+                    <View className="mb-2 bg-orange-50 rounded-lg p-3 border border-orange-200">
+                      <Text className="text-sm font-bold text-orange-800 mb-1">
+                        Number: {item.number}
+                      </Text>
+                      <Text className="text-xs text-gray-600 mb-1">{item.message}</Text>
+                      {item.booking_details?.map((detail: any, i: number) => (
+                        <Text key={i} className="text-xs text-gray-500">
+                          {detail.sub_type} x{detail.count}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+                />
+              </View>
+              <TouchableOpacity
+                onPress={() => setRemovedNumbersModalVisible(false)}
+                className="px-6 py-2 rounded-lg bg-orange-600"
+              >
+                <Text className="text-white font-semibold text-base text-center">Close</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </Modal>
