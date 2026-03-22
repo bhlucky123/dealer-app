@@ -1,3 +1,5 @@
+build doc
+
 npx expo prebuild --platform android
 
 cd android;
