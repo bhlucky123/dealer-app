@@ -112,7 +112,6 @@ function DealerPendingModal({
   const [totalCount, setTotalCount] = useState(0);
   const [totalPending, setTotalPending] = useState<number | null>(null);
   const [next, setNext] = useState<string | null>(null);
-  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -171,7 +170,6 @@ function DealerPendingModal({
     let ignore = false;
     setLoading(true);
     setAllData([]);
-    setOffset(0);
     (async () => {
       try {
         const data = await fetchPage(0);
@@ -191,8 +189,9 @@ function DealerPendingModal({
     if (loadingMore || !next) return;
     setLoadingMore(true);
     try {
-      const nextOffset = offset + LIMIT;
-      const data = await fetchPage(nextOffset);
+      const url = new URL(next);
+      const res = await api.get(`${url.pathname}${url.search}`);
+      const data = res.data as DealerBalanceResponse;
       setAllData(prev => {
         const all = [...prev, ...(data?.results || [])];
         const idSet = new Set<number>();
@@ -205,19 +204,17 @@ function DealerPendingModal({
         }
         return deduped;
       });
-      setOffset(nextOffset);
       setTotalCount(data.count);
       setNext(data.next);
     } catch { }
     setLoadingMore(false);
-  }, [loadingMore, next, offset, fetchPage]);
+  }, [loadingMore, next]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     try {
       const data = await fetchPage(0);
       setAllData(data.results);
-      setOffset(0);
       setTotalCount(data.count);
       setTotalPending(data.total_pending_amount);
       setNext(data.next);
@@ -430,35 +427,17 @@ function DealerPendingModal({
                 tintColor="#4f46e5"
               />
             }
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.5}
             ListEmptyComponent={
               <View className="flex-1 items-center justify-center mt-10">
                 <Text className="text-gray-400 text-sm">No dealers with pending balance.</Text>
               </View>
             }
             ListFooterComponent={
-              allData.length < totalCount && !!next ? (
+              loadingMore ? (
                 <View style={{ alignItems: "center", marginVertical: 12 }}>
-                  <TouchableOpacity
-                    style={{
-                      backgroundColor: "#4f46e5",
-                      borderRadius: 8,
-                      paddingHorizontal: 24,
-                      paddingVertical: 12,
-                      minWidth: 120,
-                      alignItems: "center",
-                      opacity: loadingMore ? 0.7 : 1,
-                    }}
-                    onPress={handleLoadMore}
-                    disabled={loadingMore}
-                  >
-                    {loadingMore ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 15 }}>
-                        Load More
-                      </Text>
-                    )}
-                  </TouchableOpacity>
+                  <ActivityIndicator size="small" color="#4f46e5" />
                 </View>
               ) : null
             }

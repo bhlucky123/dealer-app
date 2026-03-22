@@ -81,8 +81,6 @@ export default function PaymentTab() {
 
     const limit = 10;
     // Infinity scroll state
-    // NOTE: This will now track offset instead of page!
-    const [offset, setOffset] = useState(0);
     const [allData, setAllData] = useState<AgentOrDealer[]>([]);
     const [totalCount, setTotalCount] = useState<number>(0);
     const [next, setNext] = useState<string | null>(null);
@@ -97,6 +95,8 @@ export default function PaymentTab() {
 
     // Data and query loading
     const [queryLoading, setQueryLoading] = useState(true);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const isInitialLoad = useRef(true);
 
     // Debounce search input (300ms)
     const searchDebounceTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -119,7 +119,7 @@ export default function PaymentTab() {
     // Now: pageToFetch is an offset (should be 0 for first, 10 for second, etc)
     const fetchPage = async (offsetToFetch: number) => {
         let endpoint = "";
-        if (user?.user_type === "ADMIN") endpoint = "/draw-payment/dealers-with-pending-balance/";
+        if (user?.user_type === "ADMIN") endpoint = "/draw-payment/dealers-pending-balance-fast/";
         else if (user?.user_type === "DEALER") endpoint = "/draw-payment/agents-with-pending-balance/";
 
         function buildQuery(params: Record<string, any>): string {
@@ -144,13 +144,20 @@ export default function PaymentTab() {
     // Initial fetch and search: loads first page and resets
     useEffect(() => {
         let ignore = false;
-        setQueryLoading(true);
-        setAllData([]);
+        const isSearch = !isInitialLoad.current;
+        if (isSearch) {
+            setSearchLoading(true);
+        } else {
+            setQueryLoading(true);
+        }
         setTotalCount(0);
         setNext(null);
-        setOffset(0);
         (async () => {
-            if (!user?.user_type) return setQueryLoading(false);
+            if (!user?.user_type) {
+                setQueryLoading(false);
+                setSearchLoading(false);
+                return;
+            }
             try {
                 const data = await fetchPage(0); // offset=0 for first fetch
                 if (ignore) return;
@@ -158,21 +165,26 @@ export default function PaymentTab() {
                 setTotalCount(data.count);
                 setNext(data.next);
             } finally {
-                if (!ignore) setQueryLoading(false);
+                if (!ignore) {
+                    setQueryLoading(false);
+                    setSearchLoading(false);
+                    isInitialLoad.current = false;
+                }
             }
         })();
         return () => { ignore = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.user_type, search]);
 
-    // Load more handler (loads next "page" --> add limit to offset)
+    // Load more handler — uses the `next` URL directly from the API response
     const handleLoadMore = useCallback(async () => {
         if (isLoadingMore || !next) return;
         setIsLoadingMore(true);
         try {
-            const nextOffset = offset + limit;
-            const data = await fetchPage(nextOffset);
-            //console.log("data", data)
+            // Extract the path + query from the full next URL
+            const url = new URL(next);
+            const res = await api.get(`${url.pathname}${url.search}`);
+            const data = res.data as DataResponse;
             // Deduplicate data by 'id' to ensure unique items
             setAllData(prev => {
                 const all = [...prev, ...(data?.results || [])];
@@ -186,15 +198,13 @@ export default function PaymentTab() {
                 }
                 return deduped;
             });
-            setOffset(nextOffset);
             setTotalCount(data.count);
             setNext(data.next);
         } catch (e) {
             // optionally handle error
         }
         setIsLoadingMore(false);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isLoadingMore, next, offset, user?.user_type, search]);
+    }, [isLoadingMore, next]);
 
     // On pull-to-refresh, reload page 1 (offset 0) and reset
     const onRefresh = async () => {
@@ -202,8 +212,8 @@ export default function PaymentTab() {
         try {
             if (!user?.user_type) return;
             const data = await fetchPage(0);
+            console.log("data", data)
             setAllData(data.results);
-            setOffset(0);
             setTotalCount(data.count);
             setNext(data.next);
         } catch (err) {
@@ -423,6 +433,9 @@ export default function PaymentTab() {
                     returnKeyType="search"
                     autoCorrect={false}
                 />
+                {searchLoading && (
+                    <ActivityIndicator size="small" color="#2563eb" style={{ marginRight: 4 }} />
+                )}
                 {(!!searchInput) && (
                     <TouchableOpacity onPress={() => setSearchInput("")} style={{ paddingHorizontal: 8, height: 40, justifyContent: "center" }}>
                         <Text style={{ fontSize: 20, color: "#64748b" }}>×</Text>
@@ -443,35 +456,17 @@ export default function PaymentTab() {
                         tintColor="#2563eb"
                     />
                 }
+                onEndReached={handleLoadMore}
+                onEndReachedThreshold={0.5}
                 ListEmptyComponent={
                     <Text className="text-center text-gray-300 mt-10">
                         No {user?.user_type === "ADMIN" ? "dealers" : "agents"} with pending balance.
                     </Text>
                 }
                 ListFooterComponent={
-                    (allData.length < totalCount && !!next) ? (
+                    isLoadingMore ? (
                         <View style={{ alignItems: "center", marginVertical: 12 }}>
-                            <TouchableOpacity
-                                style={{
-                                    backgroundColor: "#2563eb",
-                                    borderRadius: 8,
-                                    paddingHorizontal: 24,
-                                    paddingVertical: 12,
-                                    minWidth: 120,
-                                    alignItems: "center",
-                                    opacity: isLoadingMore ? 0.7 : 1,
-                                }}
-                                onPress={handleLoadMore}
-                                disabled={isLoadingMore}
-                            >
-                                {isLoadingMore ? (
-                                    <ActivityIndicator color="#fff" />
-                                ) : (
-                                    <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>
-                                        Load More
-                                    </Text>
-                                )}
-                            </TouchableOpacity>
+                            <ActivityIndicator size="small" color="#2563eb" />
                         </View>
                     ) : null
                 }
