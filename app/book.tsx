@@ -94,6 +94,7 @@ const BookingScreen: React.FC = () => {
   // Modal for removed numbers (force_create)
   const [removedNumbersModalVisible, setRemovedNumbersModalVisible] = useState(false);
   const [removedNumbers, setRemovedNumbers] = useState<any[]>([]);
+  const [submittedDetails, setSubmittedDetails] = useState<BookingDetail[]>([]);
   const [selectedDealer, setSelectedDealer] = useState("");
   const [selectedAgent, setSelectedAgent] = useState("");
 
@@ -233,12 +234,14 @@ const BookingScreen: React.FC = () => {
       return response.data;
     },
     onSuccess: (data) => {
+      const submitted = [...bookingDetails];
       setBookingDetails([]);
       clearInputs();
       setEditIndex(null);
       setCustomerName("");
 
       if (data && data.removed_numbers && data.removed_numbers.length > 0) {
+        setSubmittedDetails(submitted);
         setRemovedNumbers(data.removed_numbers);
         setRemovedNumbersModalVisible(true);
         ToastAndroid.show("Booking created with some numbers removed.", 300);
@@ -1841,7 +1844,8 @@ const BookingScreen: React.FC = () => {
                       valueField="value"
                       value={selectedDealer}
                       onChange={item => {
-                        setSelectedDealer(item.value)
+                        setSelectedDealer(item.value);
+                        setSelectedAgent("")
                       }}
                       placeholder="Select Dealer"
                       style={{
@@ -1865,7 +1869,10 @@ const BookingScreen: React.FC = () => {
                       renderRightIcon={() =>
                         selectedDealer ? (
                           <TouchableOpacity
-                            onPress={() => setSelectedDealer("")}
+                            onPress={() => {
+                              setSelectedDealer("");
+                              setSelectedAgent("")
+                            }}
                             style={{
                               position: "absolute",
                               right: 10,
@@ -2424,36 +2431,110 @@ const BookingScreen: React.FC = () => {
           <View className="flex-1 justify-center items-center bg-black/50 px-4">
             <View className="bg-white p-6 rounded-2xl w-full max-w-md shadow-lg">
               <Text className="text-xl font-bold mb-4 text-center text-orange-700">
-                Some Numbers Not Booked
+                Booking Summary
               </Text>
-              <Text className="mb-3 text-gray-700 text-center text-sm">
-                Booking was created, but the following numbers could not be booked:
-              </Text>
+
+              {/* Summary counts */}
+              {(() => {
+                const removedDetailCount = removedNumbers.reduce(
+                  (sum: number, r: any) => sum + (r.booking_details?.length || 1), 0
+                );
+                const bookedCount = submittedDetails.length - removedDetailCount;
+                return (
+                  <View className="flex-row justify-center mb-4" style={{ gap: 16 }}>
+                    <View className="flex-row items-center bg-green-50 rounded-lg px-4 py-2 border border-green-200" style={{ gap: 6 }}>
+                      <Ionicons name="checkmark-circle" size={18} color="#16a34a" />
+                      <Text className="text-green-700 font-bold text-lg">{bookedCount}</Text>
+                      <Text className="text-green-600 text-xs">Booked</Text>
+                    </View>
+                    <View className="flex-row items-center bg-red-50 rounded-lg px-4 py-2 border border-red-200" style={{ gap: 6 }}>
+                      <Ionicons name="close-circle" size={18} color="#dc2626" />
+                      <Text className="text-red-700 font-bold text-lg">{removedDetailCount}</Text>
+                      <Text className="text-red-600 text-xs">Not Booked</Text>
+                    </View>
+                  </View>
+                );
+              })()}
+
+              {/* Table header */}
+              <View className="flex-row border-b-2 border-gray-300 pb-2 mb-1">
+                <Text className="text-xs font-bold text-gray-600" style={{ width: 60 }}>Number</Text>
+                <Text className="flex-1 text-xs font-bold text-gray-600 text-center">Type</Text>
+                <Text className="text-xs font-bold text-gray-600 text-center" style={{ width: 50 }}>Count</Text>
+                <Text className="text-xs font-bold text-gray-600 text-center" style={{ width: 30 }} />
+              </View>
+
+              {/* Table rows — only not-booked numbers */}
               <View className="max-h-60 mb-4">
                 <FlatList
-                  data={removedNumbers}
+                  data={(() => {
+                    const rows: { number: string; sub_type: string; count: number }[] = [];
+                    removedNumbers.forEach((r: any) => {
+                      if (r.booking_details?.length) {
+                        r.booking_details.forEach((d: any) => {
+                          rows.push({ number: r.number, sub_type: d.sub_type, count: d.count });
+                        });
+                      } else {
+                        rows.push({ number: r.number, sub_type: "", count: 0 });
+                      }
+                    });
+                    return rows;
+                  })()}
                   keyExtractor={(_, idx) => idx.toString()}
                   renderItem={({ item }) => (
-                    <View className="mb-2 bg-orange-50 rounded-lg p-3 border border-orange-200">
-                      <Text className="text-sm font-bold text-orange-800 mb-1">
-                        Number: {item.number}
-                      </Text>
-                      <Text className="text-xs text-gray-600 mb-1">{item.message}</Text>
-                      {item.booking_details?.map((detail: any, i: number) => (
-                        <Text key={i} className="text-xs text-gray-500">
-                          {detail.sub_type} x{detail.count}
-                        </Text>
-                      ))}
+                    <View className="flex-row items-center py-2 border-b border-gray-100">
+                      <Text className="text-sm text-gray-800" style={{ width: 60 }}>{item.number}</Text>
+                      <Text className="flex-1 text-xs text-gray-500 text-center">{item.sub_type}</Text>
+                      <Text className="text-xs text-gray-600 text-center" style={{ width: 50 }}>{item.count}</Text>
+                      <View style={{ width: 30, alignItems: "center" }}>
+                        <Ionicons name="close-circle" size={18} color="#dc2626" />
+                      </View>
                     </View>
                   )}
                 />
               </View>
-              <TouchableOpacity
-                onPress={() => setRemovedNumbersModalVisible(false)}
-                className="px-6 py-2 rounded-lg bg-orange-600"
-              >
-                <Text className="text-white font-semibold text-base text-center">Close</Text>
-              </TouchableOpacity>
+
+              {/* Copy & Close buttons */}
+              <View className="flex-row" style={{ gap: 10 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    const lines: string[] = [];
+                    removedNumbers.forEach((r: any) => {
+                      if (r.booking_details?.length) {
+                        r.booking_details.forEach((d: any) => {
+                          lines.push(`${r.number} ${d.count} ${d.sub_type}`);
+                        });
+                      } else {
+                        lines.push(r.number);
+                      }
+                    });
+                    const text = lines.join("\n");
+                    if (RNClipboard?.Clipboard?.setString) {
+                      RNClipboard.Clipboard.setString(text);
+                    } else {
+                      try {
+                        const { default: CB } = require("@react-native-clipboard/clipboard");
+                        CB.setString(text);
+                      } catch {
+                        ToastAndroid.show("Clipboard not available", ToastAndroid.SHORT);
+                        return;
+                      }
+                    }
+                    ToastAndroid.show("Copied to clipboard", ToastAndroid.SHORT);
+                  }}
+                  className="flex-1 flex-row items-center justify-center py-2 rounded-lg bg-blue-600"
+                  style={{ gap: 6 }}
+                >
+                  <Ionicons name="copy-outline" size={16} color="#fff" />
+                  <Text className="text-white font-semibold text-base">Copy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setRemovedNumbersModalVisible(false)}
+                  className="flex-1 py-2 rounded-lg bg-orange-600"
+                >
+                  <Text className="text-white font-semibold text-base text-center">Close</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
