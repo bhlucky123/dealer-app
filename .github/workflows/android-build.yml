@@ -14,10 +14,22 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - name: Determine which builds to run
         id: set-matrix
         run: |
-          MSG=$(echo "${{ github.event.head_commit.message }}" | tr '[:upper:]' '[:lower:]')
+          # Get commit message safely — falls back to empty string if unavailable
+          MSG="${{ github.event.head_commit.message }}"
+          if [ -z "$MSG" ]; then
+            # Fallback: get message from git log (handles PR merges, etc.)
+            MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
+          fi
+          MSG=$(echo "$MSG" | tr '[:upper:]' '[:lower:]')
+          echo "Commit message: $MSG"
 
           ADMIN='{"user_type":"ADMIN","slug":"admin","scheme":"admin","package":"com.luckybh.admin","icon":"admin-appicon.png"}'
           DEALER='{"user_type":"DEALER","slug":"dealer","scheme":"dealer","package":"com.luckybh.dealer","icon":"dealer-appicon.png"}'
@@ -37,7 +49,9 @@ jobs:
             ENTRIES="$ADMIN,$DEALER,$AGENT"
           fi
 
-          echo "matrix={\"include\":[$ENTRIES]}" >> $GITHUB_OUTPUT
+          MATRIX="{\"include\":[$ENTRIES]}"
+          echo "Generated matrix: $MATRIX"
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
   build:
     runs-on: ubuntu-latest
