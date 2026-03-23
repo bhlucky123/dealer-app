@@ -2502,7 +2502,7 @@ const BookingScreen: React.FC = () => {
                     removedNumbers.forEach((r: any) => {
                       if (r.booking_details?.length) {
                         r.booking_details.forEach((d: any) => {
-                          lines.push(`${r.number} ${d.count} ${d.sub_type}`);
+                          lines.push(d.sub_type?.toLowerCase() === "super" ? `${r.number} ${d.count}` : `${r.number} ${d.count} ${d.sub_type}`);
                         });
                       } else {
                         lines.push(r.number);

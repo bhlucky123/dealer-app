@@ -220,6 +220,22 @@ export default function RootLayout() {
             }}
           />
 
+          <Stack.Screen
+            name="image-extract"
+            options={{
+              headerShown: true,
+              title: "Image Extract",
+              headerStyle: { backgroundColor: themeColors.headerBackground },
+              headerTitleStyle: {
+                color: themeColors.headerTitle,
+                fontWeight: "bold",
+                fontSize: 22,
+              },
+              headerTintColor: themeColors.headerTint,
+              headerShadowVisible: false,
+            }}
+          />
+
           <Stack.Screen name="+not-found" />
         </Stack>
       </AlertNotificationRoot>
