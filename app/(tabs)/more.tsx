@@ -2,6 +2,8 @@ import { useAuthStore } from "@/store/auth";
 import api from "@/utils/axios";
 import { useFocusEffect } from "@react-navigation/native";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -1128,6 +1130,27 @@ export default function MoreTab() {
           ) : (
             renderBankDetailsSection()
           )}
+
+          {/* Image Extract Button */}
+          <TouchableOpacity
+            onPress={() => router.push("/image-extract")}
+            style={{
+              width: "100%",
+              backgroundColor: "#f97316",
+              borderRadius: 16,
+              padding: 16,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              marginTop: 18,
+              gap: 10,
+            }}
+          >
+            <Ionicons name="image-outline" size={22} color="#fff" />
+            <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>
+              Image Extract
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

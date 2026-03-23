@@ -22,3 +22,7 @@ super admin
 username: adm
 password: adm
 
+ git format-patch -1 HEAD -o patches        
+
+git apply .\patches\0001-git-ignore.patch  
+
