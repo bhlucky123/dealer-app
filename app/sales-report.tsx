@@ -347,7 +347,8 @@ const SalesReportScreen = () => {
                 `).join('');
             }).join('');
 
-            const totalAmount = res?.data?.total_customer_amount || 0
+            const totalAmount = res?.data?.total_customer_amount || 0;
+            const totalCount = res?.data?.total_bill_count || 0;
 
             const now = new Date();
             const formattedDate = formatDateDDMMYYYY(fromDate);
@@ -411,11 +412,11 @@ const SalesReportScreen = () => {
                 background: #C7D2FE;
                 color: #3730A3;
               }
-              .footer { 
-                text-align: right; 
-                margin-top: 20px; 
-                font-size: 12px; 
-                font-weight: bold; 
+              .footer {
+                text-align: center;
+                margin-top: 20px;
+                font-size: 12px;
+                font-weight: bold;
                 color: #6D28D9;
               }
             </style>
@@ -440,6 +441,7 @@ const SalesReportScreen = () => {
               </tbody>
             </table>
             <div class="footer">
+              <p>Total Count: ${totalCount}</p>
               <p>Total Amount: ${amountHandler(Number(totalAmount))}</p>
             </div>
           </body>

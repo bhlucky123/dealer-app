@@ -4,9 +4,9 @@ import api from "@/utils/axios";
 import { formatDateDDMMYYYY } from "@/utils/date";
 import Clipboard from "@react-native-clipboard/clipboard";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Calendar, ChevronDown, ChevronUp, Copy, Filter } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { BarChart3, Calendar, ChevronDown, ChevronUp, Clock, Copy, Filter } from "lucide-react-native";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -27,6 +27,8 @@ type InsightItem = {
   total_count: number;
   total_amount: number;
   extra_count?: number;
+  count_before?: number;
+  count_after?: number;
 };
 
 type InsightsResponse = {
@@ -69,7 +71,6 @@ export default function TopNumbers() {
   const [minCountBox, setMinCountBox] = useState<string>("");
   const [superActive, setSuperActive] = useState(true);
   const [boxActive, setBoxActive] = useState(true);
-  const [page, setPage] = useState<number>(1);
   const [refreshing, setRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string>("");
   const [showToast, setShowToast] = useState(false);
@@ -79,8 +80,15 @@ export default function TopNumbers() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  // Time filter state
+  const [fromTime, setFromTime] = useState<string>("");
+  const [showTimePicker, setShowTimePicker] = useState(false);
+
   // Exclude dealers expand/collapse
   const [excludeDealersExpanded, setExcludeDealersExpanded] = useState(false);
+
+  // Top numbers chart collapse
+  const [topNumbersExpanded, setTopNumbersExpanded] = useState(false);
 
   // Selected items for copying
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -100,11 +108,11 @@ export default function TopNumbers() {
     queryFn: () => api.get("/draw/list/").then((res) => res.data || []),
   });
 
-  const buildParams = (forPage = true) => {
+  const buildParams = (pageNum?: number) => {
     const params: Record<string, any> = {};
 
-    if (forPage) {
-      params.page = page;
+    if (pageNum) {
+      params.page = pageNum;
     }
 
     // Only include triple_digit if super or box is active
@@ -113,6 +121,10 @@ export default function TopNumbers() {
       : selectedTypes.filter((t) => t !== "triple_digit");
     if (types.length) params.type = types.join(",");
     const allSubTypes = types.flatMap((t) => selectedSubTypes[t] || []);
+    if (types.includes("triple_digit")) {
+      if (superActive) allSubTypes.push("SUPER");
+      if (boxActive) allSubTypes.push("BOX");
+    }
     if (allSubTypes.length) params.sub_type = allSubTypes.join(",");
     if (drawId) params.draw = drawId;
     if (dealerId) params.dealer = dealerId;
@@ -130,6 +142,9 @@ export default function TopNumbers() {
       const day = String(selectedDate.getDate()).padStart(2, "0");
       params.date = `${year}-${month}-${day}`;
     }
+    if (fromTime) {
+      params.time = fromTime;
+    }
 
     console.log("top-numbers params", params);
 
@@ -141,21 +156,32 @@ export default function TopNumbers() {
     data,
     isLoading,
     isFetching,
+    isFetchingNextPage,
     error,
     refetch,
-  } = useQuery<InsightsResponse>({
+    fetchNextPage,
+    hasNextPage,
+  } = useInfiniteQuery<InsightsResponse>({
     queryKey: ["/draw-booking/top-numbers/", buildParams()],
-    queryFn: async () => {
-      const params = buildParams();
+    queryFn: async ({ pageParam = 1 }) => {
+      const params = buildParams(pageParam as number);
       const res = await api.get("/draw-booking/top-numbers/", { params });
-      console.log("top-numbers response", res.data);
       return res.data;
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      if (lastPage.page < lastPage.num_pages) {
+        return lastPage.page + 1;
+      }
+      return undefined;
     },
   });
 
-  // console.log("top-numbers data", data);
-
-  const items = data?.results || [];
+  const lastPage = data?.pages?.[data.pages.length - 1];
+  const items = useMemo(
+    () => data?.pages?.flatMap((p) => p.results) || [],
+    [data]
+  );
 
   const maxCount = useMemo(
     () => (items.length ? Math.max(...items.map((i) => i.total_count)) : 0),
@@ -187,9 +213,20 @@ export default function TopNumbers() {
     setExcludedDealerIds((prev) =>
       prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]
     );
-    setPage(1);
+
 
   };
+
+  const handleScroll = useCallback(
+    (e: any) => {
+      const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+      const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+      if (distanceFromBottom < 200 && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage();
+      }
+    },
+    [hasNextPage, isFetchingNextPage, fetchNextPage]
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -214,25 +251,28 @@ export default function TopNumbers() {
     setSuperActive(true);
     setBoxActive(true);
     setSelectedDate(null);
-    setPage(1);
+    setFromTime("");
+
 
   };
 
   const formatCopyText = (item: InsightItem): string => {
-    const { number, type, sub_type, total_count, extra_count } = item;
+    const { number, type, sub_type, total_count, extra_count, count_before, count_after } = item;
+    const count = extra_count || total_count;
+    const timeSuffix = count_before != null ? ` (${count_before}|${count_after})` : "";
 
     // super = "number count"
     if (sub_type?.toUpperCase() === "SUPER") {
-      return `${number} ${extra_count || total_count}`;
+      return `${number} ${count}${timeSuffix}`;
     }
 
     // 3digit number = "number count subtype"
     if (type === "triple_digit") {
-      return `${number} ${extra_count || total_count} ${sub_type || ""}`.trim();
+      return `${number} ${count} ${sub_type || ""}${timeSuffix}`.trim();
     }
 
     // other = "subtype number count"
-    return `${sub_type || ""} ${number} ${extra_count || total_count}`.trim();
+    return `${sub_type || ""} ${number} ${count}${timeSuffix}`.trim();
   };
 
   const showToastMessage = (message: string) => {
@@ -306,7 +346,7 @@ export default function TopNumbers() {
     setCopyLoading(true);
     try {
       const res = await api.get("/draw-booking/top-numbers/all/", {
-        params: buildParams(false),
+        params: buildParams(),
       });
       const lines: string[] = res.data || [];
 
@@ -330,9 +370,11 @@ export default function TopNumbers() {
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 24 }}
+        onScroll={handleScroll}
+        scrollEventThrottle={400}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing || isFetching}
+            refreshing={refreshing || (isFetching && !isFetchingNextPage)}
             onRefresh={onRefresh}
             colors={["#6366f1"]}
             tintColor="#6366f1"
@@ -393,7 +435,7 @@ export default function TopNumbers() {
                             ? prev.filter((t) => t !== opt.value)
                             : [...prev, opt.value]
                         );
-                        setPage(1);
+
                       }}
                       style={{ width: 60 }}
                       className={`py-1.5 rounded-full border items-center ${isActive
@@ -421,7 +463,7 @@ export default function TopNumbers() {
                                 ? prev[opt.value].filter((s) => s !== st)
                                 : [...(prev[opt.value] || []), st],
                             }));
-                            setPage(1);
+    
                           }}
                           className={`px-2 py-1 rounded-full border ${isSubActive
                             ? "bg-indigo-100 border-indigo-400"
@@ -443,7 +485,7 @@ export default function TopNumbers() {
                         value={opt.min}
                         onChangeText={(txt) => {
                           opt.setMin(txt.replace(/[^0-9]/g, ""));
-                          setPage(1);
+  
                         }}
                         placeholder="Min"
                         keyboardType="numeric"
@@ -473,7 +515,7 @@ export default function TopNumbers() {
                 <TouchableOpacity
                   onPress={() => {
                     setSuperActive((prev) => !prev);
-                    setPage(1);
+
                   }}
                   style={{ width: 60 }}
                   className={`py-1.5 rounded-full border items-center ${superActive
@@ -489,7 +531,7 @@ export default function TopNumbers() {
                     value={minCountSuper}
                     onChangeText={(txt) => {
                       setMinCountSuper(txt.replace(/[^0-9]/g, ""));
-                      setPage(1);
+  
                     }}
                     placeholder="Min"
                     keyboardType="numeric"
@@ -517,7 +559,7 @@ export default function TopNumbers() {
                 <TouchableOpacity
                   onPress={() => {
                     setBoxActive((prev) => !prev);
-                    setPage(1);
+
                   }}
                   style={{ width: 60 }}
                   className={`py-1.5 rounded-full border items-center ${boxActive
@@ -533,7 +575,7 @@ export default function TopNumbers() {
                     value={minCountBox}
                     onChangeText={(txt) => {
                       setMinCountBox(txt.replace(/[^0-9]/g, ""));
-                      setPage(1);
+  
                     }}
                     placeholder="Min"
                     keyboardType="numeric"
@@ -573,7 +615,7 @@ export default function TopNumbers() {
                 onChange={(item: any) => {
                   setDealerId(item.value);
                   setExcludedDealerIds([]);
-                  setPage(1);
+              
 
                 }}
                 renderRightIcon={() =>
@@ -581,7 +623,7 @@ export default function TopNumbers() {
                     <TouchableOpacity
                       onPress={() => {
                         setDealerId("");
-                        setPage(1);
+
 
                       }}
                       style={{
@@ -640,7 +682,7 @@ export default function TopNumbers() {
                   <TouchableOpacity
                     onPress={() => {
                       setSelectedDate(null);
-                      setPage(1);
+  
 
                     }}
                     className="px-2 py-2 rounded-lg bg-red-50 border border-red-200"
@@ -653,6 +695,37 @@ export default function TopNumbers() {
             </View>
 
             <View className="flex-1">
+              <Text className="text-[11px] text-gray-500 mb-1">From Time</Text>
+              <View className="flex-row items-center gap-2">
+                <TouchableOpacity
+                  onPress={() => setShowTimePicker(true)}
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 flex-row justify-between items-center bg-white"
+                  activeOpacity={0.7}
+                >
+                  <Text className="text-xs text-gray-700">
+                    {fromTime || "Select time"}
+                  </Text>
+                  <Clock size={14} color="#6366f1" />
+                </TouchableOpacity>
+                {fromTime !== "" && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setFromTime("");
+  
+                    }}
+                    className="px-2 py-2 rounded-lg bg-red-50 border border-red-200"
+                    activeOpacity={0.7}
+                  >
+                    <Text className="text-xs font-semibold text-red-600">✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+
+          {/* Row: Min count */}
+          <View className="flex-row gap-3 mt-3">
+            <View className="flex-1">
               <Text className="text-[11px] text-gray-500 mb-1">
                 Min Count
               </Text>
@@ -661,7 +734,7 @@ export default function TopNumbers() {
                 onChangeText={(txt) => {
                   const clean = txt.replace(/[^0-9]/g, "");
                   setMinCount(clean);
-                  setPage(1);
+              
 
                 }}
                 placeholder="Global"
@@ -682,59 +755,8 @@ export default function TopNumbers() {
           </View>
 
 
-          {/* Row 4: Pagination */}
-          <View className="mt-3">
-            <Text className="text-[11px] text-gray-500 mb-1">Page</Text>
-            <View className="flex-row items-center justify-between bg-white border border-gray-200 rounded-full px-2 py-1.5">
-              <TouchableOpacity
-                disabled={page <= 1}
-                onPress={() => {
-                  setPage((p) => Math.max(1, p - 1));
 
-                }}
-                className={`px-2 py-1 rounded-full ${page <= 1 ? "bg-gray-100" : "bg-indigo-50"
-                  }`}
-                activeOpacity={0.8}
-              >
-                <Text
-                  className={`text-[11px] font-semibold ${page <= 1 ? "text-gray-400" : "text-indigo-600"
-                    }`}
-                >
-                  Prev
-                </Text>
-              </TouchableOpacity>
-              <Text className="text-[11px] text-gray-600">
-                {data?.page || page} / {data?.num_pages || "-"}
-              </Text>
-              <TouchableOpacity
-                disabled={
-                  !data?.num_pages || (data?.page || page) >= data.num_pages
-                }
-                onPress={() => {
-                  setPage((p) =>
-                    data?.num_pages ? Math.min(data.num_pages, p + 1) : p + 1
-                  );
 
-                }}
-                className={`px-2 py-1 rounded-full ${!data?.num_pages ||
-                  (data?.page || page) >= (data?.num_pages || 0)
-                  ? "bg-gray-100"
-                  : "bg-indigo-50"
-                  }`}
-                activeOpacity={0.8}
-              >
-                <Text
-                  className={`text-[11px] font-semibold ${!data?.num_pages ||
-                    (data?.page || page) >= (data?.num_pages || 0)
-                    ? "text-gray-400"
-                    : "text-indigo-600"
-                    }`}
-                >
-                  Next
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
 
           {/* Exclude dealers - Collapsible */}
           {dealers.length > 0 && !dealerId && (
@@ -860,10 +882,10 @@ export default function TopNumbers() {
                   Total Count
                 </Text>
                 <Text className="text-lg font-extrabold text-indigo-900">
-                  {data?.grand_total_count ?? 0}
+                  {lastPage?.grand_total_count ?? 0}
                 </Text>
                 <Text className="text-[10px] text-indigo-500 mt-1">
-                  Across {data?.total_items ?? 0} numbers
+                  Across {lastPage?.total_items ?? 0} numbers
                 </Text>
               </View>
               <View className="flex-1 bg-emerald-50 border border-emerald-100 rounded-2xl p-3">
@@ -871,7 +893,7 @@ export default function TopNumbers() {
                   Total Amount
                 </Text>
                 <Text className="text-lg font-extrabold text-emerald-900">
-                  ₹{data?.grand_total_amount ?? 0}
+                  ₹{lastPage?.grand_total_amount ?? 0}
                 </Text>
                 <Text className="text-[10px] text-emerald-500 mt-1">
                   Sum of all filtered bookings
@@ -881,42 +903,60 @@ export default function TopNumbers() {
 
             {/* Charts */}
             <View className="mx-4 mt-4">
-              <View className="bg-white border border-gray-200 rounded-2xl p-3 mb-3">
-                <Text className="text-xs font-semibold text-gray-800 mb-2">
-                  Top Numbers
-                </Text>
-                {topByCount.length === 0 ? (
-                  <Text className="text-[11px] text-gray-500">
-                    No data for selected filters.
+              <View className="bg-white border border-gray-200 rounded-2xl mb-3 overflow-hidden">
+                <TouchableOpacity
+                  onPress={() => setTopNumbersExpanded(!topNumbersExpanded)}
+                  className="flex-row items-center justify-between p-3"
+                  activeOpacity={0.7}
+                >
+                  <Text className="text-xs font-semibold text-gray-800">
+                    Top Numbers
                   </Text>
-                ) : (
-                  topByCount.map((item) => (
-                    <View key={`${item.number}-${item.sub_type}-count`} className="mb-2">
-                      <View className="flex-row justify-between mb-1">
-                        <Text className="text-[11px] text-gray-700">
-                          #{item.number}
-                          {item.sub_type ? ` (${item.sub_type})` : ""}
-                        </Text>
-                        <Text className="text-[11px] font-semibold text-gray-900">
-                          {item.total_count} {item?.extra_count && (item?.extra_count)}
-                        </Text>
-                      </View>
-                      <View className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                        <View
-                          className="h-3 rounded-full bg-indigo-500"
-                          style={{
-                            width: `${maxCount
-                              ? Math.max(
-                                6,
-                                (item.total_count / maxCount) * 100
-                              )
-                              : 0
-                              }%`,
-                          }}
-                        />
-                      </View>
-                    </View>
-                  ))
+                  {topNumbersExpanded ? (
+                    <ChevronUp size={16} color="#6b7280" />
+                  ) : (
+                    <ChevronDown size={16} color="#6b7280" />
+                  )}
+                </TouchableOpacity>
+                {topNumbersExpanded && (
+                  <View className="px-3 pb-3">
+                    {topByCount.length === 0 ? (
+                      <Text className="text-[11px] text-gray-500">
+                        No data for selected filters.
+                      </Text>
+                    ) : (
+                      topByCount.map((item) => (
+                        <View key={`${item.number}-${item.sub_type}-count`} className="mb-2">
+                          <View className="flex-row justify-between mb-1">
+                            <Text className="text-[11px] text-gray-700">
+                              #{item.number}
+                              {item.sub_type ? ` (${item.sub_type})` : ""}
+                            </Text>
+                            <Text className="text-[11px] font-semibold text-gray-900">
+                              {item.count_before != null
+                                ? `${item.count_before} | ${item.count_after} (${item.total_count})`
+                                : item.total_count}{" "}
+                              {item?.extra_count != null && item?.extra_count}
+                            </Text>
+                          </View>
+                          <View className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                            <View
+                              className="h-3 rounded-full bg-indigo-500"
+                              style={{
+                                width: `${maxCount
+                                  ? Math.max(
+                                    6,
+                                    (item.total_count / maxCount) * 100
+                                  )
+                                  : 0
+                                  }%`,
+                              }}
+                            />
+                          </View>
+                        </View>
+                      ))
+                    )}
+                  </View>
                 )}
               </View>
               {/* 
@@ -963,72 +1003,87 @@ export default function TopNumbers() {
 
             {/* Numbers table */}
             <View className="mx-4 mt-4 mb-6 bg-white border border-gray-200 rounded-2xl overflow-hidden">
-              <View className="flex-row items-center justify-between bg-gray-50 border-b border-gray-200 py-2 px-3">
-                <View className="flex-row flex-1">
-                  <Text className="flex-1 text-[11px] font-semibold text-gray-700">
-                    Number
-                  </Text>
-                  <Text className="w-14 text-[11px] font-semibold text-right text-gray-700">
-                    {/* Count */}
-                  </Text>
-                  <Text className="w-18 text-[11px] font-semibold text-right text-gray-700">
-                    {/* Amount */}
-                  </Text>
-                  <View className="w-10" />
-                </View>
-                {items.length > 0 && (
-                  <View className="flex-row items-center gap-2 ml-2">
-                    {selectedItems.size > 0 ? (
-                      <TouchableOpacity
-                        onPress={deselectAllItems}
-                        className="px-2 py-1.5 rounded-full bg-gray-200 active:bg-gray-300"
-                        activeOpacity={0.8}
-                      >
-                        <Text className="text-[10px] font-semibold text-gray-700">
-                          Clear ({selectedItems.size})
-                        </Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity
-                        onPress={selectAllItems}
-                        className="px-2 py-1.5 rounded-full bg-gray-200 active:bg-gray-300"
-                        activeOpacity={0.8}
-                      >
-                        <Text className="text-[10px] font-semibold text-gray-700">
-                          Select All
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                    {selectedItems.size > 0 && (
-                      <TouchableOpacity
-                        onPress={handleCopySelected}
-                        className="flex-row items-center px-3 py-1.5 rounded-full bg-emerald-600 active:bg-emerald-700"
-                        activeOpacity={0.8}
-                      >
-                        <Copy size={12} color="#fff" />
-                        <Text className="ml-1.5 text-[11px] font-semibold text-white">
-                          Copy ({selectedItems.size})
-                        </Text>
-                      </TouchableOpacity>
-                    )}
+              {/* Action buttons row */}
+              {items.length > 0 && (
+                <View className="flex-row items-center justify-end gap-2 bg-gray-50 border-b border-gray-200 py-2 px-3">
+                  {selectedItems.size > 0 ? (
                     <TouchableOpacity
-                      onPress={handleCopyAll}
-                      disabled={copyLoading}
-                      className="flex-row items-center px-3 py-1.5 rounded-full bg-indigo-600 active:bg-indigo-700"
+                      onPress={deselectAllItems}
+                      className="px-2 py-1.5 rounded-full bg-gray-200 active:bg-gray-300"
                       activeOpacity={0.8}
-                      style={copyLoading ? { opacity: 0.7 } : undefined}
                     >
-                      {copyLoading ? (
-                        <ActivityIndicator size={12} color="#fff" />
-                      ) : (
-                        <Copy size={12} color="#fff" />
-                      )}
-                      <Text className="ml-1.5 text-[11px] font-semibold text-white">
-                        {copyLoading ? "Copying..." : "Copy All"}
+                      <Text className="text-[10px] font-semibold text-gray-700">
+                        Clear ({selectedItems.size})
                       </Text>
                     </TouchableOpacity>
-                  </View>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={selectAllItems}
+                      className="px-2 py-1.5 rounded-full bg-gray-200 active:bg-gray-300"
+                      activeOpacity={0.8}
+                    >
+                      <Text className="text-[10px] font-semibold text-gray-700">
+                        Select All
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  {selectedItems.size > 0 && (
+                    <TouchableOpacity
+                      onPress={handleCopySelected}
+                      className="flex-row items-center px-3 py-1.5 rounded-full bg-emerald-600 active:bg-emerald-700"
+                      activeOpacity={0.8}
+                    >
+                      <Copy size={12} color="#fff" />
+                      <Text className="ml-1.5 text-[11px] font-semibold text-white">
+                        Copy ({selectedItems.size})
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    onPress={handleCopyAll}
+                    disabled={copyLoading}
+                    className="flex-row items-center px-3 py-1.5 rounded-full bg-indigo-600 active:bg-indigo-700"
+                    activeOpacity={0.8}
+                    style={copyLoading ? { opacity: 0.7 } : undefined}
+                  >
+                    {copyLoading ? (
+                      <ActivityIndicator size={12} color="#fff" />
+                    ) : (
+                      <Copy size={12} color="#fff" />
+                    )}
+                    <Text className="ml-1.5 text-[11px] font-semibold text-white">
+                      {copyLoading ? "Copying..." : "Copy All"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Column headings row */}
+              <View className="flex-row items-center bg-gray-50 border-b border-gray-200 py-2 px-3">
+                <View className="w-8" />
+                <Text className="flex-1 text-[11px] font-semibold text-gray-700">
+                  Number
+                </Text>
+                {fromTime ? (
+                  <>
+                    <Text className="w-14 text-[11px] font-semibold text-right text-orange-600">
+                      Before
+                    </Text>
+                    <Text className="w-14 text-[11px] font-semibold text-right text-green-700">
+                      After
+                    </Text>
+                    <Text className="w-14 text-[11px] font-semibold text-right text-gray-700">
+                      Total
+                    </Text>
+                  </>
+                ) : (
+                  <Text className="w-14 text-[11px] font-semibold text-right text-gray-700">
+                    Count
+                  </Text>
                 )}
+                <Text className="w-18 text-[11px] font-semibold text-right text-gray-700">
+                  Amount
+                </Text>
               </View>
 
               {items.length === 0 ? (
@@ -1083,14 +1138,28 @@ export default function TopNumbers() {
                           {item.sub_type ? ` • ${item.sub_type}` : ""}
                         </Text>
                       </View>
-                      {item?.extra_count &&
+                      {item?.extra_count != null &&
                         <Text className="w-14 text-[11px] text-right text-gray-800 ">
                           ({item?.extra_count})
                         </Text>
                       }
-                      <Text className="w-14 text-[11px] text-right text-gray-800 ">
-                        {item.total_count} &nbsp; &nbsp; &nbsp; &nbsp;
-                      </Text>
+                      {item.count_before != null ? (
+                        <>
+                          <Text className="w-14 text-[11px] text-right text-orange-600">
+                            {item.count_before} &nbsp;
+                          </Text>
+                          <Text className="w-14 text-[11px] text-right text-green-700 font-semibold">
+                            {item.count_after} &nbsp;
+                          </Text>
+                          <Text className="w-14 text-[11px] text-right text-gray-800">
+                            {item.total_count} &nbsp;
+                          </Text>
+                        </>
+                      ) : (
+                        <Text className="w-14 text-[11px] text-right text-gray-800 ">
+                          {item.total_count} &nbsp; &nbsp; &nbsp; &nbsp;
+                        </Text>
+                      )}
 
                       <Text className="w-18 text-[11px] text-right text-gray-800">
                         ₹{item.total_amount} &nbsp;
@@ -1100,51 +1169,11 @@ export default function TopNumbers() {
                 })
               )}
 
-              {!!data?.num_pages && data.num_pages > 1 && (
-                <View className="flex-row items-center justify-between px-3 py-2 bg-gray-50">
-                  <TouchableOpacity
-                    disabled={page <= 1}
-                    onPress={() => {
-                      setPage((p) => Math.max(1, p - 1));
-
-                    }}
-                    className={`px-3 py-1.5 rounded-full ${page <= 1 ? "bg-gray-100" : "bg-white border border-gray-300"
-                      }`}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      className={`text-[11px] font-semibold ${page <= 1 ? "text-gray-400" : "text-gray-700"
-                        }`}
-                    >
-                      Previous
-                    </Text>
-                  </TouchableOpacity>
-                  <Text className="text-[11px] text-gray-600">
-                    Page {data.page} of {data.num_pages}
-                  </Text>
-                  <TouchableOpacity
-                    disabled={data.page >= data.num_pages}
-                    onPress={() => {
-                      setPage((p) =>
-                        data?.num_pages ? Math.min(data.num_pages, p + 1) : p + 1
-                      );
-
-                    }}
-                    className={`px-3 py-1.5 rounded-full ${data.page >= data.num_pages
-                      ? "bg-gray-100"
-                      : "bg-white border border-gray-300"
-                      }`}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      className={`text-[11px] font-semibold ${data.page >= data.num_pages
-                        ? "text-gray-400"
-                        : "text-gray-700"
-                        }`}
-                    >
-                      Next
-                    </Text>
-                  </TouchableOpacity>
+              {/* Loading more indicator */}
+              {isFetchingNextPage && (
+                <View className="py-3 items-center">
+                  <ActivityIndicator size="small" color="#4f46e5" />
+                  <Text className="text-[10px] text-gray-500 mt-1">Loading more...</Text>
                 </View>
               )}
             </View>
@@ -1181,8 +1210,35 @@ export default function TopNumbers() {
             setShowDatePicker(false);
             if (event.type === "set" && date) {
               setSelectedDate(date);
-              setPage(1);
+          
 
+            }
+          }}
+        />
+      )}
+
+      {/* Time Picker */}
+      {showTimePicker && (
+        <DateTimePicker
+          value={(() => {
+            if (fromTime) {
+              const [h, m] = fromTime.split(":").map(Number);
+              const d = new Date();
+              d.setHours(h, m, 0, 0);
+              return d;
+            }
+            return new Date();
+          })()}
+          mode="time"
+          is24Hour={true}
+          display={Platform.OS === "android" ? "default" : "spinner"}
+          onChange={(event, date) => {
+            setShowTimePicker(false);
+            if (event.type === "set" && date) {
+              const hours = String(date.getHours()).padStart(2, "0");
+              const minutes = String(date.getMinutes()).padStart(2, "0");
+              setFromTime(`${hours}:${minutes}`);
+          
             }
           }}
         />
