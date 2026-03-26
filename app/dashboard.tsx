@@ -39,6 +39,7 @@ type DashboardSummary = {
   commission: number;
   winnings: number;
   profit: number;
+  dealer_pending?: number;
   total_dealer_pending?: number;
   total_paid_amount?: number;
   total_received_amount?: number;
@@ -63,7 +64,7 @@ type DashboardResponse = {
   draws: DrawItem[];
 };
 
-const DAY_OPTIONS = [7, 15, 30];
+const DAY_OPTIONS = [15, 30];
 
 type DealerBalance = {
   id: number;
@@ -457,10 +458,11 @@ const getDefaultCustomDates = () => {
 
 export default function AdminDashboard() {
   const { start: defaultStart, end: defaultEnd } = getDefaultCustomDates();
-  const [days, setDays] = useState<number>(7);
-  const [dateRangeMode, setDateRangeMode] = useState<"days" | "custom">("days");
-  const [startDate, setStartDate] = useState<Date>(defaultStart);
-  const [endDate, setEndDate] = useState<Date>(defaultEnd);
+  const [days, setDays] = useState<number>(15);
+  const [dateRangeMode, setDateRangeMode] = useState<"days" | "custom">("custom");
+  const [startDate, setStartDate] = useState<Date>(new Date());
+  const [endDate, setEndDate] = useState<Date>(new Date());
+  const [isTodayMode, setIsTodayMode] = useState(true);
   const [showDatePicker, setShowDatePicker] = useState<"from" | "to" | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showDealerList, setShowDealerList] = useState(false);
@@ -597,7 +599,7 @@ export default function AdminDashboard() {
             >
               <View className="flex-1 mr-3">
                 <Text className="text-[11px] text-emerald-700 font-semibold mb-1">
-                  Dealer pending amount
+                  Total Dealer Pending
                 </Text>
                 <Text className="text-xl font-extrabold text-emerald-900">
                   {formatAmount(summary.total_dealer_pending)}
@@ -641,14 +643,46 @@ export default function AdminDashboard() {
                 className="flex-row flex-wrap gap-2 p-1 rounded-xl"
                 style={{ backgroundColor: "#f1f5f9" }}
               >
+                {/* Today button */}
+                <TouchableOpacity
+                  onPress={() => {
+                    const today = new Date();
+                    setDateRangeMode("custom");
+                    setStartDate(today);
+                    setEndDate(today);
+                    setIsTodayMode(true);
+                  }}
+                  className="flex-1 min-w-[72px]"
+                  activeOpacity={0.75}
+                >
+                  <View
+                    className="py-2.5 rounded-lg items-center"
+                    style={{
+                      backgroundColor: isTodayMode ? "#4f46e5" : "transparent",
+                      shadowColor: isTodayMode ? "#4f46e5" : undefined,
+                      shadowOffset: isTodayMode ? { width: 0, height: 2 } : undefined,
+                      shadowOpacity: isTodayMode ? 0.25 : 0,
+                      shadowRadius: isTodayMode ? 4 : 0,
+                      elevation: isTodayMode ? 2 : 0,
+                    }}
+                  >
+                    <Text
+                      className={`text-xs font-bold ${isTodayMode ? "text-white" : "text-gray-600"}`}
+                    >
+                      Today
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
                 {DAY_OPTIONS.map((option) => {
-                  const active = dateRangeMode === "days" && option === days;
+                  const active = !isTodayMode && dateRangeMode === "days" && option === days;
                   return (
                     <TouchableOpacity
                       key={option}
                       onPress={() => {
                         setDateRangeMode("days");
                         setDays(option);
+                        setIsTodayMode(false);
                       }}
                       className="flex-1 min-w-[72px]"
                       activeOpacity={0.75}
@@ -675,33 +709,40 @@ export default function AdminDashboard() {
                   );
                 })}
                 <TouchableOpacity
-                  onPress={() => setDateRangeMode("custom")}
+                  onPress={() => {
+                    setDateRangeMode("custom");
+                    setIsTodayMode(false);
+                  }}
                   className="flex-1 min-w-[72px]"
                   activeOpacity={0.75}
                 >
-                  <View
-                    className="py-2.5 rounded-lg flex-row items-center justify-center gap-1.5"
-                    style={{
-                      backgroundColor: dateRangeMode === "custom" ? "#4f46e5" : "transparent",
-                      shadowColor: dateRangeMode === "custom" ? "#4f46e5" : undefined,
-                      shadowOffset: dateRangeMode === "custom" ? { width: 0, height: 2 } : undefined,
-                      shadowOpacity: dateRangeMode === "custom" ? 0.25 : 0,
-                      shadowRadius: dateRangeMode === "custom" ? 4 : 0,
-                      elevation: dateRangeMode === "custom" ? 2 : 0,
-                    }}
-                  >
-                    <Calendar size={13} color={dateRangeMode === "custom" ? "#fff" : "#64748b"} />
-                    <Text
-                      className={`text-xs font-bold ${dateRangeMode === "custom" ? "text-white" : "text-gray-600"
-                        }`}
-                    >
-                      Custom
-                    </Text>
-                  </View>
+                  {(() => {
+                    const customActive = dateRangeMode === "custom" && !isTodayMode;
+                    return (
+                      <View
+                        className="py-2.5 rounded-lg flex-row items-center justify-center gap-1.5"
+                        style={{
+                          backgroundColor: customActive ? "#4f46e5" : "transparent",
+                          shadowColor: customActive ? "#4f46e5" : undefined,
+                          shadowOffset: customActive ? { width: 0, height: 2 } : undefined,
+                          shadowOpacity: customActive ? 0.25 : 0,
+                          shadowRadius: customActive ? 4 : 0,
+                          elevation: customActive ? 2 : 0,
+                        }}
+                      >
+                        <Calendar size={13} color={customActive ? "#fff" : "#64748b"} />
+                        <Text
+                          className={`text-xs font-bold ${customActive ? "text-white" : "text-gray-600"}`}
+                        >
+                          Custom
+                        </Text>
+                      </View>
+                    );
+                  })()}
                 </TouchableOpacity>
               </View>
 
-              {dateRangeMode === "custom" ? (
+              {dateRangeMode === "custom" && !isTodayMode ? (
                 <View className="mt-3 flex-row items-stretch gap-2">
                   <TouchableOpacity
                     onPress={() => setShowDatePicker("from")}
@@ -771,7 +812,7 @@ export default function AdminDashboard() {
                 </View>
               ) : (
                 <Text className="text-xs text-gray-500 mt-2.5 font-medium">
-                  Showing data for the last {days} days
+                  {isTodayMode ? "Showing data for today" : `Showing data for the last ${days} days`}
                 </Text>
               )}
             </View>
@@ -883,6 +924,23 @@ export default function AdminDashboard() {
               </View>
             </View>
 
+            {/* Dealer Pending (date-range scoped) */}
+            {summary?.dealer_pending != null && (
+              <View className="mx-4 mt-3 flex-row gap-3">
+                <View className="flex-1 bg-orange-50 border border-orange-100 rounded-2xl p-3">
+                  <View className="flex-row items-center justify-between mb-1">
+                    <Text className="text-[11px] text-orange-700">Dealer Pending</Text>
+                    <Wallet size={14} color="#c2410c" />
+                  </View>
+                  <Text className="text-lg font-extrabold text-orange-900">
+                    {formatAmount(summary.dealer_pending)}
+                  </Text>
+                  <Text className="text-[10px] text-orange-500 mt-1">
+                    Pending for selected date range
+                  </Text>
+                </View>
+              </View>
+            )}
 
             {/* Draw breakdown */}
             <View className="mx-4 mt-4 mb-6 bg-white border border-gray-200 rounded-2xl p-4">
