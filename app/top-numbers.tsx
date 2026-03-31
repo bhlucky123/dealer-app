@@ -4,7 +4,7 @@ import api from "@/utils/axios";
 import { formatDateDDMMYYYY } from "@/utils/date";
 import Clipboard from "@react-native-clipboard/clipboard";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { BarChart3, Calendar, ChevronDown, ChevronUp, Clock, Copy, Filter } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -463,7 +463,7 @@ export default function TopNumbers() {
                                 ? prev[opt.value].filter((s) => s !== st)
                                 : [...(prev[opt.value] || []), st],
                             }));
-    
+
                           }}
                           className={`px-2 py-1 rounded-full border ${isSubActive
                             ? "bg-indigo-100 border-indigo-400"
@@ -485,7 +485,7 @@ export default function TopNumbers() {
                         value={opt.min}
                         onChangeText={(txt) => {
                           opt.setMin(txt.replace(/[^0-9]/g, ""));
-  
+
                         }}
                         placeholder="Min"
                         keyboardType="numeric"
@@ -531,7 +531,7 @@ export default function TopNumbers() {
                     value={minCountSuper}
                     onChangeText={(txt) => {
                       setMinCountSuper(txt.replace(/[^0-9]/g, ""));
-  
+
                     }}
                     placeholder="Min"
                     keyboardType="numeric"
@@ -575,7 +575,7 @@ export default function TopNumbers() {
                     value={minCountBox}
                     onChangeText={(txt) => {
                       setMinCountBox(txt.replace(/[^0-9]/g, ""));
-  
+
                     }}
                     placeholder="Min"
                     keyboardType="numeric"
@@ -615,7 +615,7 @@ export default function TopNumbers() {
                 onChange={(item: any) => {
                   setDealerId(item.value);
                   setExcludedDealerIds([]);
-              
+
 
                 }}
                 renderRightIcon={() =>
@@ -682,7 +682,7 @@ export default function TopNumbers() {
                   <TouchableOpacity
                     onPress={() => {
                       setSelectedDate(null);
-  
+
 
                     }}
                     className="px-2 py-2 rounded-lg bg-red-50 border border-red-200"
@@ -711,7 +711,7 @@ export default function TopNumbers() {
                   <TouchableOpacity
                     onPress={() => {
                       setFromTime("");
-  
+
                     }}
                     className="px-2 py-2 rounded-lg bg-red-50 border border-red-200"
                     activeOpacity={0.7}
@@ -734,7 +734,7 @@ export default function TopNumbers() {
                 onChangeText={(txt) => {
                   const clean = txt.replace(/[^0-9]/g, "");
                   setMinCount(clean);
-              
+
 
                 }}
                 placeholder="Global"
@@ -1210,7 +1210,7 @@ export default function TopNumbers() {
             setShowDatePicker(false);
             if (event.type === "set" && date) {
               setSelectedDate(date);
-          
+
 
             }
           }}
@@ -1238,7 +1238,7 @@ export default function TopNumbers() {
               const hours = String(date.getHours()).padStart(2, "0");
               const minutes = String(date.getMinutes()).padStart(2, "0");
               setFromTime(`${hours}:${minutes}`);
-          
+
             }
           }}
         />
