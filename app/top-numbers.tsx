@@ -341,6 +341,7 @@ export default function TopNumbers() {
   };
 
   const [copyLoading, setCopyLoading] = useState(false);
+  const [copyAfterLoading, setCopyAfterLoading] = useState(false);
 
   const handleCopyAll = async () => {
     setCopyLoading(true);
@@ -362,6 +363,29 @@ export default function TopNumbers() {
       showToastMessage("Failed to copy");
     } finally {
       setCopyLoading(false);
+    }
+  };
+
+  const handleCopyAfter = async () => {
+    setCopyAfterLoading(true);
+    try {
+      const res = await api.get("/draw-booking/top-numbers/all-after/", {
+        params: buildParams(),
+      });
+      const lines: string[] = res.data || [];
+
+      if (lines.length === 0) {
+        showToastMessage("No after-time items to copy");
+        return;
+      }
+
+      const text = lines.join("\n");
+      Clipboard.setString(text);
+      showToastMessage(`Copied ${lines.length} after-time item${lines.length > 1 ? "s" : ""}`);
+    } catch (err) {
+      showToastMessage("Failed to copy");
+    } finally {
+      setCopyAfterLoading(false);
     }
   };
 
@@ -1055,6 +1079,24 @@ export default function TopNumbers() {
                       {copyLoading ? "Copying..." : "Copy All"}
                     </Text>
                   </TouchableOpacity>
+                  {fromTime ? (
+                    <TouchableOpacity
+                      onPress={handleCopyAfter}
+                      disabled={copyAfterLoading}
+                      className="flex-row items-center px-3 py-1.5 rounded-full bg-green-600 active:bg-green-700"
+                      activeOpacity={0.8}
+                      style={copyAfterLoading ? { opacity: 0.7 } : undefined}
+                    >
+                      {copyAfterLoading ? (
+                        <ActivityIndicator size={12} color="#fff" />
+                      ) : (
+                        <Copy size={12} color="#fff" />
+                      )}
+                      <Text className="ml-1.5 text-[11px] font-semibold text-white">
+                        {copyAfterLoading ? "Copying..." : "Copy After"}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               )}
 

@@ -4,6 +4,7 @@ import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 const Calculator = () => {
   const {
     display,
+    expression,
     handleNumberInput,
     handleOperator,
     handleClear,
@@ -31,6 +32,11 @@ const Calculator = () => {
       )}
 
       <View className="mb-6">
+        {expression ? (
+          <Text className="text-gray-400 text-right text-2xl mb-1">
+            {expression}
+          </Text>
+        ) : null}
         <Text className="text-white text-right text-5xl font-bold">
           {display || pinInput}
         </Text>

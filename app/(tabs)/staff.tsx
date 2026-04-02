@@ -54,6 +54,8 @@ const StaffForm = ({
     const [form, setForm] = useState({
         username: defaultValues.username || "",
         password: "", // Always start with an empty password for security
+        calculate_str: (defaultValues as any).calculate_str || "",
+        secret_pin: (defaultValues as any).secret_pin || "",
         is_active: defaultValues.is_active ?? true,
     });
 
@@ -72,6 +74,12 @@ const StaffForm = ({
         // Password is only required for new creations
         if (!defaultValues?.id && !form.password.trim())
             newErrors.password = "Password is required";
+        if (!form.calculate_str.trim())
+            newErrors.calculate_str = "Calculate string is required";
+        if (!form.secret_pin.toString().trim())
+            newErrors.secret_pin = "Secret pin is required";
+        else if (isNaN(Number(form.secret_pin)))
+            newErrors.secret_pin = "Secret pin must be a number";
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -87,15 +95,15 @@ const StaffForm = ({
             return
         }
 
-        const preparedData: Partial<Staff> = {
+        const preparedData: any = {
             ...form,
+            secret_pin: Number(form.secret_pin),
         };
 
         // Only include password if it's set (for new creation or explicit update)
         if (form.password.trim() !== "") {
             preparedData.password = form.password;
         } else if (defaultValues.id) {
-            // If it's an edit and password is empty, ensure it's not sent to avoid accidental overwrite
             delete preparedData.password;
         }
 
@@ -104,7 +112,9 @@ const StaffForm = ({
 
     const inputFields = [
         { key: "username", label: "Username", keyboardType: "default" as const, secureTextEntry: false, icon: "👤" },
-        { key: "password", label: "Password", keyboardType: "default" as const, secureTextEntry: true, optional: !!defaultValues?.id, icon: "🔒" }, // Optional for edit
+        { key: "password", label: "Password", keyboardType: "default" as const, secureTextEntry: true, optional: !!defaultValues?.id, icon: "🔒" },
+        { key: "calculate_str", label: "Calculate String", keyboardType: "default" as const, secureTextEntry: false, icon: "🧮" },
+        { key: "secret_pin", label: "Secret Pin", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🔑" },
     ];
 
     return (

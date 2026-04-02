@@ -88,7 +88,7 @@ api.interceptors.response.use(
       }
 
       if (status === 401) {
-        router.push("/login")
+        router.push("/")
         return
       }
       return Promise.reject({ status: status || 500, message: data || "something went wrong" });
