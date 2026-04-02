@@ -1,4 +1,4 @@
-import { config } from "@/utils/config";
+import { config, UserType } from "@/utils/config";
 import { router } from "expo-router";
 import { create } from "zustand";
 
@@ -17,52 +17,59 @@ interface AuthState {
   token: string | null;
   loading: boolean;
   error: string | null;
+  preLoginToken: string | null;
+  preLoginUserType: UserType | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   setUser: (user: User | null) => void;
+  setPreLogin: (token: string, userType: UserType) => void;
   application_status: boolean;
   setApplicationStatus: (status: boolean) => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => {
+const LOGIN_URLS: Record<UserType, string> = {
+  ADMIN: `${config.apiBaseUrl}/administrator/login/`,
+  DEALER: `${config.apiBaseUrl}/dealer/login/`,
+  AGENT: `${config.apiBaseUrl}/agent/login/`,
+};
+
+export const useAuthStore = create<AuthState>((set, get) => {
   return {
     user: null,
     token: null,
     loading: false,
     error: null,
+    preLoginToken: null,
+    preLoginUserType: null,
     application_status: true,
 
+    setPreLogin: (token, userType) => set({ preLoginToken: token, preLoginUserType: userType }),
+
     login: async (username, password) => {
+      const { preLoginToken, preLoginUserType } = get();
+
+      if (!preLoginToken || !preLoginUserType) {
+        set({ error: "Session expired. Please verify again.", loading: false });
+        setTimeout(() => set({ error: "" }), 3000);
+        return;
+      }
+
       set({ loading: true, error: null });
       try {
-        // Determine login endpoint and user-type header based on config.userType
-        let loginUrl = "";
-        let userTypeHeader = config.userType;
+        const loginUrl = LOGIN_URLS[preLoginUserType];
 
-        switch (config.userType) {
-          case "ADMIN":
-            loginUrl = `${config.apiBaseUrl}/administrator/login/`;
-            break;
-          case "AGENT":
-            loginUrl = `${config.apiBaseUrl}/agent/login/`;
-            break;
-          case "DEALER":
-          default:
-            loginUrl = `${config.apiBaseUrl}/dealer/login/`;
-            break;
-        }
-
-        const response = await fetch(
-          loginUrl,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "User-Type": userTypeHeader,
-            },
-            body: JSON.stringify({ username, password }),
-          }
-        );
+        const response = await fetch(loginUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Type": preLoginUserType,
+          },
+          body: JSON.stringify({
+            username,
+            password,
+            pre_login_token: preLoginToken,
+          }),
+        });
 
         if (!response.ok) {
           let errorMsg = `Login failed: ${response.status}`;
@@ -75,9 +82,10 @@ export const useAuthStore = create<AuthState>((set) => {
               // Not JSON, fallback to text
             }
             if (parsed && typeof parsed === "object") {
-              // Handle DRF-style error: {"non_field_errors":["Invalid username or password."]}
               if (parsed.non_field_errors && Array.isArray(parsed.non_field_errors) && parsed.non_field_errors.length > 0) {
                 errorMsg = parsed.non_field_errors[0];
+              } else if (parsed.error) {
+                errorMsg = parsed.error;
               } else if (parsed.detail) {
                 errorMsg = parsed.detail;
               } else {
@@ -90,12 +98,16 @@ export const useAuthStore = create<AuthState>((set) => {
             // fallback to default errorMsg
           }
 
+          // If token expired/invalid, clear pre-login state so user goes back to calculator
+          if (errorMsg.includes("token")) {
+            set({ preLoginToken: null, preLoginUserType: null });
+          }
+
           set({
             error: errorMsg,
             loading: false,
           });
 
-          // Clear error after 3 seconds
           setTimeout(() => {
             set({ error: "" });
           }, 3000);
@@ -104,20 +116,19 @@ export const useAuthStore = create<AuthState>((set) => {
         }
 
         const data = await response.json();
-        if (config.userType !== data?.user_details?.user_type) {
-          router.push("/login")
-        }
         console.log("data", data);
         set({
           user: {
             id: data.user_details?.user_id,
-            user_type: config.userType,
+            user_type: preLoginUserType,
             superuser: data?.user_details?.superuser || false,
             ...data?.user_details
           },
           token: data.access,
           loading: false,
           error: null,
+          preLoginToken: null,
+          preLoginUserType: null,
         });
         router.push("/(tabs)");
       } catch (err: any) {
@@ -127,7 +138,7 @@ export const useAuthStore = create<AuthState>((set) => {
     },
 
     logout: () => {
-      set({ user: null, token: null });
+      set({ user: null, token: null, preLoginToken: null, preLoginUserType: null });
     },
 
     setUser: (user) => set({ user }),

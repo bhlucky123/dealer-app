@@ -1,4 +1,4 @@
-name: Build Android APKs
+name: Build Android APK
 
 on:
   push:
@@ -9,57 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  setup:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Determine which builds to run
-        id: set-matrix
-        run: |
-          # Get commit message safely — falls back to empty string if unavailable
-          MSG="${{ github.event.head_commit.message }}"
-          if [ -z "$MSG" ]; then
-            # Fallback: get message from git log (handles PR merges, etc.)
-            MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
-          fi
-          MSG=$(echo "$MSG" | tr '[:upper:]' '[:lower:]')
-          echo "Commit message: $MSG"
-
-          ADMIN='{"user_type":"ADMIN","slug":"admin","scheme":"admin","package":"com.luckybh.admin","icon":"admin-appicon.png"}'
-          DEALER='{"user_type":"DEALER","slug":"dealer","scheme":"dealer","package":"com.luckybh.dealer","icon":"dealer-appicon.png"}'
-          AGENT='{"user_type":"AGENT","slug":"agent","scheme":"agent","package":"com.luckybh.agent","icon":"agent-appicon.png"}'
-
-          HAS_ADMIN=$(echo "$MSG" | grep -c "#admin" || true)
-          HAS_DEALER=$(echo "$MSG" | grep -c "#dealer" || true)
-          HAS_AGENT=$(echo "$MSG" | grep -c "#agent" || true)
-
-          ENTRIES=""
-          if [ "$HAS_ADMIN" -gt 0 ]; then ENTRIES="$ADMIN"; fi
-          if [ "$HAS_DEALER" -gt 0 ]; then [ -n "$ENTRIES" ] && ENTRIES="$ENTRIES,"; ENTRIES="${ENTRIES}${DEALER}"; fi
-          if [ "$HAS_AGENT" -gt 0 ]; then [ -n "$ENTRIES" ] && ENTRIES="$ENTRIES,"; ENTRIES="${ENTRIES}${AGENT}"; fi
-
-          # No hashtags = build all 3
-          if [ -z "$ENTRIES" ]; then
-            ENTRIES="$ADMIN,$DEALER,$AGENT"
-          fi
-
-          MATRIX="{\"include\":[$ENTRIES]}"
-          echo "Generated matrix: $MATRIX"
-          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
-
   build:
     runs-on: ubuntu-latest
-    needs: setup
-    name: ${{ matrix.user_type }} Build
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
 
     steps:
       - name: Checkout repository
@@ -80,19 +31,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Set userType to ${{ matrix.user_type }}
-        run: |
-          sed -i 's/userType: "[A-Z]*"/userType: "${{ matrix.user_type }}"/' utils/config.ts
-
-      - name: Configure app.json for ${{ matrix.user_type }}
-        run: |
-          jq '.expo.slug = "${{ matrix.slug }}" |
-              .expo.scheme = "${{ matrix.scheme }}" |
-              .expo.android.package = "${{ matrix.package }}" |
-              .expo.android.icon = "./assets/images/${{ matrix.icon }}" |
-              .expo.icon = "./assets/images/${{ matrix.icon }}"' app.json > app.json.tmp
-          mv app.json.tmp app.json
-
       - name: Expo prebuild
         run: npx expo prebuild --platform android --clean
 
@@ -105,14 +43,13 @@ jobs:
       - name: Rename APK
         run: |
           APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
-          LOWER_TYPE=$(echo "${{ matrix.user_type }}" | tr '[:upper:]' '[:lower:]')
-          cp "$APK_PATH" "${LOWER_TYPE}-app.apk"
+          cp "$APK_PATH" "calculator-app.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.user_type }}-apk
-          path: "*-app.apk"
+          name: calculator-apk
+          path: "calculator-app.apk"
           retention-days: 5
 
   release:
@@ -121,7 +58,7 @@ jobs:
     if: needs.build.result == 'success'
 
     steps:
-      - name: Download all APK artifacts
+      - name: Download APK artifact
         uses: actions/download-artifact@v4
         with:
           path: apks
@@ -133,7 +70,7 @@ jobs:
           echo "RELEASE_TAG=build-${TIMESTAMP}" >> $GITHUB_ENV
           echo "TIMESTAMP=${TIMESTAMP}" >> $GITHUB_ENV
 
-      - name: Rename APKs with timestamp
+      - name: Rename APK with timestamp
         run: |
           cd apks
           for f in *.apk; do
@@ -142,7 +79,7 @@ jobs:
           done
           ls -la
 
-      - name: Upload APKs to GoFile
+      - name: Upload APK to GoFile
         id: gofile-upload
         continue-on-error: true
         run: |
@@ -171,7 +108,6 @@ jobs:
               echo "Uploading ${name} (attempt $attempt)..."
               RESPONSE=$(curl -s --max-time 120 -F "file=@${f}" "https://${SERVER}.gofile.io/uploadFile" 2>/dev/null || true)
 
-              # Validate response is JSON before parsing
               if echo "$RESPONSE" | jq -e '.status' >/dev/null 2>&1; then
                 STATUS=$(echo "$RESPONSE" | jq -r '.status')
                 if [ "$STATUS" = "ok" ]; then
@@ -218,7 +154,7 @@ jobs:
           echo "$GH_ROWS" >> $GITHUB_OUTPUT
           echo "GHEOF" >> $GITHUB_OUTPUT
 
-      - name: Create Release with APKs
+      - name: Create Release with APK
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
@@ -236,7 +172,7 @@ jobs:
           secure: true
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          subject: "Android Build Complete - APKs Ready"
+          subject: "Android Build Complete - APK Ready"
           to: ${{ secrets.MAIL_TO }}
           from: ${{ secrets.MAIL_USERNAME }}
           html_body: |
@@ -244,7 +180,7 @@ jobs:
               <div style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
                 <div style="background:linear-gradient(135deg,#059669,#10b981);padding:28px 24px;text-align:center;">
                   <h1 style="color:#fff;margin:0;font-size:22px;font-weight:800;">Build Successful</h1>
-                  <p style="color:#a7f3d0;margin:8px 0 0;font-size:13px;">Public download links — no GitHub account needed</p>
+                  <p style="color:#a7f3d0;margin:8px 0 0;font-size:13px;">Public download link — no GitHub account needed</p>
                 </div>
                 <div style="padding:20px 24px;">
                   <table style="width:100%;margin-bottom:8px;" cellpadding="0" cellspacing="0">
@@ -267,8 +203,8 @@ jobs:
                   </div>
                 </div>
                 <div style="padding:0 24px 20px;">
-                  <h3 style="margin:0 0 4px;font-size:16px;color:#1e293b;font-weight:700;">Download APKs</h3>
-                  <p style="margin:0 0 12px;font-size:12px;color:#059669;font-weight:600;">Public links via GoFile — no login required</p>
+                  <h3 style="margin:0 0 4px;font-size:16px;color:#1e293b;font-weight:700;">Download APK</h3>
+                  <p style="margin:0 0 12px;font-size:12px;color:#059669;font-weight:600;">Public link via GoFile — no login required</p>
                   <table style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:12px;overflow:hidden;" cellpadding="0" cellspacing="0">
                     ${{ steps.gofile-upload.outputs.gofile_rows }}
                   </table>
@@ -280,14 +216,14 @@ jobs:
                   </div>
                 </div>
                 <div style="padding:0 24px 20px;">
-                  <h3 style="margin:0 0 4px;font-size:14px;color:#94a3b8;font-weight:600;">GitHub Release Links</h3>
+                  <h3 style="margin:0 0 4px;font-size:14px;color:#94a3b8;font-weight:600;">GitHub Release Link</h3>
                   <p style="margin:0 0 10px;font-size:11px;color:#94a3b8;">Requires GitHub login</p>
                   <table style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:10px;overflow:hidden;" cellpadding="0" cellspacing="0">
                     ${{ steps.gh-links.outputs.gh_rows }}
                   </table>
                 </div>
                 <div style="padding:0 24px 24px;text-align:center;">
-                  <a href="mailto:?subject=APK%20Download%20Links&body=${{ steps.gofile-upload.outputs.gofile_copy_encoded }}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;margin-right:8px;">Forward All Links</a>
+                  <a href="mailto:?subject=APK%20Download%20Link&body=${{ steps.gofile-upload.outputs.gofile_copy_encoded }}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;margin-right:8px;">Forward Link</a>
                   <a href="https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }}" style="display:inline-block;background:#0f172a;color:#fff;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;">View Release</a>
                 </div>
               </div>

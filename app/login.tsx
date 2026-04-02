@@ -1,5 +1,4 @@
 import { useAuthStore } from "@/store/auth";
-import { config } from "@/utils/config";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -18,7 +17,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
-  const { login, loading, error } = useAuthStore();
+  const { login, loading, error, preLoginUserType } = useAuthStore();
 
   const handleLogin = () => {
     setErrorMsg("");
@@ -40,7 +39,7 @@ export default function LoginScreen() {
           <View className="w-full max-w-sm bg-white/90 rounded-2xl shadow-lg p-8 space-y-6">
             <View className="items-center mb-2">
               <Text className="text-blue-900 text-3xl font-extrabold tracking-wide mb-1 capitalize">
-                {config.userType?.toLocaleLowerCase()} Login
+                {preLoginUserType ? `${preLoginUserType.toLowerCase()} Login` : "Login"}
               </Text>
               <Text className="text-gray-500 text-base font-medium">
                 Welcome back! Please sign in.

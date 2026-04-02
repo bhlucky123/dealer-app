@@ -1,7 +1,7 @@
 import { useAuthStore } from "@/store/auth";
 import api from "@/utils/axios";
 import { useFocusEffect } from "@react-navigation/native";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
@@ -376,7 +376,8 @@ function AdminCredentialsBlock() {
 
 // --- Main Screen Component ---
 export default function MoreTab() {
-  const { setApplicationStatus, application_status, user } = useAuthStore();
+  const { setApplicationStatus, application_status, user, logout } = useAuthStore();
+  const queryClient = useQueryClient();
 
   const [localStatus, setLocalStatus] = useState<boolean | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
@@ -1149,6 +1150,45 @@ export default function MoreTab() {
             <Ionicons name="image-outline" size={22} color="#fff" />
             <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>
               Image Extract
+            </Text>
+          </TouchableOpacity>
+
+          {/* Logout Button */}
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert("Logout", "Are you sure you want to logout?", [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Logout",
+                  style: "destructive",
+                  onPress: () => {
+                    queryClient.clear();
+                    logout();
+                    setTimeout(() => {
+                      router.replace("/index");
+                    }, 100);
+                  },
+                },
+              ]);
+            }}
+            style={{
+              width: "100%",
+              borderRadius: 16,
+              padding: 16,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              marginTop: 24,
+              marginBottom: 100,
+              gap: 10,
+              borderWidth: 1.5,
+              borderColor: "#fca5a5",
+              backgroundColor: "#fef2f2",
+            }}
+          >
+            <Ionicons name="log-out-outline" size={20} color="#dc2626" />
+            <Text style={{ color: "#dc2626", fontWeight: "700", fontSize: 15 }}>
+              Logout
             </Text>
           </TouchableOpacity>
         </View>
