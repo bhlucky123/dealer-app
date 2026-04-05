@@ -30,9 +30,10 @@ const getTomorrow = () => {
 
 const LastSaleReportScreen = () => {
     const { selectedDraw } = useDrawStore();
-    const { user } = useAuthStore();
+    const { user, hasFeature } = useAuthStore();
     const router = useRouter();
     const queryClient = useQueryClient();
+    const canDeleteBooking = hasFeature("delete_booking");
 
     // Delete booking state
     const [deleteBookingLoading, setDeleteBookingLoading] = React.useState(false);
@@ -140,7 +141,7 @@ const LastSaleReportScreen = () => {
                     <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">
                         ₹{amountHandler(Number(item.total_booking_amount))}
                     </Text>
-                    {(user?.user_type !== "ADMIN" || user?.superuser) && (
+                    {canDeleteBooking && (user?.user_type !== "ADMIN" || user?.superuser) && (
                         <View className="w-4 items-end ml-1">
                             <Pressable
                                 onPress={(e) => {

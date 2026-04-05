@@ -67,12 +67,18 @@ const useDraw = () => {
       ...rest
     }: {
       draw_session: number;
-      first_prize: string;
+      first_prize?: string;
       second_prize?: string;
       third_prize?: string;
       fourth_prize?: string;
       fifth_prize?: string;
       complementary_prizes?: string[];
+      kl_first_prize_numbers?: string[];
+      kl_second_prize_numbers?: string[];
+      kl_third_prize_numbers?: string[];
+      kl_fourth_prize_numbers?: string[];
+      kl_fifth_prize_numbers?: string[];
+      kl_sixth_prize_numbers?: string[];
     }) => {
       try {
         console.log("payload", rest);
@@ -96,12 +102,18 @@ const useDraw = () => {
       ...rest
     }: {
       id: number;
-      first_prize: string;
+      first_prize?: string;
       second_prize?: string;
       third_prize?: string;
       fourth_prize?: string;
       fifth_prize?: string;
       complementary_prizes?: string[];
+      kl_first_prize_numbers?: string[];
+      kl_second_prize_numbers?: string[];
+      kl_third_prize_numbers?: string[];
+      kl_fourth_prize_numbers?: string[];
+      kl_fifth_prize_numbers?: string[];
+      kl_sixth_prize_numbers?: string[];
     }) => {
       try {
         const res = await api.patch(`/draw-result/result/${id}/`, rest);

@@ -40,17 +40,62 @@ export type DrawResult = {
     fifth_prize: string;
     draw_time: string; // eg: "15:05:00",
     complementary_prizes: string[];
+    kl_first_prize_numbers: string[];
+    kl_second_prize_numbers: string[];
+    kl_third_prize_numbers: string[];
+    kl_fourth_prize_numbers: string[];
+    kl_fifth_prize_numbers: string[];
+    kl_sixth_prize_numbers: string[];
 };
 
 function isThreeDigitNumber(str: string) {
     return /^\d{3}$/.test(str);
 }
 
+function isFourDigitNumber(str: string) {
+    return /^\d{4}$/.test(str);
+}
+
+const KL_FIELDS = [
+    "kl_first_prize_numbers",
+    "kl_second_prize_numbers",
+    "kl_third_prize_numbers",
+    "kl_fourth_prize_numbers",
+    "kl_fifth_prize_numbers",
+    "kl_sixth_prize_numbers",
+] as const;
+
+const KL_LABELS = ["1st", "2nd", "3rd", "4th", "5th", "6th"];
+
 function validateDrawResultFields(data: Partial<DrawResult> & { complementary_prizes?: string[] }, drawType?: string) {
     // Tamil Nadu: only first_prize is required
     if (drawType === "tamil_nadu") {
         if (!data.first_prize || typeof data.first_prize !== "string" || !isThreeDigitNumber(data.first_prize)) {
             return "Please enter a valid 3-digit number for First Prize.";
+        }
+        return null;
+    }
+
+    // Kerala: validate kl_*_prize_numbers fields
+    if (drawType === "kerala") {
+        let anyEntered = false;
+        for (let i = 0; i < KL_FIELDS.length; i++) {
+            const field = KL_FIELDS[i];
+            const numbers = (data as any)[field];
+            if (Array.isArray(numbers)) {
+                for (let j = 0; j < numbers.length; j++) {
+                    const val = numbers[j]?.trim?.() || "";
+                    if (val) {
+                        anyEntered = true;
+                        if (!isFourDigitNumber(val)) {
+                            return `${KL_LABELS[i]} Prize, number ${j + 1} must be exactly 4 digits.`;
+                        }
+                    }
+                }
+            }
+        }
+        if (!anyEntered) {
+            return "Please enter at least one winning number.";
         }
         return null;
     }
@@ -128,6 +173,7 @@ const ResultPage: React.FC = () => {
     const { selectedDraw } = useDrawStore();
     const drawType = selectedDraw?.type || "default";
     const isTamilNadu = drawType === "tamil_nadu";
+    const isKerala = drawType === "kerala";
 
     const [mode, setMode] = useState<"view" | "edit">("view");
     const [formData, setFormData] = useState<Partial<DrawResult> | null>(null);
@@ -135,7 +181,8 @@ const ResultPage: React.FC = () => {
     const [filterDate, setFilterDate] = useState<Date>(new Date());
     const [formError, setFormError] = useState<string | null>(null);
 
-    const { user } = useAuthStore();
+    const { user, hasFeature } = useAuthStore();
+    const canPublishResult = hasFeature("publish_result");
 
     const resultViewRef = useRef<any>(null);
 
@@ -237,6 +284,39 @@ const ResultPage: React.FC = () => {
         }
 
         setLoading(true)
+        // For Kerala, only send kl_*_prize_numbers fields
+        if (drawType === "kerala") {
+            const submitData: any = {};
+            for (const field of KL_FIELDS) {
+                const numbers = (resultData as any)[field];
+                if (Array.isArray(numbers)) {
+                    submitData[field] = numbers
+                        .map((v: string) => v?.trim?.() || "")
+                        .filter((v: string) => isFourDigitNumber(v));
+                } else {
+                    submitData[field] = [];
+                }
+            }
+            try {
+                if (data && data.id) {
+                    await updateDrawResult.mutateAsync({ id: data.id, ...submitData });
+                } else {
+                    await createDrawResult.mutateAsync({ ...submitData, draw_session: selectedDraw!.id });
+                }
+                setMode("view");
+                setFormData(null);
+                refetch();
+            } catch (err: any) {
+                const msg = typeof err === "string" ? err : "Failed to save result.";
+                setFormError(msg);
+                Alert.alert("Error", msg);
+                setTimeout(() => setFormError(""), 3000);
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
+
         // For Tamil Nadu, only send first_prize
         if (isTamilNadu) {
             const submitData = { first_prize: resultData.first_prize };
@@ -442,8 +522,8 @@ const ResultPage: React.FC = () => {
     }
 
     // Only allow add if no result, and only allow edit if result is updated within 1 hour
-    const canAdd = user?.user_type === "ADMIN" && !data && !isSkipped;
-    const canEditIcon = user?.user_type === "ADMIN" && data && canEditResult(data.published_at) && !isSkipped;
+    const canAdd = user?.user_type === "ADMIN" && canPublishResult && !data && !isSkipped;
+    const canEditIcon = user?.user_type === "ADMIN" && canPublishResult && data && canEditResult(data.published_at) && !isSkipped;
 
     // Allow skip if admin, no result, and not loading, and not skipped
     const canSkip =
@@ -482,7 +562,18 @@ const ResultPage: React.FC = () => {
                     {canAdd && (
                         <TouchableOpacity
                             onPress={() => {
-                                setFormData({ complementary_prizes: [] });
+                                if (isKerala) {
+                                    setFormData({
+                                        kl_first_prize_numbers: [],
+                                        kl_second_prize_numbers: [],
+                                        kl_third_prize_numbers: [],
+                                        kl_fourth_prize_numbers: [],
+                                        kl_fifth_prize_numbers: [],
+                                        kl_sixth_prize_numbers: [],
+                                    });
+                                } else {
+                                    setFormData({ complementary_prizes: [] });
+                                }
                                 setMode("edit");
                                 setFormError(null);
                             }}
@@ -611,8 +702,39 @@ const ResultPage: React.FC = () => {
                                         <Text className="text-white font-semibold text-sm">Share</Text>
                                     </TouchableOpacity>
                                 </View>
-                                {(
-                                    isTamilNadu
+                                {isKerala ? (
+                                    // Kerala prize display
+                                    [{label: "1st Prize", numbers: data.kl_first_prize_numbers || []},
+                                     {label: "2nd Prize", numbers: data.kl_second_prize_numbers || []},
+                                     {label: "3rd Prize", numbers: data.kl_third_prize_numbers || []},
+                                     {label: "4th Prize", numbers: data.kl_fourth_prize_numbers || []},
+                                     {label: "5th Prize", numbers: data.kl_fifth_prize_numbers || []},
+                                     {label: "6th Prize", numbers: data.kl_sixth_prize_numbers || []}
+                                    ].map((row, idx) => (
+                                        <View key={row.label} className={`${PRIZE_COLOURS[idx % PRIZE_COLOURS.length]} border-b border-gray-300`}>
+                                            <View className="flex-row items-center">
+                                                <Text className="w-10 text-center py-2 text-[11px] font-medium border-r border-gray-300 bg-white/20">
+                                                    {idx + 1}
+                                                </Text>
+                                                <Text className="flex-1 py-2 text-[14px] font-bold text-center text-gray-800">
+                                                    {row.label}
+                                                </Text>
+                                            </View>
+                                            {row.numbers.length > 0 ? (
+                                                <View className="flex-row flex-wrap px-3 pb-2 gap-2 justify-center">
+                                                    {row.numbers.map((num, nIdx) => (
+                                                        <Text key={nIdx} className="text-[15px] font-mono font-bold text-gray-900 bg-white/60 rounded px-2 py-0.5 border border-gray-300">
+                                                            {num}
+                                                        </Text>
+                                                    ))}
+                                                </View>
+                                            ) : (
+                                                <Text className="text-center pb-2 text-gray-400">—</Text>
+                                            )}
+                                        </View>
+                                    ))
+                                ) : (
+                                    (isTamilNadu
                                         ? [{ label: "First Price", value: data.first_prize }]
                                         : [
                                             { label: "First Price", value: data.first_prize },
@@ -621,23 +743,24 @@ const ResultPage: React.FC = () => {
                                             { label: "Fourth Price", value: data.fourth_prize },
                                             { label: "Fifth Price", value: data.fifth_prize },
                                         ]
-                                ).map((row, idx) => (
-                                    <View key={row.label} className={`flex-row ${PRIZE_COLOURS[idx]} border-b border-gray-300`}>
-                                        <Text className="w-10 text-center py-1.5 text-[11px] font-medium border-r border-gray-300 bg-white/20">
-                                            {idx + 1}
-                                        </Text>
-                                        <Text className="flex-1 py-1.5 text-[16px] font-bold text-center text-gray-800">
-                                            {row.label}
-                                        </Text>
-                                        <Text className="w-20 py-1.5 text-[17px] font-mono font-bold text-center border-l border-gray-300">
-                                            {row.value}
-                                        </Text>
-                                    </View>
-                                ))}
+                                    ).map((row, idx) => (
+                                        <View key={row.label} className={`flex-row ${PRIZE_COLOURS[idx]} border-b border-gray-300`}>
+                                            <Text className="w-10 text-center py-1.5 text-[11px] font-medium border-r border-gray-300 bg-white/20">
+                                                {idx + 1}
+                                            </Text>
+                                            <Text className="flex-1 py-1.5 text-[16px] font-bold text-center text-gray-800">
+                                                {row.label}
+                                            </Text>
+                                            <Text className="w-20 py-1.5 text-[17px] font-mono font-bold text-center border-l border-gray-300">
+                                                {row.value}
+                                            </Text>
+                                        </View>
+                                    ))
+                                )}
                             </View>
 
-                            {/* Complementary grid — hidden for Tamil Nadu */}
-                            {!isTamilNadu && <View className="mx-4 mt-4 border border-gray-300 rounded-lg overflow-hidden">
+                            {/* Complementary grid — hidden for Tamil Nadu and Kerala */}
+                            {!isTamilNadu && !isKerala && <View className="mx-4 mt-4 border border-gray-300 rounded-lg overflow-hidden">
                                 {/* Top-to-bottom grid, 3 columns */}
                                 <View className="flex-row border-b border-gray-200">
                                     {Array.from({ length: 3 }).map((_, colIdx) => (

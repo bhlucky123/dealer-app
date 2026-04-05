@@ -1,4 +1,4 @@
-import { Clipboard } from "lucide-react-native";
+import { Clipboard, Plus, X } from "lucide-react-native";
 import { useRef, useState } from "react";
 import * as RNClipboard from "react-native"; // For Clipboard.getString()
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -17,7 +17,17 @@ const PRIZE_COLOURS = [
     "bg-amber-200/60",
     "bg-green-200/60",
     "bg-fuchsia-200/60",
+    "bg-orange-200/60",
 ];
+
+const KL_FIELDS = [
+    { key: "kl_first_prize_numbers", label: "1st Prize Numbers" },
+    { key: "kl_second_prize_numbers", label: "2nd Prize Numbers" },
+    { key: "kl_third_prize_numbers", label: "3rd Prize Numbers" },
+    { key: "kl_fourth_prize_numbers", label: "4th Prize Numbers" },
+    { key: "kl_fifth_prize_numbers", label: "5th Prize Numbers" },
+    { key: "kl_sixth_prize_numbers", label: "6th Prize Numbers" },
+] as const;
 
 type Props = {
     onSubmit: (data: any) => void;
@@ -28,6 +38,8 @@ type Props = {
 
 const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }: Props) => {
     const isTamilNadu = drawType === "tamil_nadu";
+    const isKerala = drawType === "kerala";
+
     const [form, setForm] = useState({
         first_prize: initialData?.first_prize || '',
         second_prize: initialData?.second_prize || '',
@@ -44,6 +56,18 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
             }
             return prizes;
         })(),
+    });
+
+    // Kerala form state: each field is a dynamic-length array of strings
+    const [keralaForm, setKeralaForm] = useState<Record<string, string[]>>(() => {
+        const initial: Record<string, string[]> = {};
+        for (const { key } of KL_FIELDS) {
+            const existing = initialData?.[key];
+            initial[key] = Array.isArray(existing) && existing.length > 0
+                ? [...existing]
+                : [""];  // start with one empty input
+        }
+        return initial;
     });
 
     // Refs for main prize inputs
@@ -80,6 +104,32 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
         }
     };
 
+    // Kerala handlers
+    const handleKeralaChange = (fieldKey: string, index: number, value: string) => {
+        setKeralaForm((prev) => {
+            const updated = [...(prev[fieldKey] || [])];
+            updated[index] = value;
+            return { ...prev, [fieldKey]: updated };
+        });
+    };
+
+    const addKeralaRow = (fieldKey: string) => {
+        setKeralaForm((prev) => ({
+            ...prev,
+            [fieldKey]: [...(prev[fieldKey] || []), ""],
+        }));
+    };
+
+    const removeKeralaRow = (fieldKey: string, index: number) => {
+        setKeralaForm((prev) => {
+            const updated = [...(prev[fieldKey] || [])];
+            updated.splice(index, 1);
+            // Keep at least one input
+            if (updated.length === 0) updated.push("");
+            return { ...prev, [fieldKey]: updated };
+        });
+    };
+
     // Handler for the "Paste" button - now reads from clipboard using RNClipboard.Clipboard.getString()
     const handlePasteComplementary = async () => {
         try {
@@ -108,13 +158,13 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
                     }
                 }
             }
-            
+
             // Sort the prizes from low to high (numerically)
             expanded.sort((a, b) => parseInt(a) - parseInt(b));
 
             console.log("expanded", expanded);
-            
-            
+
+
             // Only take the first 30
             expanded = expanded.slice(0, 30);
 
@@ -145,6 +195,15 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
         }
     };
 
+    const handleSubmit = () => {
+        if (loading) return;
+        if (isKerala) {
+            onSubmit(keralaForm);
+        } else {
+            onSubmit(form);
+        }
+    };
+
     return (
         <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -158,106 +217,150 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
                     keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* Prize table style inputs */}
-                    <View className="mx-4 mt-6 border border-gray-300 rounded-lg overflow-hidden">
-                        {(Object.keys(PRIZE_LABELS) as PrizeKey[])
-                            .filter((_, idx) => !isTamilNadu || idx === 0)
-                            .map((key, idx) => (
-                            <View
-                                key={key}
-                                className={`flex-row items-center ${PRIZE_COLOURS[idx]} border-b border-gray-300`}
-                            >
-                                <Text className="w-10 text-center py-1.5 text-[11px] font-medium border-r border-gray-300 bg-white/20">
-                                    {idx + 1}
-                                </Text>
-                                <Text className="flex-1 py-1.5 text-[12px] font-bold text-center text-gray-800">
-                                    {PRIZE_LABELS[key]}
-                                </Text>
-                                <View className="w-24 border-l border-gray-300 px-2 py-1.5">
-                                    <TextInput
-                                        ref={mainPrizeRefs[idx]}
-                                        className="text-center text-[13px] font-mono font-bold text-gray-900 bg-white rounded-md border border-gray-300 px-2 py-1"
-                                        keyboardType="numeric"
-                                        placeholder="e.g. 123"
-                                        value={typeof form[key] === "string" ? form[key] : ""}
-                                        onChangeText={(text) => handleInput(key, text, idx)}
-                                        maxLength={3}
-                                        returnKeyType={idx < mainPrizeRefs.length - 1 ? "next" : "done"}
-                                        blurOnSubmit={idx === mainPrizeRefs.length - 1}
-                                        onSubmitEditing={() => {
-                                            if (idx < mainPrizeRefs.length - 1) {
-                                                mainPrizeRefs[idx + 1].current?.focus();
-                                            }
-                                        }}
-                                        placeholderTextColor="#9ca3af"
-
-                                    />
-                                </View>
-                            </View>
-                        ))}
-                    </View>
-
-                    {/* Complementary grid style inputs — hidden for Tamil Nadu */}
-                    {!isTamilNadu && <><View className="mx-4 flex-row items-center mt-8 mb-2">
-                        <Text className="flex-1 text-base font-semibold text-gray-700 tracking-wide">
-                            Complementary Prizes
-                        </Text>
-                        <TouchableOpacity
-                            onPress={handlePasteComplementary}
-                            className="ml-2 flex-row items-center bg-green-100 border border-green-400 px-3 py-1.5 rounded-lg"
-                            activeOpacity={0.8}
-                            style={{
-                                shadowColor: "#16a34a",
-                                shadowOffset: { width: 0, height: 1 },
-                                shadowOpacity: 0.08,
-                                shadowRadius: 2,
-                            }}
-                        >
-                            <Clipboard color="#16a34a" size={18} /> 
-                            <Text className="ml-1 text-green-700 text-xs font-semibold">Paste</Text>
-                        </TouchableOpacity>
-                    </View>
-                    <View className="mx-4 border border-gray-300 rounded-lg overflow-hidden mb-10">
-                        <View className="flex-row border-b border-gray-200">
-                            {Array.from({ length: 3 }).map((_, colIdx) => (
-                                <View key={`col-${colIdx}`} className="flex-1">
-                                    {Array.from({ length: Math.ceil(form.complementary_prizes.length / 3) }).map((_, rowIdx) => {
-                                        const idx = rowIdx + colIdx * Math.ceil(form.complementary_prizes.length / 3);
-                                        const val = form.complementary_prizes[idx] || "";
-                                        return (
-                                            <View
-                                                key={`prize-${colIdx}-${rowIdx}`}
-                                                className={`border-b border-gray-200 ${colIdx < 2 ? "border-r border-gray-200" : ""} px-2 py-2 bg-white`}
-                                                style={{ minWidth: 0 }}
+                    {isKerala ? (
+                        // Kerala form: 6 dynamic-length number list inputs
+                        <View className="mx-4 mt-6">
+                            {KL_FIELDS.map(({ key, label }, fieldIdx) => (
+                                <View key={key} className={`mb-4 border border-gray-300 rounded-lg overflow-hidden`}>
+                                    <View className={`flex-row items-center justify-between px-3 py-2 ${PRIZE_COLOURS[fieldIdx]}`}>
+                                        <Text className="text-[14px] font-bold text-gray-800">{label}</Text>
+                                        <TouchableOpacity
+                                            onPress={() => addKeralaRow(key)}
+                                            className="flex-row items-center bg-white/80 rounded-md px-2 py-1 border border-gray-300"
+                                            activeOpacity={0.7}
+                                        >
+                                            <Plus size={14} color="#16a34a" />
+                                            <Text className="ml-1 text-green-700 text-xs font-semibold">Add</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    {(keralaForm[key] || [""]).map((val, idx) => (
+                                        <View key={idx} className="flex-row items-center px-3 py-1.5 border-t border-gray-200 bg-white">
+                                            <Text className="text-gray-400 text-xs w-6">{idx + 1}.</Text>
+                                            <TextInput
+                                                className="flex-1 text-center text-[14px] font-mono font-bold text-gray-900 bg-gray-50 rounded-md border border-gray-300 px-2 py-1.5"
+                                                keyboardType="numeric"
+                                                placeholder="e.g. 1234"
+                                                value={val}
+                                                onChangeText={(text) => handleKeralaChange(key, idx, text)}
+                                                maxLength={4}
+                                                placeholderTextColor="#9ca3af"
+                                            />
+                                            <TouchableOpacity
+                                                onPress={() => removeKeralaRow(key, idx)}
+                                                className="ml-2 p-1"
+                                                activeOpacity={0.7}
                                             >
-                                                {idx < form.complementary_prizes.length ? (
-                                                    <TextInput
-                                                        ref={complementaryRefs[idx]}
-                                                        className="text-center text-[13px] font-mono font-bold text-gray-900 bg-gray-50 rounded-md border border-gray-300 px-2 py-1"
-                                                        keyboardType="numeric"
-                                                        placeholder={`Prize ${idx + 1}`}
-                                                        value={val}
-                                                        onChangeText={(text) => handleComplementaryChange(idx, text)}
-                                                        maxLength={3}
-                                                        returnKeyType={idx < complementaryRefs.length - 1 ? "next" : "done"}
-                                                        blurOnSubmit={idx === complementaryRefs.length - 1}
-                                                        onSubmitEditing={() => {
-                                                            if (idx < complementaryRefs.length - 1) {
-                                                                complementaryRefs[idx + 1].current?.focus();
-                                                            }
-                                                        }}
-                                                        placeholderTextColor="#9ca3af"
-                                                    />
-                                                ) : (
-                                                    <View />
-                                                )}
-                                            </View>
-                                        );
-                                    })}
+                                                <X size={16} color="#ef4444" />
+                                            </TouchableOpacity>
+                                        </View>
+                                    ))}
                                 </View>
                             ))}
                         </View>
-                    </View></>}
+                    ) : (
+                        <>
+                            {/* Prize table style inputs */}
+                            <View className="mx-4 mt-6 border border-gray-300 rounded-lg overflow-hidden">
+                                {(Object.keys(PRIZE_LABELS) as PrizeKey[])
+                                    .filter((_, idx) => !isTamilNadu || idx === 0)
+                                    .map((key, idx) => (
+                                    <View
+                                        key={key}
+                                        className={`flex-row items-center ${PRIZE_COLOURS[idx]} border-b border-gray-300`}
+                                    >
+                                        <Text className="w-10 text-center py-1.5 text-[11px] font-medium border-r border-gray-300 bg-white/20">
+                                            {idx + 1}
+                                        </Text>
+                                        <Text className="flex-1 py-1.5 text-[12px] font-bold text-center text-gray-800">
+                                            {PRIZE_LABELS[key]}
+                                        </Text>
+                                        <View className="w-24 border-l border-gray-300 px-2 py-1.5">
+                                            <TextInput
+                                                ref={mainPrizeRefs[idx]}
+                                                className="text-center text-[13px] font-mono font-bold text-gray-900 bg-white rounded-md border border-gray-300 px-2 py-1"
+                                                keyboardType="numeric"
+                                                placeholder="e.g. 123"
+                                                value={typeof form[key] === "string" ? form[key] : ""}
+                                                onChangeText={(text) => handleInput(key, text, idx)}
+                                                maxLength={3}
+                                                returnKeyType={idx < mainPrizeRefs.length - 1 ? "next" : "done"}
+                                                blurOnSubmit={idx === mainPrizeRefs.length - 1}
+                                                onSubmitEditing={() => {
+                                                    if (idx < mainPrizeRefs.length - 1) {
+                                                        mainPrizeRefs[idx + 1].current?.focus();
+                                                    }
+                                                }}
+                                                placeholderTextColor="#9ca3af"
+
+                                            />
+                                        </View>
+                                    </View>
+                                ))}
+                            </View>
+
+                            {/* Complementary grid style inputs — hidden for Tamil Nadu */}
+                            {!isTamilNadu && <><View className="mx-4 flex-row items-center mt-8 mb-2">
+                                <Text className="flex-1 text-base font-semibold text-gray-700 tracking-wide">
+                                    Complementary Prizes
+                                </Text>
+                                <TouchableOpacity
+                                    onPress={handlePasteComplementary}
+                                    className="ml-2 flex-row items-center bg-green-100 border border-green-400 px-3 py-1.5 rounded-lg"
+                                    activeOpacity={0.8}
+                                    style={{
+                                        shadowColor: "#16a34a",
+                                        shadowOffset: { width: 0, height: 1 },
+                                        shadowOpacity: 0.08,
+                                        shadowRadius: 2,
+                                    }}
+                                >
+                                    <Clipboard color="#16a34a" size={18} />
+                                    <Text className="ml-1 text-green-700 text-xs font-semibold">Paste</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <View className="mx-4 border border-gray-300 rounded-lg overflow-hidden mb-10">
+                                <View className="flex-row border-b border-gray-200">
+                                    {Array.from({ length: 3 }).map((_, colIdx) => (
+                                        <View key={`col-${colIdx}`} className="flex-1">
+                                            {Array.from({ length: Math.ceil(form.complementary_prizes.length / 3) }).map((_, rowIdx) => {
+                                                const idx = rowIdx + colIdx * Math.ceil(form.complementary_prizes.length / 3);
+                                                const val = form.complementary_prizes[idx] || "";
+                                                return (
+                                                    <View
+                                                        key={`prize-${colIdx}-${rowIdx}`}
+                                                        className={`border-b border-gray-200 ${colIdx < 2 ? "border-r border-gray-200" : ""} px-2 py-2 bg-white`}
+                                                        style={{ minWidth: 0 }}
+                                                    >
+                                                        {idx < form.complementary_prizes.length ? (
+                                                            <TextInput
+                                                                ref={complementaryRefs[idx]}
+                                                                className="text-center text-[13px] font-mono font-bold text-gray-900 bg-gray-50 rounded-md border border-gray-300 px-2 py-1"
+                                                                keyboardType="numeric"
+                                                                placeholder={`Prize ${idx + 1}`}
+                                                                value={val}
+                                                                onChangeText={(text) => handleComplementaryChange(idx, text)}
+                                                                maxLength={3}
+                                                                returnKeyType={idx < complementaryRefs.length - 1 ? "next" : "done"}
+                                                                blurOnSubmit={idx === complementaryRefs.length - 1}
+                                                                onSubmitEditing={() => {
+                                                                    if (idx < complementaryRefs.length - 1) {
+                                                                        complementaryRefs[idx + 1].current?.focus();
+                                                                    }
+                                                                }}
+                                                                placeholderTextColor="#9ca3af"
+                                                            />
+                                                        ) : (
+                                                            <View />
+                                                        )}
+                                                    </View>
+                                                );
+                                            })}
+                                        </View>
+                                    ))}
+                                </View>
+                            </View></>}
+                        </>
+                    )}
                 </ScrollView>
                 {/* Submit button bar */}
                 <View
@@ -281,9 +384,7 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
                 >
                     <TouchableOpacity
                         className="bg-green-700 px-4 py-3 rounded-xl items-center justify-center shadow-lg"
-                        onPress={() => {
-                            if (!loading) onSubmit(form);
-                        }}
+                        onPress={handleSubmit}
                         activeOpacity={0.85}
                         style={{
                             elevation: 4,

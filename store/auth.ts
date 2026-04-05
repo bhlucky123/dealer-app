@@ -9,7 +9,8 @@ interface User {
   commission: number;
   single_digit_number_commission: number;
   cap_amount: number;
-  superuser?: boolean
+  superuser?: boolean;
+  vendor_features?: string[];
 }
 
 interface AuthState {
@@ -25,6 +26,7 @@ interface AuthState {
   setPreLogin: (token: string, userType: UserType) => void;
   application_status: boolean;
   setApplicationStatus: (status: boolean) => void;
+  hasFeature: (codename: string) => boolean;
 }
 
 const LOGIN_URLS: Record<UserType, string> = {
@@ -143,6 +145,13 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
     setUser: (user) => set({ user }),
 
-    setApplicationStatus: (status: boolean) => set({ application_status: status })
+    setApplicationStatus: (status: boolean) => set({ application_status: status }),
+
+    hasFeature: (codename: string) => {
+      const { user } = get();
+      if (!user) return false;
+      if (user.superuser) return true;
+      return Array.isArray(user.vendor_features) && user.vendor_features.includes(codename);
+    },
   };
 });

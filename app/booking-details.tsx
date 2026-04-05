@@ -125,8 +125,8 @@ const emptyComponent = (
     </View>
 );
 
-const DetailRow = React.memo(({ item, index, isEditable, isSuperuser, onMenuOpen, onDelete }: {
-    item: DisplayRow; index: number; isEditable: boolean; isSuperuser: boolean;
+const DetailRow = React.memo(({ item, index, isEditable, showDeleteOnly, onMenuOpen, onDelete }: {
+    item: DisplayRow; index: number; isEditable: boolean; showDeleteOnly: boolean;
     onMenuOpen: (item: DisplayRow) => void; onDelete: (item: DisplayRow) => void;
 }) => (
     <View style={index % 2 === 0 ? rowStyles.rowEven : rowStyles.rowOdd}>
@@ -152,7 +152,7 @@ const DetailRow = React.memo(({ item, index, isEditable, isSuperuser, onMenuOpen
                     <Entypo name="dots-three-vertical" size={16} color="#6b7280" />
                 </TouchableOpacity>
             </View>
-        ) : isSuperuser ? (
+        ) : showDeleteOnly ? (
             <View style={rowStyles.actionsCol}>
                 <TouchableOpacity onPress={() => onDelete(item)} hitSlop={10}>
                     <Ionicons name="trash-outline" size={15} color="#ef4444" />
@@ -163,16 +163,19 @@ const DetailRow = React.memo(({ item, index, isEditable, isSuperuser, onMenuOpen
 ));
 
 const BookingDetailsScreen = () => {
-    const { user } = useAuthStore();
+    const { user, hasFeature } = useAuthStore();
     const { selectedDraw } = useDrawStore();
     const drawType = selectedDraw?.type || "default";
     const queryClient = useQueryClient();
     const params = useLocalSearchParams();
     const billNumber = params.bill_number as string | undefined;
     const initialSearch = (params.search as string) || "";
-    const isEditable = params.editable === "true" && (user?.user_type !== "ADMIN" || !!user?.superuser);
+    const canEditBooking = hasFeature("edit_booking");
+    const canDeleteBooking = hasFeature("delete_booking");
+    const isEditable = params.editable === "true" && (user?.user_type !== "ADMIN" || !!user?.superuser) && canEditBooking;
     const isSuperuser = !!user?.superuser;
-    const showActionsCol = isEditable || isSuperuser;
+    const showDeleteOnly = canDeleteBooking && (isSuperuser || !isEditable);
+    const showActionsCol = isEditable || showDeleteOnly;
 
     const [search, setSearch] = useState(initialSearch);
     const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
@@ -340,8 +343,8 @@ const BookingDetailsScreen = () => {
     }, []);
 
     const renderItem = useCallback(({ item, index }: { item: DisplayRow; index: number }) => (
-        <DetailRow item={item} index={index} isEditable={isEditable} isSuperuser={isSuperuser} onMenuOpen={handleMenuOpen} onDelete={handleDelete} />
-    ), [isEditable, isSuperuser, handleDelete, handleMenuOpen]);
+        <DetailRow item={item} index={index} isEditable={isEditable} showDeleteOnly={showDeleteOnly} onMenuOpen={handleMenuOpen} onDelete={handleDelete} />
+    ), [isEditable, showDeleteOnly, handleDelete, handleMenuOpen]);
 
     const keyExtractor = useCallback((item: DisplayRow) => item.key, []);
 
@@ -495,20 +498,22 @@ const BookingDetailsScreen = () => {
                             <Text style={{ marginLeft: 12, fontSize: 15, fontWeight: "600", color: "#374151" }}>Edit</Text>
                         </TouchableOpacity>
 
-                        <View style={{ height: 1, backgroundColor: "#f3f4f6", marginHorizontal: 12 }} />
+                        {canDeleteBooking && (<>
+                            <View style={{ height: 1, backgroundColor: "#f3f4f6", marginHorizontal: 12 }} />
 
-                        <TouchableOpacity
-                            onPress={() => {
-                                const item = actionMenuItem;
-                                setActionMenuItem(null);
-                                if (item) handleDelete(item);
-                            }}
-                            style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 }}
-                            activeOpacity={0.6}
-                        >
-                            <Ionicons name="trash-outline" size={18} color="#ef4444" />
-                            <Text style={{ marginLeft: 12, fontSize: 15, fontWeight: "600", color: "#ef4444" }}>Delete</Text>
-                        </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    const item = actionMenuItem;
+                                    setActionMenuItem(null);
+                                    if (item) handleDelete(item);
+                                }}
+                                style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 }}
+                                activeOpacity={0.6}
+                            >
+                                <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                                <Text style={{ marginLeft: 12, fontSize: 15, fontWeight: "600", color: "#ef4444" }}>Delete</Text>
+                            </TouchableOpacity>
+                        </>)}
                     </View>
                 </Pressable>
             </Modal>
