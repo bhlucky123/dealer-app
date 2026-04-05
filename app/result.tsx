@@ -46,7 +46,15 @@ function isThreeDigitNumber(str: string) {
     return /^\d{3}$/.test(str);
 }
 
-function validateDrawResultFields(data: Partial<DrawResult> & { complementary_prizes?: string[] }) {
+function validateDrawResultFields(data: Partial<DrawResult> & { complementary_prizes?: string[] }, drawType?: string) {
+    // Tamil Nadu: only first_prize is required
+    if (drawType === "tamil_nadu") {
+        if (!data.first_prize || typeof data.first_prize !== "string" || !isThreeDigitNumber(data.first_prize)) {
+            return "Please enter a valid 3-digit number for First Prize.";
+        }
+        return null;
+    }
+
     const mainPrizes = [
         data.first_prize,
         data.second_prize,
@@ -118,6 +126,8 @@ function formatDrawTime(time: string | undefined | null): string {
 const ResultPage: React.FC = () => {
     const { createDrawResult, updateDrawResult, createDrawResultIsPending, updateDrawResultIsPending } = useDraw();
     const { selectedDraw } = useDrawStore();
+    const drawType = selectedDraw?.type || "default";
+    const isTamilNadu = drawType === "tamil_nadu";
 
     const [mode, setMode] = useState<"view" | "edit">("view");
     const [formData, setFormData] = useState<Partial<DrawResult> | null>(null);
@@ -219,7 +229,7 @@ const ResultPage: React.FC = () => {
     const handleFormSubmit = async (resultData: any) => {
         setFormError(null);
         // Validate all fields
-        const validationError = validateDrawResultFields(resultData);
+        const validationError = validateDrawResultFields(resultData, drawType);
         if (validationError) {
             setFormError(validationError);
             Alert.alert("Validation Error", validationError);
@@ -227,6 +237,29 @@ const ResultPage: React.FC = () => {
         }
 
         setLoading(true)
+        // For Tamil Nadu, only send first_prize
+        if (isTamilNadu) {
+            const submitData = { first_prize: resultData.first_prize };
+            try {
+                if (data && data.id) {
+                    await updateDrawResult.mutateAsync({ id: data.id, ...submitData });
+                } else {
+                    await createDrawResult.mutateAsync({ ...submitData, draw_session: selectedDraw!.id });
+                }
+                setMode("view");
+                setFormData(null);
+                refetch();
+            } catch (err: any) {
+                const msg = typeof err === "string" ? err : "Failed to save result.";
+                setFormError(msg);
+                Alert.alert("Error", msg);
+                setTimeout(() => setFormError(""), 3000);
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
+
         // Remove complementary_prizes if all elements are empty strings
         let submitData = { ...resultData };
         if (
@@ -384,8 +417,8 @@ const ResultPage: React.FC = () => {
                 <DrawResultForm
                     initialData={formData || undefined}
                     onSubmit={handleFormSubmit}
-                    validate={validateDrawResultFields}
                     loading={loading}
+                    drawType={drawType}
                 />
             </View>
         );
@@ -579,13 +612,15 @@ const ResultPage: React.FC = () => {
                                     </TouchableOpacity>
                                 </View>
                                 {(
-                                    [
-                                        { label: "First Price", value: data.first_prize },
-                                        { label: "Second Price", value: data.second_prize },
-                                        { label: "Third Price", value: data.third_prize },
-                                        { label: "Fourth Price", value: data.fourth_prize },
-                                        { label: "Fifth Price", value: data.fifth_prize },
-                                    ] as const
+                                    isTamilNadu
+                                        ? [{ label: "First Price", value: data.first_prize }]
+                                        : [
+                                            { label: "First Price", value: data.first_prize },
+                                            { label: "Second Price", value: data.second_prize },
+                                            { label: "Third Price", value: data.third_prize },
+                                            { label: "Fourth Price", value: data.fourth_prize },
+                                            { label: "Fifth Price", value: data.fifth_prize },
+                                        ]
                                 ).map((row, idx) => (
                                     <View key={row.label} className={`flex-row ${PRIZE_COLOURS[idx]} border-b border-gray-300`}>
                                         <Text className="w-10 text-center py-1.5 text-[11px] font-medium border-r border-gray-300 bg-white/20">
@@ -601,8 +636,8 @@ const ResultPage: React.FC = () => {
                                 ))}
                             </View>
 
-                            {/* Complementary grid */}
-                            <View className="mx-4 mt-4 border border-gray-300 rounded-lg overflow-hidden">
+                            {/* Complementary grid — hidden for Tamil Nadu */}
+                            {!isTamilNadu && <View className="mx-4 mt-4 border border-gray-300 rounded-lg overflow-hidden">
                                 {/* Top-to-bottom grid, 3 columns */}
                                 <View className="flex-row border-b border-gray-200">
                                     {Array.from({ length: 3 }).map((_, colIdx) => (
@@ -622,7 +657,7 @@ const ResultPage: React.FC = () => {
                                         </View>
                                     ))}
                                 </View>
-                            </View>
+                            </View>}
                         </View>
                     </ViewShot>
                 )}

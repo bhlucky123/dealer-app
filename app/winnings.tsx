@@ -147,7 +147,7 @@ const WinnerRow = React.memo(({ item, index }: { item: DisplayRow; index: number
         </View>
         <View style={rowStyles.numCol}>
             <Text style={rowStyles.winNum}>{item.win_number}</Text>
-            <Text style={rowStyles.lsk}>{item.lsk}</Text>
+            {item.lsk ? <Text style={rowStyles.lsk}>{item.lsk}</Text> : null}
             <Text style={rowStyles.countText}>
                 Count: <Text style={rowStyles.countBold}>{item.count}</Text>
             </Text>

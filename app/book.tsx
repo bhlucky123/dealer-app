@@ -49,6 +49,7 @@ type DrawSessionResponse = {
     active_session_id: number | null;
   };
   name: string;
+  type: "default" | "kerala" | "tamil_nadu";
   valid_from: string;
   valid_till: string;
   cut_off_time: string;
@@ -101,6 +102,10 @@ const BookingScreen: React.FC = () => {
   const { selectedDraw, setSelectedDraw } = useDrawStore();
 
   const colorTheme = selectedDraw?.color_theme;
+  const drawType = selectedDraw?.type || "default";
+  const isDefaultDraw = drawType === "default";
+  const isKeralaDraw = drawType === "kerala";
+  const isTamilNaduDraw = drawType === "tamil_nadu";
   const { user } = useAuthStore();
 
   const countInputRef = useRef<TextInput>(null);
@@ -121,11 +126,21 @@ const BookingScreen: React.FC = () => {
       !parsed ||
       typeof parsed !== "object" ||
       typeof parsed.number !== "string" ||
-      typeof parsed.subType !== "string" ||
       typeof parsed.count !== "number"
     ) {
       return false;
     }
+
+    // Non-default draw types: only validate number and count
+    if (!isDefaultDraw) {
+      if (!/^\d+$/.test(parsed.number)) return false;
+      if (isKeralaDraw && parsed.number.length !== 4) return false;
+      if (isTamilNaduDraw && parsed.number.length !== 3) return false;
+      if (!Number.isInteger(parsed.count) || parsed.count <= 0) return false;
+      return true;
+    }
+
+    if (typeof parsed.subType !== "string") return false;
 
     // Validate number is all digits and length is 1, 2, or 3
     if (!/^\d+$/.test(parsed.number)) return false;
@@ -378,10 +393,48 @@ const BookingScreen: React.FC = () => {
       let newEntries: BookingDetail[] = [];
 
       numbers.forEach((num) => {
-        if (!isValidNumberString(num) || ![1, 2, 3].includes(num.length)) {
+        if (!isValidNumberString(num)) {
           invalids.push(num);
           return;
         }
+        // Validate number length based on draw type
+        if (isKeralaDraw && num.length !== 4) {
+          invalids.push(num);
+          return;
+        }
+        if (isTamilNaduDraw && num.length !== 3) {
+          invalids.push(num);
+          return;
+        }
+        if (isDefaultDraw && ![1, 2, 3].includes(num.length)) {
+          invalids.push(num);
+          return;
+        }
+
+        // For non-default draws, create simple entries without type/sub_type
+        if (!isDefaultDraw) {
+          const price = DrawSessionDetails?.non_single_digit_price || 0;
+          const commission = user?.commission ?? 0;
+          const amt = count * price;
+          let d_amount: number;
+          if (commission > 1) {
+            d_amount = parseFloat((amt - (amt * (commission / 100))).toFixed(2));
+          } else {
+            d_amount = parseFloat((amt - (count * commission)).toFixed(2));
+          }
+          newEntries.push({
+            lsk: "",
+            number: num,
+            count,
+            amount: price,
+            d_amount,
+            c_amount: amt,
+            type: isKeralaDraw ? "four_digit" : "triple_digit",
+            sub_type: "",
+          });
+          return;
+        }
+
         const bookingType = getBookingTypeByLength(num.length);
         const isSingle = bookingType === "single_digit";
         const isDouble = bookingType === "double_digit";
@@ -459,6 +512,74 @@ const BookingScreen: React.FC = () => {
 
       if (newEntries.length > 0) {
         setBookingDetails((prev) => [...newEntries, ...prev]);
+      }
+      return;
+    }
+
+    // --- Non-default draw types (kerala, tamil_nadu) ---
+    if (!isDefaultDraw) {
+      const numbers = numberInput
+        .split(/[\s,]+/)
+        .map((n) => n.trim())
+        .filter((n) => n.length > 0);
+
+      const parseNum = (val: string | undefined) => parseInt(val ?? "") || 0;
+      const countVal = parseNum(countInput);
+      let invalids: string[] = [];
+      let allEntries: BookingDetail[] = [];
+
+      numbers.forEach((num) => {
+        if (!isValidNumberString(num)) {
+          invalids.push(num);
+          return;
+        }
+        if (isKeralaDraw && num.length !== 4) {
+          invalids.push(num);
+          return;
+        }
+        if (isTamilNaduDraw && num.length !== 3) {
+          invalids.push(num);
+          return;
+        }
+        if (!isValidPositiveNumber(countVal)) {
+          invalids.push(num);
+          return;
+        }
+
+        const price = DrawSessionDetails?.non_single_digit_price || 0;
+        const commission = user?.commission ?? 0;
+        const amt = countVal * price;
+        let d_amount: number;
+        if (commission > 1) {
+          d_amount = parseFloat((amt - (amt * (commission / 100))).toFixed(2));
+        } else {
+          d_amount = parseFloat((amt - (countVal * commission)).toFixed(2));
+        }
+
+        allEntries.push({
+          lsk: "",
+          number: num,
+          count: countVal,
+          amount: price,
+          d_amount,
+          c_amount: amt,
+          type: isKeralaDraw ? "four_digit" : "triple_digit",
+          sub_type: "",
+        });
+      });
+
+      if (invalids.length > 0) {
+        const expectedLen = isKeralaDraw ? "4" : "3";
+        Alert.alert(
+          "Invalid input",
+          `The following numbers are invalid (expected ${expectedLen} digits):\n${invalids.join(", ")}`
+        );
+        return;
+      }
+
+      if (allEntries.length > 0) {
+        setBookingDetails((prev) => [...allEntries, ...prev]);
+        clearInputs();
       }
       return;
     }
@@ -934,12 +1055,9 @@ const BookingScreen: React.FC = () => {
         booked_agent: bookedAgent,
         booked_dealer: user?.user_type === "ADMIN" ? booked_dealer : undefined,
         booking_details: bookingDetails.map(
-          ({ number, count, type, sub_type }) => ({
-            number,
-            count,
-            type,
-            sub_type,
-          })
+          ({ number, count, type, sub_type }) => isDefaultDraw
+            ? { number, count, type, sub_type }
+            : { number, count, type }
         ),
       };
       mutate(data);
@@ -1098,6 +1216,8 @@ const BookingScreen: React.FC = () => {
 
       // Helper: Validate if subType is allowed for number length
       function isValidSubtypeForNumber(number: string, subType: string) {
+        // Non-default draws don't use sub_type
+        if (!isDefaultDraw) return true;
         const len = number.length;
         const st = (subType || "").toUpperCase();
         if (!validSubTypesByLength[len]) return false;
@@ -1109,7 +1229,19 @@ const BookingScreen: React.FC = () => {
       function pushBooking(number: string, count: number, subType?: string) {
         if (!number || isNaN(Number(number)) || !count || isNaN(Number(count)) || Number(count) <= 0) return false;
         let nlen = number.length;
+
+        // Validate number length for draw type
+        if (isKeralaDraw && nlen !== 4) return false;
+        if (isTamilNaduDraw && nlen !== 3) return false;
+        if (isDefaultDraw && ![1, 2, 3].includes(nlen)) return false;
+
         let st = (subType || "").toUpperCase();
+
+        // For non-default draws, sub_type is not used
+        if (!isDefaultDraw) {
+          bookings.push({ number, count: Number(count), subType: "" });
+          return true;
+        }
 
         // Default subType logic
         if (!st) {
@@ -1166,48 +1298,48 @@ const BookingScreen: React.FC = () => {
       // 2. "Abc 0 5" style (legacy)
       const abcRegex = /^\s*Abc\s+(\d+)\s+(\d+)\s*$/i;
       // 3. "304  10" style (number, 2+ spaces, count)
-      const superSpaceRegex = /^\s*(\d{1,3})\s{2,}(\d+)\s*$/;
+      const superSpaceRegex = /^\s*(\d{1,4})\s{2,}(\d+)\s*$/;
       // 4. "054 2" (3-digit number, 1 space, count)
       const threeDigitSpaceRegex = /^\s*(\d{3})\s+(\d+)\s*$/;
       // 5. "number [subType] count"
-      const normalMatchRegex = /^\s*(\d{1,3})\s+([A-Za-z]+)?\s*(\d+)\s*$/;
+      const normalMatchRegex = /^\s*(\d{1,4})\s+([A-Za-z]+)?\s*(\d+)\s*$/;
       // 6. "123=5", "123+5", etc
-      const superSymbolRegex = /^\s*(\d{1,3})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s*$/;
+      const superSymbolRegex = /^\s*(\d{1,4})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s*$/;
       // 7. "041-1.2", "041-1*2", etc
-      const dualCountRegex = /^\s*(\d{1,3})\s*[-=+\/\.\#\&\*:,]\s*(\d+)[^0-9]+(\d+)\s*$/;
+      const dualCountRegex = /^\s*(\d{1,4})\s*[-=+\/\.\#\&\*:,]\s*(\d+)[^0-9]+(\d+)\s*$/;
       // 8. "036,2" or "036, 2" or "036-2" or etc.
-      const commaOrSymbolRegex = /^\s*(\d{1,3})\s*[,=+\-:\/\.\#\&\*]\s*(\d+)\s*$/;
+      const commaOrSymbolRegex = /^\s*(\d{1,4})\s*[,=+\-:\/\.\#\&\*]\s*(\d+)\s*$/;
       // 9. "AB.24.2" or "BC.41.2"
       const subtypeDotNumberDotCount = /^\s*([A-Za-z]+)[\.\-]([0-9]{1,3})[\.\-](\d+)\s*$/;
       // 10. "100.2.2"
-      const numberDotCountDotCount = /^\s*(\d{1,3})[\.\-](\d+)[\.\-](\d+)\s*$/;
+      const numberDotCountDotCount = /^\s*(\d{1,4})[\.\-](\d+)[\.\-](\d+)\s*$/;
       // 11. "021*2"
-      const numberStarCount = /^\s*(\d{1,3})\s*\*\s*(\d+)\s*$/;
+      const numberStarCount = /^\s*(\d{1,4})\s*\*\s*(\d+)\s*$/;
       // 12. "312.6"
-      const numberDotCount = /^\s*(\d{1,3})\s*[\.\-]\s*(\d+)\s*$/;
+      const numberDotCount = /^\s*(\d{1,4})\s*[\.\-]\s*(\d+)\s*$/;
       // 12a. "608..50"
-      const numberDoubleDotCount = /^\s*(\d{1,3})\s*\.\.\s*(\d+)\s*$/;
+      const numberDoubleDotCount = /^\s*(\d{1,4})\s*\.\.\s*(\d+)\s*$/;
       // 13. "123-5 box", "123=5 set", "123-5 super", "123-5 both"
-      const numberSymbolCountSubtype = /^\s*(\d{1,3})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s+([A-Za-z]+)\s*$/;
+      const numberSymbolCountSubtype = /^\s*(\d{1,4})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s+([A-Za-z]+)\s*$/;
       // 14. "56 AC=5", "34 AB:5", ...
-      const numberSubtypeSymbolCount = /^\s*(\d{1,3})\s*([A-Za-z]+)\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s*$/;
+      const numberSubtypeSymbolCount = /^\s*(\d{1,4})\s*([A-Za-z]+)\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s*$/;
       // 15. "A 8 20"
-      const subtypeNumberCount = /^\s*([A-Za-z]+)\s+(\d{1,3})\s+(\d+)\s*$/;
+      const subtypeNumberCount = /^\s*([A-Za-z]+)\s+(\d{1,4})\s+(\d+)\s*$/;
       // 16. "Dear 6", ...
       const ignoreLineRegex = /^\s*[A-Za-z ]+\d+\s*$/;
       // 17. "709-5,077-6,078-5,..." 
-      const multiBookingLineRegex = /(\d{1,3})\s*[-=+\*\/\.\#\&:,]\s*(\d+)/g;
+      const multiBookingLineRegex = /(\d{1,4})\s*[-=+\*\/\.\#\&:,]\s*(\d+)/g;
 
       // --- Set 524.5 box / Set 524 5 both style ---
       const setWordNumberCountSubtype = /^\s*Set\s+(\d{3})[\.\-\s]+(\d+)\s+([A-Za-z]+)\s*$/i;
       // --- Set 524.1 style ---
       const setWordNumberDotCount = /^\s*Set\s+(\d{3})\.(\d+)\s*$/i;
       // --- "770,,1" style ---
-      const numberDoubleCommaCount = /^\s*(\d{1,3})\s*,{2,}\s*(\d+)\s*$/;
+      const numberDoubleCommaCount = /^\s*(\d{1,4})\s*,{2,}\s*(\d+)\s*$/;
       // --- "Abc-8-5" style ---
       const abcDashNumberDashCount = /^\s*Abc\s*-\s*(\d+)\s*-\s*(\d+)\s*$/i;
       // --- 3-value booking ---
-      const numberCount1Count2Regex = /^\s*(\d{1,3})\s+(\d+)\s+(\d+)\s*$/;
+      const numberCount1Count2Regex = /^\s*(\d{1,4})\s+(\d+)\s+(\d+)\s*$/;
       // --- C+7+100 ---
       const subtypePlusNumberPlusCount = /^\s*([A-Za-z]+)\+(\d+)\+(\d+)\s*$/;
       // --- Abc=6=25 ---
@@ -1226,9 +1358,9 @@ const BookingScreen: React.FC = () => {
 
       // ---- Main new regex for number+count+subtype, with any separator, BOX/SET awareness ----
       // for 123=5=box / 123-5-BOX / 123+25+box / 123:5:box / 123.20.box / 123,4,BOX / 123 2 box
-      const numberCountSubtypeFlexible = /^\s*(\d{1,3})\s*([=+\-:\/\.,\s]+)\s*(\d+)\s*([=+\-:\/\.,\s]+)\s*([A-Za-z]+)\s*$/i;
+      const numberCountSubtypeFlexible = /^\s*(\d{1,4})\s*([=+\-:\/\.,\s]+)\s*(\d+)\s*([=+\-:\/\.,\s]+)\s*([A-Za-z]+)\s*$/i;
       // also allow 123 5 set
-      const numberCountSubtypeSpaces = /^\s*(\d{1,3})\s+(\d+)\s+([A-Za-z]+)\s*$/i;
+      const numberCountSubtypeSpaces = /^\s*(\d{1,4})\s+(\d+)\s+([A-Za-z]+)\s*$/i;
       // 123 5 set box / 123 5 set both (number count "set" subtype)
       const numberCountSetSubtype = /^\s*(\d{3})\s*[=+\-:\/\.,\s]+\s*(\d+)\s+set\s+([A-Za-z]+)\s*$/i;
 
@@ -1950,7 +2082,7 @@ const BookingScreen: React.FC = () => {
             </View>
 
             <View className="flex-row items-center mb-2 gap-2">
-              {[1, 2, 3].map((num) => (
+              {isDefaultDraw && [1, 2, 3].map((num) => (
                 <TouchableOpacity
                   key={num}
                   onPress={() => handleDrawSession(num.toString())}
@@ -1968,7 +2100,7 @@ const BookingScreen: React.FC = () => {
               ))}
               <View className="flex-1 ml-1">
                 <View style={{ flexDirection: "row", gap: 6 }}>
-                  {rangeOptions
+                  {isDefaultDraw && rangeOptions
                     .filter(option => option.value !== "Book") // Exclude 'Book'
                     .map(option => (
                       <TouchableOpacity
@@ -2012,7 +2144,7 @@ const BookingScreen: React.FC = () => {
                   const formatted = text.replace(/[^0-9]/g, "");
                   setNumberInput(formatted);
 
-                  const requiredLength = parseInt(drawSession);
+                  const requiredLength = isKeralaDraw ? 4 : isTamilNaduDraw ? 3 : parseInt(drawSession);
                   if (formatted.length >= requiredLength) {
                     if (selectedRange === "Range" || selectedRange === "Different") {
                       endNumInputRef.current?.focus();
@@ -2021,7 +2153,7 @@ const BookingScreen: React.FC = () => {
                     }
                   }
                 }}
-                maxLength={3}
+                maxLength={isKeralaDraw ? 4 : 3}
                 keyboardType="numeric"
                 placeholder={
                   selectedRange === "Range" || selectedRange === "Different"
@@ -2042,7 +2174,7 @@ const BookingScreen: React.FC = () => {
                     const formatted = text.replace(/[^0-9]/g, "");
                     setEndNumberInput(formatted);
 
-                    const requiredLength = parseInt(drawSession);
+                    const requiredLength = isKeralaDraw ? 4 : isTamilNaduDraw ? 3 : parseInt(drawSession);
                     if (formatted.length >= requiredLength) {
                       if (selectedRange === "Different") {
                         differenceInputRef.current?.focus();
@@ -2051,7 +2183,7 @@ const BookingScreen: React.FC = () => {
                       }
                     }
                   }}
-                  maxLength={3}
+                  maxLength={isKeralaDraw ? 4 : 3}
                   keyboardType="numeric"
                   placeholder="End"
                   className="flex-1 border border-gray-400 px-3 py-1.5 rounded text-sm"
@@ -2095,8 +2227,8 @@ const BookingScreen: React.FC = () => {
                 maxLength={3}
               />
 
-              {/* B.Count input for 3-digit only */}
-              {drawSession === "3" && (
+              {/* B.Count input for 3-digit only (default draw type only) */}
+              {isDefaultDraw && drawSession === "3" && (
                 <TextInput
                   value={bCountInput}
                   onChangeText={(text) => {
@@ -2115,37 +2247,47 @@ const BookingScreen: React.FC = () => {
             </View>
 
             <View className="flex-row flex-wrap mb-2 gap-1">
-              {buttonsMap[drawSession]?.map((btn) => (
+              {isDefaultDraw ? (
+                buttonsMap[drawSession]?.map((btn) => (
+                  <TouchableOpacity
+                    key={btn}
+                    onPress={() => addBooking(btn)}
+                    className="bg-green-700 py-2 rounded items-center"
+                    style={{ flexGrow: 1, margin: 3 }}
+                    disabled={!!drawSessionError}
+                  >
+                    <Text className="text-white font-semibold text-sm">{btn}</Text>
+                  </TouchableOpacity>
+                ))
+              ) : (
                 <TouchableOpacity
-                  key={btn}
-                  onPress={() => addBooking(btn)}
+                  onPress={() => addBooking("")}
                   className="bg-green-700 py-2 rounded items-center"
                   style={{ flexGrow: 1, margin: 3 }}
                   disabled={!!drawSessionError}
                 >
-                  <Text className="text-white font-semibold text-sm">{btn}</Text>
+                  <Text className="text-white font-semibold text-sm">Add</Text>
                 </TouchableOpacity>
-              ))}
+              )}
             </View></>}
 
           {/* Table Header */}
           <View className="border border-gray-400 rounded overflow-hidden flex-1">
             <View className="flex-row bg-gray-200 border-gray-400 py-1.5 items-center">
-              <Text className="w-[12%] text-xs font-bold text-center">LSK</Text>
-              <Text className="w-[16%] text-xs font-bold text-center">
+              {isDefaultDraw && <Text className="w-[12%] text-xs font-bold text-center">LSK</Text>}
+              <Text className={`${isDefaultDraw ? "w-[16%]" : "w-[20%]"} text-xs font-bold text-center`}>
                 NUMBER
               </Text>
-              <Text className="w-[12%] text-xs font-bold text-center">COUNT</Text>
-              <Text className="w-[20%] text-xs font-bold text-center">
+              <Text className={`${isDefaultDraw ? "w-[12%]" : "w-[16%]"} text-xs font-bold text-center`}>COUNT</Text>
+              <Text className={`${isDefaultDraw ? "w-[20%]" : "w-[22%]"} text-xs font-bold text-center`}>
                 AMOUNT
               </Text>
-              <Text className="w-[20%] text-xs font-bold text-center">
+              <Text className={`${isDefaultDraw ? "w-[20%]" : "w-[22%]"} text-xs font-bold text-center`}>
                 D.AMOUNT
               </Text>
-              <Text className="w-[18%] text-xs font-bold text-center">
+              <Text className={`${isDefaultDraw ? "w-[18%]" : "w-[20%]"} text-xs font-bold text-center`}>
                 C.AMOUNT
               </Text>
-              {/* <Text className="w-[8%] text-xs font-bold text-center"></Text> */}
             </View>
             <FlatList
               data={bookingDetails || []}
@@ -2158,20 +2300,20 @@ const BookingScreen: React.FC = () => {
                 <View
                   className="flex-row border-t border-gray-400 py-2 items-center"
                 >
-                  <Text className="w-[12%] text-xs text-center">{entry.lsk}</Text>
-                  <Text className="w-[16%] text-xs text-center">
+                  {isDefaultDraw && <Text className="w-[12%] text-xs text-center">{entry.lsk}</Text>}
+                  <Text className={`${isDefaultDraw ? "w-[16%]" : "w-[20%]"} text-xs text-center`}>
                     {entry.number}
                   </Text>
-                  <Text className="w-[12%] text-xs text-center">
+                  <Text className={`${isDefaultDraw ? "w-[12%]" : "w-[16%]"} text-xs text-center`}>
                     {entry.count}
                   </Text>
-                  <Text className="w-[20%] text-xs text-center">
+                  <Text className={`${isDefaultDraw ? "w-[20%]" : "w-[22%]"} text-xs text-center`}>
                     ₹ {entry.amount}
                   </Text>
-                  <Text className="w-[20%] text-xs text-center">
+                  <Text className={`${isDefaultDraw ? "w-[20%]" : "w-[22%]"} text-xs text-center`}>
                     ₹ {entry.d_amount}
                   </Text>
-                  <Text className="w-[12%] text-xs text-center">
+                  <Text className={`${isDefaultDraw ? "w-[12%]" : "w-[20%]"} text-xs text-center`}>
                     ₹ {entry.c_amount}
                   </Text>
                   <View className="w-[8%] flex-row justify-center items-center">

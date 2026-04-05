@@ -22,10 +22,12 @@ const PRIZE_COLOURS = [
 type Props = {
     onSubmit: (data: any) => void;
     initialData?: any;
-    loading: boolean
+    loading: boolean;
+    drawType?: "default" | "kerala" | "tamil_nadu";
 };
 
-const DrawResultForm = ({ onSubmit, initialData,loading }: Props) => {
+const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }: Props) => {
+    const isTamilNadu = drawType === "tamil_nadu";
     const [form, setForm] = useState({
         first_prize: initialData?.first_prize || '',
         second_prize: initialData?.second_prize || '',
@@ -158,7 +160,9 @@ const DrawResultForm = ({ onSubmit, initialData,loading }: Props) => {
                 >
                     {/* Prize table style inputs */}
                     <View className="mx-4 mt-6 border border-gray-300 rounded-lg overflow-hidden">
-                        {(Object.keys(PRIZE_LABELS) as PrizeKey[]).map((key, idx) => (
+                        {(Object.keys(PRIZE_LABELS) as PrizeKey[])
+                            .filter((_, idx) => !isTamilNadu || idx === 0)
+                            .map((key, idx) => (
                             <View
                                 key={key}
                                 className={`flex-row items-center ${PRIZE_COLOURS[idx]} border-b border-gray-300`}
@@ -193,8 +197,8 @@ const DrawResultForm = ({ onSubmit, initialData,loading }: Props) => {
                         ))}
                     </View>
 
-                    {/* Complementary grid style inputs */}
-                    <View className="mx-4 flex-row items-center mt-8 mb-2">
+                    {/* Complementary grid style inputs — hidden for Tamil Nadu */}
+                    {!isTamilNadu && <><View className="mx-4 flex-row items-center mt-8 mb-2">
                         <Text className="flex-1 text-base font-semibold text-gray-700 tracking-wide">
                             Complementary Prizes
                         </Text>
@@ -253,7 +257,7 @@ const DrawResultForm = ({ onSubmit, initialData,loading }: Props) => {
                                 </View>
                             ))}
                         </View>
-                    </View>
+                    </View></>}
                 </ScrollView>
                 {/* Submit button bar */}
                 <View
