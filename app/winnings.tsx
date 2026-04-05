@@ -3,6 +3,7 @@ import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
 import { getToday, getTommorow } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { FlashList } from "@shopify/flash-list";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -13,7 +14,6 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
-import { FlashList } from "@shopify/flash-list";
 import { Dropdown } from "react-native-element-dropdown";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Agent } from "./(tabs)/agent";
@@ -180,7 +180,7 @@ const WinnersReportScreen = () => {
     const [ordering, setOrdering] = useState<string>("");
 
     const { user, token } = useAuthStore();
-    
+
     // QueryClient for caching
     const queryClient = useQueryClient();
     const cachedAgents = queryClient.getQueryData<Agent[]>(["agents"]);
@@ -253,6 +253,8 @@ const WinnersReportScreen = () => {
         getNextPageParam: (lastPage) => lastPage.next,
         enabled: !!selectedDraw?.id,
     });
+
+    console.log("infiniteData", infiniteData?.pages?.[0]?.results)
 
     // Prefetch next page as soon as current page loads
     useEffect(() => {

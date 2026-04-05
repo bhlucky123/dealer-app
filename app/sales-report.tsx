@@ -159,7 +159,7 @@ const SalesReportScreen = () => {
     const [totalAgentAmount, setTotalAgentAmount] = useState(0);
     const [totalCustomerAmount, setTotalCustomerAmount] = useState(0);
 
-    const { user } = useAuthStore();
+    const { user, hasFeature } = useAuthStore();
     const router = useRouter();
     const queryClient = useQueryClient();
     const cachedAgents = queryClient.getQueryData<Agent[]>(["agents"]);
@@ -486,6 +486,7 @@ const SalesReportScreen = () => {
 
     // Delete a booking (entire bill) with confirmation
     const isSuperuser = !!user?.superuser;
+    const canDeleteBooking = hasFeature("delete_booking");
 
     const handleRowPress = useCallback((item: any) => {
         router.push({ pathname: "/booking-details", params: { bill_number: String(item.bill_number), ...(debouncedSearch ? { search: debouncedSearch } : {}) } });
@@ -523,11 +524,11 @@ const SalesReportScreen = () => {
             item={item}
             index={index}
             userType={user?.user_type}
-            isSuperuser={isSuperuser}
+            isSuperuser={isSuperuser && canDeleteBooking}
             onPress={handleRowPress}
             onDelete={handleDeleteBooking}
         />
-    ), [user?.user_type, isSuperuser, handleRowPress, handleDeleteBooking]);
+    ), [user?.user_type, isSuperuser, canDeleteBooking, handleRowPress, handleDeleteBooking]);
 
     const getItemLayout = useCallback((_data: any, index: number) => ({
         length: ROW_HEIGHT,
