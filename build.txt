@@ -1,5 +1,7 @@
 build doc
 
+claude   --dangerously-skip-permissions    
+
 npx expo prebuild --platform android
 
 cd android;

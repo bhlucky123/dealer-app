@@ -342,6 +342,7 @@ export default function TopNumbers() {
 
   const [copyLoading, setCopyLoading] = useState(false);
   const [copyAfterLoading, setCopyAfterLoading] = useState(false);
+  const [copyBeforeLoading, setCopyBeforeLoading] = useState(false);
 
   const handleCopyAll = async () => {
     setCopyLoading(true);
@@ -386,6 +387,29 @@ export default function TopNumbers() {
       showToastMessage("Failed to copy");
     } finally {
       setCopyAfterLoading(false);
+    }
+  };
+
+  const handleCopyBefore = async () => {
+    setCopyBeforeLoading(true);
+    try {
+      const res = await api.get("/draw-booking/top-numbers/all-before/", {
+        params: buildParams(),
+      });
+      const lines: string[] = res.data || [];
+
+      if (lines.length === 0) {
+        showToastMessage("No before-time items to copy");
+        return;
+      }
+
+      const text = lines.join("\n");
+      Clipboard.setString(text);
+      showToastMessage(`Copied ${lines.length} before-time item${lines.length > 1 ? "s" : ""}`);
+    } catch (err) {
+      showToastMessage("Failed to copy");
+    } finally {
+      setCopyBeforeLoading(false);
     }
   };
 
@@ -1080,22 +1104,40 @@ export default function TopNumbers() {
                     </Text>
                   </TouchableOpacity>
                   {fromTime ? (
-                    <TouchableOpacity
-                      onPress={handleCopyAfter}
-                      disabled={copyAfterLoading}
-                      className="flex-row items-center px-3 py-1.5 rounded-full bg-green-600 active:bg-green-700"
-                      activeOpacity={0.8}
-                      style={copyAfterLoading ? { opacity: 0.7 } : undefined}
-                    >
-                      {copyAfterLoading ? (
-                        <ActivityIndicator size={12} color="#fff" />
-                      ) : (
-                        <Copy size={12} color="#fff" />
-                      )}
-                      <Text className="ml-1.5 text-[11px] font-semibold text-white">
-                        {copyAfterLoading ? "Copying..." : "Copy After"}
-                      </Text>
-                    </TouchableOpacity>
+                    <>
+                      <TouchableOpacity
+                        onPress={handleCopyBefore}
+                        disabled={copyBeforeLoading}
+                        className="flex-row items-center px-3 py-1.5 rounded-full bg-orange-600 active:bg-orange-700"
+                        activeOpacity={0.8}
+                        style={copyBeforeLoading ? { opacity: 0.7 } : undefined}
+                      >
+                        {copyBeforeLoading ? (
+                          <ActivityIndicator size={12} color="#fff" />
+                        ) : (
+                          <Copy size={12} color="#fff" />
+                        )}
+                        <Text className="ml-1.5 text-[11px] font-semibold text-white">
+                          {copyBeforeLoading ? "Copying..." : "Copy Before"}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={handleCopyAfter}
+                        disabled={copyAfterLoading}
+                        className="flex-row items-center px-3 py-1.5 rounded-full bg-green-600 active:bg-green-700"
+                        activeOpacity={0.8}
+                        style={copyAfterLoading ? { opacity: 0.7 } : undefined}
+                      >
+                        {copyAfterLoading ? (
+                          <ActivityIndicator size={12} color="#fff" />
+                        ) : (
+                          <Copy size={12} color="#fff" />
+                        )}
+                        <Text className="ml-1.5 text-[11px] font-semibold text-white">
+                          {copyAfterLoading ? "Copying..." : "Copy After"}
+                        </Text>
+                      </TouchableOpacity>
+                    </>
                   ) : null}
                 </View>
               )}

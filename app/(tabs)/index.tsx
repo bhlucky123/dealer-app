@@ -801,20 +801,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
 
-          {/* add‑button */}
-          {user?.user_type === "ADMIN" && (
-            <TouchableOpacity
-              onPress={() => {
-                setEditDraw(null);
-                setShowForm(true);
-              }}
-              accessibilityLabel="Add new draw"
-              activeOpacity={0.85}
-              style={styles.addButton}
-            >
-              <AntDesign name="plus" size={26} color="#fff" />
-            </TouchableOpacity>
-          )}
+          {/* add‑button — disabled, draws are now managed server-side */}
         </View>
       </View>
 
@@ -860,7 +847,7 @@ export default function HomeScreen() {
                   <Text style={[styles.drawName, { color: textColor }]}>
                     {item.name}
                   </Text>
-                  {user?.user_type === "ADMIN" && (
+                  {false && user?.user_type === "ADMIN" && (
                     <View style={styles.adminActions}>
                       <TouchableOpacity
                         onPress={() => {

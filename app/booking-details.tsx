@@ -1,4 +1,5 @@
 import { useAuthStore } from "@/store/auth";
+import useDrawStore from "@/store/draw";
 import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
 import { Entypo, Ionicons } from "@expo/vector-icons";
@@ -64,8 +65,9 @@ type DisplayRow = {
     customer_amount: number;
 };
 
-function getSubTypeOptions(number: string) {
+function getSubTypeOptions(number: string, drawType?: string) {
     if (!number) return [];
+    if (drawType && drawType !== "default") return [];
     const num = number.replace(/\D/g, "");
     if (num.length === 3) return ["SUPER", "BOX"];
     if (num.length === 2) return ["AB", "BC", "AC"];
@@ -162,6 +164,8 @@ const DetailRow = React.memo(({ item, index, isEditable, isSuperuser, onMenuOpen
 
 const BookingDetailsScreen = () => {
     const { user } = useAuthStore();
+    const { selectedDraw } = useDrawStore();
+    const drawType = selectedDraw?.type || "default";
     const queryClient = useQueryClient();
     const params = useLocalSearchParams();
     const billNumber = params.bill_number as string | undefined;
@@ -250,7 +254,7 @@ const BookingDetailsScreen = () => {
         setEditSubType(item.sub_type || "");
         setEditErrors({});
         editNumberLengthRef.current = numberStr.length;
-        editSubTypeOptionsRef.current = getSubTypeOptions(numberStr);
+        editSubTypeOptionsRef.current = getSubTypeOptions(numberStr, drawType);
         setEditModalVisible(true);
     }, []);
 
@@ -546,7 +550,7 @@ const BookingDetailsScreen = () => {
                             value={editNumber}
                             onChangeText={(t) => { setEditNumber(t.replace(/\D/g, "")); setEditErrors(e => ({ ...e, number: undefined })); }}
                             keyboardType="numeric"
-                            maxLength={editNumberLengthRef.current || 3}
+                            maxLength={drawType === "kerala" ? 4 : (editNumberLengthRef.current || 3)}
                             style={{
                                 borderWidth: 1,
                                 borderColor: editErrors.number ? "#ef4444" : "#d1d5db",

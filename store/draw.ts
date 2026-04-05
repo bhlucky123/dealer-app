@@ -3,6 +3,7 @@ import { create } from "zustand";
 interface Draw {
   id: number;
   name: string;
+  type: "default" | "kerala" | "tamil_nadu";
   valid_from: string;
   valid_till: string;
   cut_off_time: string;
