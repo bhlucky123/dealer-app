@@ -704,12 +704,12 @@ const ResultPage: React.FC = () => {
                                 </View>
                                 {isKerala ? (
                                     // Kerala prize display
-                                    [{label: "1st Prize", numbers: data.kl_first_prize_numbers || []},
-                                     {label: "2nd Prize", numbers: data.kl_second_prize_numbers || []},
-                                     {label: "3rd Prize", numbers: data.kl_third_prize_numbers || []},
-                                     {label: "4th Prize", numbers: data.kl_fourth_prize_numbers || []},
-                                     {label: "5th Prize", numbers: data.kl_fifth_prize_numbers || []},
-                                     {label: "6th Prize", numbers: data.kl_sixth_prize_numbers || []}
+                                    [{ label: "1st Prize", numbers: data.kl_first_prize_numbers || [] },
+                                    { label: "2nd Prize", numbers: data.kl_second_prize_numbers || [] },
+                                    { label: "3rd Prize", numbers: data.kl_third_prize_numbers || [] },
+                                    { label: "4th Prize", numbers: data.kl_fourth_prize_numbers || [] },
+                                    { label: "5th Prize", numbers: data.kl_fifth_prize_numbers || [] },
+                                    { label: "6th Prize", numbers: data.kl_sixth_prize_numbers || [] }
                                     ].map((row, idx) => (
                                         <View key={row.label} className={`${PRIZE_COLOURS[idx % PRIZE_COLOURS.length]} border-b border-gray-300`}>
                                             <View className="flex-row items-center">

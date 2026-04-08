@@ -1925,7 +1925,7 @@ const BookingScreen: React.FC = () => {
 
         <View className="px-3 pt-2 flex-1 mb-0" pointerEvents={drawSessionError ? "none" : "auto"} style={drawSessionError ? { opacity: 0.5 } : undefined}>
           {/* Back button + Title + Collapse/Expand toggle */}
-          <View className="flex-row items-center py-2 px-1 mb-1">
+          <View className="flex-row items-center py-2 px-1 mb-1 rounded-lg" style={{ backgroundColor: selectedDraw?.color_theme }}>
             <TouchableOpacity
               onPress={handleBackClick}
               className="p-1.5 rounded-full bg-gray-100 mr-3"
@@ -1933,7 +1933,7 @@ const BookingScreen: React.FC = () => {
             >
               <Ionicons name="arrow-back" size={22} color="#374151" />
             </TouchableOpacity>
-            <Text className="text-base font-bold text-gray-800 flex-1">Book Ticket</Text>
+            <Text className="text-base font-bold text-gray-800 flex-1">{selectedDraw?.name}</Text>
             <TouchableOpacity
               onPress={() => setInputsCollapsed(prev => !prev)}
               className="flex-row items-center bg-gray-100 px-3 py-1.5 rounded-full"
