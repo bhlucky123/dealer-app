@@ -29,6 +29,15 @@ const KL_FIELDS = [
     { key: "kl_sixth_prize_numbers", label: "6th Prize Numbers" },
 ] as const;
 
+const KL_COUNTS: Record<string, number> = {
+    kl_first_prize_numbers: 19,
+    kl_second_prize_numbers: 6,
+    kl_third_prize_numbers: 25,
+    kl_fourth_prize_numbers: 76,
+    kl_fifth_prize_numbers: 94,
+    kl_sixth_prize_numbers: 144,
+};
+
 type Props = {
     onSubmit: (data: any) => void;
     initialData?: any;
@@ -63,9 +72,17 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
         const initial: Record<string, string[]> = {};
         for (const { key } of KL_FIELDS) {
             const existing = initialData?.[key];
-            initial[key] = Array.isArray(existing) && existing.length > 0
-                ? [...existing]
-                : [""];  // start with one empty input
+            const defaultCount = KL_COUNTS[key] || 1;
+            if (Array.isArray(existing) && existing.length > 0) {
+                // If existing data is less than default count, pad it
+                if (existing.length < defaultCount) {
+                    initial[key] = [...existing, ...Array(defaultCount - existing.length).fill("")];
+                } else {
+                    initial[key] = [...existing];
+                }
+            } else {
+                initial[key] = Array(defaultCount).fill("");
+            }
         }
         return initial;
     });
@@ -81,6 +98,9 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
 
     // Refs for complementary prize inputs
     const complementaryRefs = Array.from({ length: 30 }, () => useRef<TextInput>(null));
+
+    // Refs for Kerala prize inputs
+    const keralaRefs = useRef<Record<string, (TextInput | null)[]>>({});
 
     const handleInput = (key: PrizeKey, value: string, idx: number) => {
         setForm((prev) => ({ ...prev, [key]: value }));
@@ -111,6 +131,16 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
             updated[index] = value;
             return { ...prev, [fieldKey]: updated };
         });
+
+        // Auto focus next input if 4 digits
+        if (value.length === 4) {
+            const currentFieldRefs = keralaRefs.current[fieldKey];
+            if (currentFieldRefs && index < currentFieldRefs.length - 1) {
+                setTimeout(() => {
+                    currentFieldRefs[index + 1]?.focus();
+                }, 10);
+            }
+        }
     };
 
     const addKeralaRow = (fieldKey: string) => {
@@ -233,27 +263,32 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
                                             <Text className="ml-1 text-green-700 text-xs font-semibold">Add</Text>
                                         </TouchableOpacity>
                                     </View>
-                                    {(keralaForm[key] || [""]).map((val, idx) => (
-                                        <View key={idx} className="flex-row items-center px-3 py-1.5 border-t border-gray-200 bg-white">
-                                            <Text className="text-gray-400 text-xs w-6">{idx + 1}.</Text>
-                                            <TextInput
-                                                className="flex-1 text-center text-[14px] font-mono font-bold text-gray-900 bg-gray-50 rounded-md border border-gray-300 px-2 py-1.5"
-                                                keyboardType="numeric"
-                                                placeholder="e.g. 1234"
-                                                value={val}
-                                                onChangeText={(text) => handleKeralaChange(key, idx, text)}
-                                                maxLength={4}
-                                                placeholderTextColor="#9ca3af"
-                                            />
-                                            <TouchableOpacity
-                                                onPress={() => removeKeralaRow(key, idx)}
-                                                className="ml-2 p-1"
-                                                activeOpacity={0.7}
-                                            >
-                                                <X size={16} color="#ef4444" />
-                                            </TouchableOpacity>
-                                        </View>
-                                    ))}
+                                    <View className="flex-row flex-wrap p-2 bg-white gap-2">
+                                        {(keralaForm[key] || []).map((val, idx) => (
+                                            <View key={idx} className="relative">
+                                                <TextInput
+                                                    ref={(el) => {
+                                                        if (!keralaRefs.current[key]) keralaRefs.current[key] = [];
+                                                        keralaRefs.current[key][idx] = el;
+                                                    }}
+                                                    className="w-14 text-center text-[13px] font-mono font-bold text-gray-900 bg-gray-50 rounded-md border border-gray-300 py-1"
+                                                    keyboardType="numeric"
+                                                    placeholder="0000"
+                                                    value={val}
+                                                    onChangeText={(text) => handleKeralaChange(key, idx, text)}
+                                                    maxLength={4}
+                                                    placeholderTextColor="#9ca3af"
+                                                />
+                                                <TouchableOpacity
+                                                    onPress={() => removeKeralaRow(key, idx)}
+                                                    className="absolute -top-1 -right-1 bg-red-500 rounded-full w-4 h-4 items-center justify-center border border-white"
+                                                    activeOpacity={0.7}
+                                                >
+                                                    <X size={8} color="#fff" />
+                                                </TouchableOpacity>
+                                            </View>
+                                        ))}
+                                    </View>
                                 </View>
                             ))}
                         </View>
