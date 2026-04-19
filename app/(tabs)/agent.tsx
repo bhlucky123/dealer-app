@@ -242,8 +242,10 @@ const AgentForm = ({
   const handleSubmit = () => {
     if (!validate()) return;
 
-    // Compose calculate_str as suffix only, e.g. "+9"
-    const calculate_str = `${form.calculate_operator}${form.calculate_second_number}`;
+    // Compose calculate_str as full expression (e.g. "78/23") — the current create
+    // endpoint still validates against ^\d+[+\-*/%]\d+$. Switch to suffix-only
+    // (`${op}${num}`) once the backend relaxes the regex to ^\d*[+\-*/%]\d+$.
+    const calculate_str = `${form.calculate_first_number}${form.calculate_operator}${form.calculate_second_number}`;
 
     const preparedData: any = {
       username: form.username,
