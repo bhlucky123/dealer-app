@@ -165,57 +165,43 @@ export const useCalculator = () => {
       setWaitingForSecondOperand(true);
     };
 
-    // Try one-step login for a role. Attempts v2 first, then the legacy URL
-    // with calc+pin payload (gcc-app style) since some backends accept it there too.
-    const tryOneStepLogin = async (role: "dealer" | "agent") => {
-      const payload = JSON.stringify({
-        calculate_str: calcStr,
-        secret_pin: Number(pin),
-      });
-
-      const urls = [
-        `${config.apiBaseUrl}/${role}/login-v2/`,
-        `${config.apiBaseUrl}/${role}/login/`,
-      ];
-
-      for (const url of urls) {
-        try {
-          const resp = await fetch(url, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "User-Type": role.toUpperCase(),
-            },
-            body: payload,
-          });
-          if (!resp.ok) continue;
-          const data = await resp.json();
-          // Some backends return 200 with non_field_errors for bad creds
-          if (data?.non_field_errors?.length) continue;
-          // Success only if we got a token
-          if (data?.access) return data;
-        } catch {
-          // network error on this URL — try next
-        }
+    // v2-only one-step login per 3DLN spec. Do NOT fall back to non-v2 calc+pin URLs —
+    // they exist but reject calc+pin on this backend.
+    const tryV2 = async (role: "dealer" | "agent") => {
+      try {
+        const resp = await fetch(`${config.apiBaseUrl}/${role}/login-v2/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            calculate_str: calcStr,
+            secret_pin: Number(pin),
+          }),
+        });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        return data?.access ? data : null;
+      } catch {
+        return null;
       }
-      return null;
     };
 
     try {
-      // One-step login for dealer, then agent
-      const dealerData = await tryOneStepLogin("dealer");
+      // One-step login: try dealer then agent
+      const dealerData = await tryV2("dealer");
       if (dealerData) {
         setSessionFromV2(dealerData, "DEALER");
         return;
       }
 
-      const agentData = await tryOneStepLogin("agent");
+      const agentData = await tryV2("agent");
       if (agentData) {
         setSessionFromV2(agentData, "AGENT");
         return;
       }
 
-      // Admin fallback: 2-step flow via verify-calculate-str → /login
+      // Fallback: legacy 2-step flow via verify-calculate-str → /login
+      //   - Admins (v2 not supported for admins)
+      //   - Legacy dealers/agents whose DB row still stores the full-expression calculate_str
       const res = await fetch(`${config.apiBaseUrl}/user/verify-calculate-str/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -231,12 +217,6 @@ export const useCalculator = () => {
       }
 
       const data = await res.json();
-      // Only navigate to /login for admins — dealer/agent should have logged in above.
-      // If we get DEALER/AGENT here, both one-step URLs rejected the creds, so silently show calc result.
-      if (data.user_type !== "ADMIN" && data.user_type !== "ADMINISTRATOR") {
-        showCalcResult();
-        return;
-      }
       setPreLogin(data.token, data.user_type);
       router.navigate("/login");
     } catch {
