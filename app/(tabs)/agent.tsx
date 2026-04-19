@@ -6,7 +6,7 @@ import api from "@/utils/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { ArrowLeft, Eye, EyeOff, MoveLeft } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -22,6 +22,13 @@ import {
   View,
 } from "react-native";
 import { Card, PRIZE_CONFIG_FIELDS } from "./more";
+
+const CALC_OPERATORS = [
+  { label: "+", value: "+" },
+  { label: "-", value: "-" },
+  { label: "*", value: "*" },
+  { label: "/", value: "/" },
+];
 
 // Helper to flatten error object to field: message
 function parseApiErrors(errorObj: any): Record<string, string> {
@@ -86,11 +93,25 @@ const AgentForm = ({
   loading?: boolean;
 }) => {
   const { user } = useAuthStore()
-  const [form, setForm] = useState({
+
+  // Parse existing calculate_str (suffix form like "+9") when editing
+  let calculateOperatorInitial = "+";
+  let calculateSecondNumInitial = "";
+  if (defaultValues.calculate_str) {
+    const match = /^([+\-*/])\s*(\d+)$/.exec(defaultValues.calculate_str);
+    if (match) {
+      calculateOperatorInitial = match[1];
+      calculateSecondNumInitial = match[2];
+    }
+  }
+
+  const [form, setForm] = useState<any>({
     username: defaultValues.username || "",
     password: "",
     is_active: defaultValues.is_active ?? true,
-    calculate_str: defaultValues.calculate_str || "",
+    calculate_first_number: defaultValues?.id ? String(defaultValues.id) : "",
+    calculate_operator: calculateOperatorInitial,
+    calculate_second_number: calculateSecondNumInitial,
     secret_pin: defaultValues.secret_pin?.toString() || "",
     commission: defaultValues.commission?.toString() || "",
     single_digit_number_commission:
@@ -120,13 +141,39 @@ const AgentForm = ({
   // Add state for password visibility
   const [showPassword, setShowPassword] = useState(false);
 
-  const isEdit = !!defaultValues?.id;
-  const { data: nextUserId } = useQuery<number>({
-    queryKey: ["new-user-id", "AGENT"],
-    queryFn: () => api.get("/user/get-new-user-id/?user_type=AGENT").then((res) => res.data),
-    enabled: !isEdit,
-    staleTime: 0,
-  });
+  const skipCalculateIdFetch = !!defaultValues?.id;
+  const [newUserIdData, setNewUserIdData] = useState<number | null>(null);
+  const [loadingCalcId, setLoadingCalcId] = useState(false);
+  const [errorCalcId, setErrorCalcId] = useState(false);
+  const fetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (!skipCalculateIdFetch && !fetchedRef.current) {
+      setLoadingCalcId(true);
+      setErrorCalcId(false);
+      api.get(`/user/get-new-user-id/?user_type=AGENT`)
+        .then((res) => {
+          setNewUserIdData(res.data);
+          fetchedRef.current = true;
+          setLoadingCalcId(false);
+        })
+        .catch(() => {
+          setErrorCalcId(true);
+          setLoadingCalcId(false);
+        });
+    }
+    // eslint-disable-next-line
+  }, [skipCalculateIdFetch]);
+
+  useEffect(() => {
+    if (!skipCalculateIdFetch && newUserIdData && !form.calculate_first_number) {
+      setForm((prev: any) => ({
+        ...prev,
+        calculate_first_number: String(newUserIdData),
+      }));
+    }
+    // eslint-disable-next-line
+  }, [newUserIdData, skipCalculateIdFetch]);
 
   const handleChange = (key: string, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -143,36 +190,14 @@ const AgentForm = ({
     if (!defaultValues?.id && !form.password.trim())
       newErrors.password = "Password is required";
 
-    if (!form.calculate_str.trim()) {
-      newErrors.calculate_str = "Calculate String is required";
-    } else {
-      // Validate that calculate_str is a valid equation (e.g., only numbers, +, -, *, /, parentheses, spaces)
-      const eq = form.calculate_str.trim();
-      // Only allow numbers, operators, parentheses, and spaces
-      if (!/^[\d+\-*/().\s]+$/.test(eq)) {
-        newErrors.calculate_str = "Calculate String must be a valid equation (numbers and + - * / only)";
-      } else {
-        // Try to evaluate the equation safely
-        try {
-          // eslint-disable-next-line no-new-func
-          // Only evaluate if it doesn't contain double operators or invalid patterns
-          // (basic check, not bulletproof)
-          // Disallow consecutive operators (except for minus for negative numbers)
-          if (/[\+\-\*\/]{2,}/.test(eq.replace(/--/g, ""))) {
-            throw new Error();
-          }
-          // eslint-disable-next-line no-new-func
-          // Evaluate using Function constructor (safer than eval, but still not 100% safe)
-          // Only for validation, not for actual calculation
-          // @ts-ignore
-          const result = Function(`"use strict";return (${eq})`)();
-          if (typeof result !== "number" || isNaN(result)) {
-            throw new Error();
-          }
-        } catch {
-          newErrors.calculate_str = "Calculate String must be a valid equation";
-        }
-      }
+    if (!form.calculate_first_number || isNaN(Number(form.calculate_first_number))) {
+      newErrors.calculate_str = "First number required";
+    }
+    if (!form.calculate_operator) {
+      newErrors.calculate_str = "Operator is required";
+    }
+    if (!form.calculate_second_number || isNaN(Number(form.calculate_second_number))) {
+      newErrors.calculate_str = "Second number required";
     }
     if (
       !form?.secret_pin)
@@ -217,10 +242,13 @@ const AgentForm = ({
   const handleSubmit = () => {
     if (!validate()) return;
 
+    // Compose calculate_str as suffix only, e.g. "+9"
+    const calculate_str = `${form.calculate_operator}${form.calculate_second_number}`;
+
     const preparedData: any = {
       username: form.username,
       is_active: form.is_active,
-      calculate_str: form.calculate_str,
+      calculate_str,
       secret_pin: Number(form.secret_pin),
       commission: Number(form.commission),
       single_digit_number_commission: Number(form.single_digit_number_commission),
@@ -248,7 +276,6 @@ const AgentForm = ({
   const inputFields = [
     { key: "username", label: "Username", keyboardType: "default" as const, secureTextEntry: false, icon: "@" },
     { key: "password", label: "Password", keyboardType: "default" as const, secureTextEntry: true, optional: !!defaultValues?.id, icon: "🔒" },
-    { key: "calculate_str", label: "Calculate String", keyboardType: "default" as const, secureTextEntry: false, icon: "🧮" },
     { key: "secret_pin", label: "Secret PIN", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🔐" },
     { key: "commission", label: "Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💰" },
     { key: "single_digit_number_commission", label: "Single Digit Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "📊" },
@@ -294,17 +321,93 @@ const AgentForm = ({
               <Text className="text-red-600 text-base font-semibold text-center">{generalError}</Text>
             </View>
           ) : null}
-          {!isEdit && (
-            <View className="mb-6 p-4 rounded-xl bg-blue-50 border-2 border-blue-200">
-              <Text className="text-gray-700 font-semibold mb-1 ml-1">
-                <Text>🆔 </Text>
-                <Text>Next Agent ID</Text>
+          {/* Custom Calculate String Section */}
+          <View className="mb-6">
+            <Text className="text-gray-700 font-semibold mb-2 ml-1">
+              <Text>🧮 </Text>
+              <Text>Calculate String</Text>
+              <Text className="text-red-500"> *</Text>
+            </Text>
+            <View className="flex-row items-center space-x-2">
+              {/* User ID (fetched or derived from defaultValues) */}
+              <View style={{ flex: 1 }}>
+                <Text className="text-xs text-gray-500 mb-1">User ID</Text>
+                <View className={`
+                  border-2 rounded-xl px-4 py-3 bg-gray-100 text-gray-800
+                  ${focusedField === "calculate_first_number" ? "border-blue-300 bg-blue-50" : "border-gray-200"}
+                `}>
+                  <Text className="text-lg font-medium">
+                    {form.calculate_first_number ? form.calculate_first_number : (loadingCalcId ? "Loading..." : (errorCalcId ? "Error" : "--"))}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Operator dropdown */}
+              <View style={{ marginLeft: 6 }}>
+                <Text className="text-xs text-gray-500 mb-1">Operator</Text>
+                <View className={`
+                  border-2 rounded-xl px-2 py-1 bg-white text-gray-800
+                  ${focusedField === "calculate_operator" ? "border-blue-300 bg-blue-50" : "border-gray-200"}
+                `}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center' }}>
+                    {CALC_OPERATORS.map(op => (
+                      <TouchableOpacity
+                        key={op.value}
+                        style={{
+                          marginHorizontal: 3,
+                          borderRadius: 8,
+                          backgroundColor: form.calculate_operator === op.value ? "#3B82F6" : "transparent",
+                          paddingHorizontal: 10,
+                          paddingVertical: 6,
+                        }}
+                        onPress={() => handleChange("calculate_operator", op.value)}
+                      >
+                        <Text style={{ color: form.calculate_operator === op.value ? "#fff" : "#222", fontWeight: "bold", fontSize: 18 }}>{op.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              </View>
+
+              {/* Second number input */}
+              <View style={{ flex: 1, marginLeft: 6 }}>
+                <Text className="text-xs text-gray-500 mb-1">Second Number</Text>
+                <TextInput
+                  placeholder="e.g. 9"
+                  className={`
+                    border-2 rounded-xl px-4 py-3 bg-white
+                    text-gray-800 font-medium
+                    ${focusedField === "calculate_second_number"
+                      ? 'border-blue-400 bg-blue-50'
+                      : (form.calculate_second_number ? 'border-green-300 bg-green-50' : 'border-gray-200')}
+                  `}
+                  value={form.calculate_second_number}
+                  keyboardType="numeric"
+                  onFocus={() => setFocusedField("calculate_second_number")}
+                  onBlur={() => setFocusedField(null)}
+                  onChangeText={text => handleChange("calculate_second_number", text.replace(/[^0-9]/g, ""))}
+                  maxLength={4}
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+            </View>
+            {errors.calculate_str && (
+              <Text className="text-red-500 text-sm mt-1 ml-1 font-medium">
+                {errors.calculate_str}
               </Text>
-              <Text className="text-blue-900 font-bold text-2xl ml-1">
-                {nextUserId ?? "…"}
+            )}
+            <View className="mt-2">
+              <Text className="text-gray-500 text-sm">
+                <Text className="font-semibold">Preview:&nbsp;</Text>
+                <Text className="font-mono text-base text-blue-700">
+                  {form.calculate_first_number && form.calculate_operator && form.calculate_second_number
+                    ? `${form.calculate_first_number}${form.calculate_operator}${form.calculate_second_number}`
+                    : ""}
+                </Text>
               </Text>
             </View>
-          )}
+          </View>
+
           {inputFields.map(({ key, label, keyboardType, secureTextEntry, optional, icon }) => {
             const isFocused = focusedField === key;
             const hasError = !!errors[key];

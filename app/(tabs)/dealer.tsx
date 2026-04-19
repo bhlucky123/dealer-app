@@ -4,9 +4,9 @@ import { useAuthStore } from "@/store/auth";
 import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import { Eye, EyeOff, MoveLeft } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -21,12 +21,12 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { Card, PRIZE_CONFIG_FIELDS } from "./more";
+import { Card } from "./more";
 
 // Dealer type
 type Dealer = {
     id: number;
-    password?: string;
+    // password?: string;
     username: string;
     is_active: boolean;
     calculate_str: string;
@@ -48,6 +48,13 @@ type Dealer = {
     "super_third_prize": string
 };
 
+const CALC_OPERATORS = [
+    { label: "+", value: "+" },
+    { label: "-", value: "-" },
+    { label: "*", value: "*" },
+    { label: "/", value: "/" },
+];
+
 // Eye icon SVG (simple inline, no extra dependency)
 const EyeIcon = ({ visible }: { visible: boolean }) => (
     <View style={{ width: 24, height: 24, justifyContent: "center", alignItems: "center" }}>
@@ -55,7 +62,7 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
             // Open eye
             <Eye color="#6b7280" size={20} />
         ) : (
-            // Closed eye (using emoji for simplicity)
+            // Closed eye
             <EyeOff color="#6b7280" size={20} />
         )}
     </View>
@@ -72,11 +79,31 @@ const DealerForm = ({
     onCancel: () => void;
     submitting?: boolean
 }) => {
+    const { user } = useAuthStore();
+
+    // For calculate string config: number, operator, second number
+    // During editing, parse out the firstNum, op, secondNum from calculate_str
+    let calculateFirstNumInitial = "";
+    let calculateOperatorInitial = "+";
+    let calculateSecondNumInitial = "";
+
+    if (defaultValues.calculate_str) {
+        // calculate_str will be like "+9": only operator and second number
+        const match = /^([+\-*/])\s*(\d+)$/.exec(defaultValues.calculate_str);
+        if (match) {
+            calculateOperatorInitial = match[1];
+            calculateSecondNumInitial = match[2];
+        }
+    }
+
     const [form, setForm] = useState({
         username: defaultValues.username || "",
-        password: "", // Always start with an empty password for security
+        // password: "", // Always start with an empty password for security
         is_active: defaultValues.is_active ?? true,
-        calculate_str: defaultValues.calculate_str || "",
+        // calculate_str is composed in handleSubmit from below:
+        calculate_first_number: defaultValues?.id,
+        calculate_operator: calculateOperatorInitial,
+        calculate_second_number: calculateSecondNumInitial,
         secret_pin: defaultValues.secret_pin?.toString() || "",
         commission: defaultValues.commission?.toString() || "",
         single_digit_number_commission: defaultValues.single_digit_number_commission?.toString() || "",
@@ -98,13 +125,42 @@ const DealerForm = ({
     const [focusedField, setFocusedField] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
 
-    const isEdit = !!defaultValues?.id;
-    const { data: nextUserId } = useQuery<number>({
-        queryKey: ["new-user-id", "DEALER"],
-        queryFn: () => api.get("/user/get-new-user-id/?user_type=DEALER").then((res) => res.data),
-        enabled: !isEdit,
-        staleTime: 0,
-    });
+    // Fetch calculate id if creating new; do not run if editing existing dealer
+    const skipCalculateIdFetch = !!defaultValues?.id;
+    // Custom fetch logic: Only fetch when the form is opened (component mount), and not cached.
+    const [newUserIdData, setNewUserIdData] = useState<number | null>(null);
+    const [loadingCalcId, setLoadingCalcId] = useState(false);
+    const [errorCalcId, setErrorCalcId] = useState(false);
+    const fetchedRef = useRef(false);
+
+    useEffect(() => {
+        if (!skipCalculateIdFetch && !fetchedRef.current) {
+            setLoadingCalcId(true);
+            setErrorCalcId(false);
+            api.get(`/user/get-new-user-id/?user_type=DEALER`)
+                .then((res) => {
+                    setNewUserIdData(res.data);
+                    fetchedRef.current = true;
+                    setLoadingCalcId(false);
+                })
+                .catch((e) => {
+                    setErrorCalcId(true);
+                    setLoadingCalcId(false);
+                });
+        }
+        // eslint-disable-next-line
+    }, [skipCalculateIdFetch]);
+
+    // On new userId fetched -> set to calculate_first_number
+    useEffect(() => {
+        if (!skipCalculateIdFetch && newUserIdData && !form.calculate_first_number) {
+            setForm(prev => ({
+                ...prev,
+                calculate_first_number: String(newUserIdData)
+            }));
+        }
+        // eslint-disable-next-line
+    }, [newUserIdData, skipCalculateIdFetch]);
 
     const validate = () => {
         const newErrors: Record<string, string> = {};
@@ -114,10 +170,18 @@ const DealerForm = ({
             newErrors.username = "Username should not contain spaces";
         }
         // Password is only required for new creations
-        if (!defaultValues?.id && !form.password.trim())
-            newErrors.password = "Password is required";
-        if (!form?.calculate_str?.trim())
-            newErrors.calculate_str = "required";
+        // if (!defaultValues?.id && !form.password.trim())
+        //     newErrors.password = "Password is required";
+        // Calculate string validation
+        if (!form.calculate_first_number || isNaN(Number(form.calculate_first_number))) {
+            newErrors.calculate_str = "First number required";
+        }
+        if (!form.calculate_operator) {
+            newErrors.calculate_str = "Operator is required";
+        }
+        if (!form.calculate_second_number || isNaN(Number(form.calculate_second_number))) {
+            newErrors.calculate_str = "Second number required";
+        }
         if (!form.secret_pin.trim())
             newErrors.secret_pin = "required";
         if (!form?.commission)
@@ -145,7 +209,6 @@ const DealerForm = ({
             if (!form?.super_second_prize)
                 newErrors.super_second_prize = "Super Second Prize is required";
         }
-
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -155,81 +218,45 @@ const DealerForm = ({
         setErrors((prev) => ({ ...prev, [key]: "" }));
     };
 
-    const validatePrizeConfig = () => {
-        // if(!form.box_direct){
-        //     setErrors((prev) => ({ ...prev, ["errMsg"]: "Box Direct is required" }));
-        //     return false;
-        // }
-
-        // if(!form.box_indirect){
-        //     setErrors((prev) => ({ ...prev, ["errMsg"]: "Box Indirect is required" }));
-        //     return false;
-        // }
-
-        // if(!form.double_digit_prize){
-        //     setErrors((prev) => ({ ...prev, ["errMsg"]: "Double Digit Prize is required" }));
-        //     return false;
-        // }
-
-        // if(!form.){
-        //     setErrors((prev) => ({ ...prev, ["errMsg"]: "Double Digit Prize is required" }));
-        //     return false;
-        // }
-
-
-
-
-
-
-        if (
-            !form ||
-            PRIZE_CONFIG_FIELDS.some(
-                ({ key }) =>
-                    form[key] === undefined ||
-                    form[key] === null ||
-                    isNaN(Number(form[key]))
-            )
-        ) {
-            setErrors((prev) => ({ ...prev, ["errMsg"]: "All fields are required and must be numbers" }));
-
-            return false;
-        }
-        setErrors((prev) => ({ ...prev, ["errMsg"]: "" }));
-
-        return true
-    };
-
     const handleSubmit = () => {
-        console.log("validatePrizeConfig", validatePrizeConfig(), "!validate()", validate())
+        console.log("on submit")
         if (!validate()) {
-            console.log("inside if");
             return
         }
-        console.log("after validation");
+        // Compose calculate_str: "{firstNum}{op}{secondNum}", eg "12+9"
+        const str = `${form.calculate_operator}${form.calculate_second_number}`
 
         const preparedData: Partial<Dealer> = {
             ...form,
+            calculate_str: str,
             secret_pin: Number(form.secret_pin),
             commission: Number(form.commission),
             single_digit_number_commission: Number(form.single_digit_number_commission),
             cap_amount: Number(form.cap_amount),
         };
+        console.log("preparedData", preparedData)
 
-        // Only include password if it's set (for new creation or explicit update)
-        if (form.password.trim() !== "") {
-            preparedData.password = form.password;
-        } else if (defaultValues.id) {
-            // If it's an edit and password is empty, ensure it's not sent to avoid accidental overwrite
-            delete preparedData.password;
-        }
+        // // Only include password if it's set (for new creation or explicit update)
+        // if (form.password.trim() !== "") {
+        //     preparedData.password = form.password;
+        // } else if (defaultValues.id) {
+        //     // If it's an edit and password is empty, ensure it's not sent to avoid accidental overwrite
+        //     delete preparedData.password;
+        // }
+
+        // Remove our UI fields if they exist to prevent type errors
+        delete (preparedData as any).calculate_first_number;
+        delete (preparedData as any).calculate_operator;
+        delete (preparedData as any).calculate_second_number;
 
         onSubmit(preparedData);
     };
 
+    // Setup input fields except calculate_str; calculate_str field will be rendered custom below.
     const inputFields = [
         { key: "username", label: "Username", keyboardType: "default" as const, secureTextEntry: false, icon: "👤" },
-        { key: "password", label: "Password", keyboardType: "default" as const, secureTextEntry: true, optional: !!defaultValues?.id, icon: "🔒" }, // Optional for edit
-        { key: "calculate_str", label: "Calculate String", keyboardType: "default" as const, secureTextEntry: false, icon: "🧮" },
+        // { key: "password", label: "Password", keyboardType: "default" as const, secureTextEntry: true, optional: !!defaultValues?.id, icon: "🔒" },
+        // { key: "calculate_str", label: "Calculate String", ...} // Omit, we now custom
         { key: "secret_pin", label: "Secret PIN", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🔑" },
         { key: "commission", label: "Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💰" },
         { key: "single_digit_number_commission", label: "Single Digit Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🎯" },
@@ -272,22 +299,99 @@ const DealerForm = ({
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{ paddingBottom: 50 }} // Add padding to the bottom
                 >
-                    {!isEdit && (
-                        <View className="mb-6 p-4 rounded-xl bg-blue-50 border-2 border-blue-200">
-                            <Text className="text-gray-700 font-semibold mb-1 ml-1">
-                                <Text>🆔 </Text>
-                                <Text>Next Dealer ID</Text>
+                    {/* Custom Calculate String Section */}
+                    <View className="mb-6">
+                        <Text className="text-gray-700 font-semibold mb-2 ml-1">
+                            <Text>🧮 </Text>
+                            <Text>Calculate String</Text>
+                            <Text className="text-red-500"> *</Text>
+                        </Text>
+                        <View className="flex-row items-center space-x-2">
+                            {/* Number fetched from API (first number) */}
+                            <View style={{ flex: 1 }}>
+                                <Text className="text-xs text-gray-500 mb-1">User ID</Text>
+                                <View className={`
+                                    border-2 rounded-xl px-4 py-3 bg-gray-100 text-gray-800
+                                    ${focusedField === "calculate_first_number" ? "border-blue-300 bg-blue-50" : "border-gray-200"}
+                                `}>
+                                    <Text className="text-lg font-medium">
+                                        {form.calculate_first_number ? form.calculate_first_number : (loadingCalcId ? "Loading..." : (errorCalcId ? "Error" : "--"))}
+                                    </Text>
+                                </View>
+                            </View>
+
+                            {/* Operator dropdown */}
+                            <View style={{ marginLeft: 6 }}>
+                                <Text className="text-xs text-gray-500 mb-1">Operator</Text>
+                                <View className={`
+                                    border-2 rounded-xl px-2 py-1 bg-white text-gray-800
+                                    ${focusedField === "calculate_operator" ? "border-blue-300 bg-blue-50" : "border-gray-200"}
+                                `}>
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        {CALC_OPERATORS.map(op => (
+                                            <TouchableOpacity
+                                                key={op.value}
+                                                style={{
+                                                    marginHorizontal: 3,
+                                                    borderRadius: 8,
+                                                    backgroundColor: form.calculate_operator === op.value ? "#3B82F6" : "transparent",
+                                                    paddingHorizontal: 10,
+                                                    paddingVertical: 6,
+                                                }}
+                                                onPress={() => handleChange("calculate_operator", op.value)}
+                                            >
+                                                <Text style={{ color: form.calculate_operator === op.value ? "#fff" : "#222", fontWeight: "bold", fontSize: 18 }}>{op.label}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+                            </View>
+
+                            {/* Second number input */}
+                            <View style={{ flex: 1, marginLeft: 6 }}>
+                                <Text className="text-xs text-gray-500 mb-1">Second Number</Text>
+                                <TextInput
+                                    placeholder="e.g. 9"
+                                    className={`
+                                        border-2 rounded-xl px-4 py-3 bg-white
+                                        text-gray-800 font-medium
+                                        ${focusedField === "calculate_second_number"
+                                            ? 'border-blue-400 bg-blue-50'
+                                            : (form.calculate_second_number ? 'border-green-300 bg-green-50' : 'border-gray-200')}
+                                    `}
+                                    value={form.calculate_second_number}
+                                    keyboardType="numeric"
+                                    onFocus={() => setFocusedField("calculate_second_number")}
+                                    onBlur={() => setFocusedField(null)}
+                                    onChangeText={text => handleChange("calculate_second_number", text.replace(/[^0-9]/g, ""))}
+                                    maxLength={4}
+                                    placeholderTextColor="#9CA3AF"
+                                />
+                            </View>
+                        </View>
+                        {/* Validation error for calculate_str */}
+                        {errors.calculate_str && (
+                            <Text className="text-red-500 text-sm mt-1 ml-1 font-medium">
+                                {errors.calculate_str}
                             </Text>
-                            <Text className="text-blue-900 font-bold text-2xl ml-1">
-                                {nextUserId ?? "…"}
+                        )}
+                        <View className="mt-2">
+                            <Text className="text-gray-500 text-sm">
+                                <Text className="font-semibold">Preview:&nbsp;</Text>
+                                <Text className="font-mono text-base text-blue-700">
+                                    {form.calculate_first_number && form.calculate_operator && form.calculate_second_number
+                                        ? `${form.calculate_first_number}${form.calculate_operator}${form.calculate_second_number}`
+                                        : ""}
+                                </Text>
                             </Text>
                         </View>
-                    )}
+                    </View>
 
+                    {/* Other Inputs */}
                     {inputFields.map(({ key, label, keyboardType, secureTextEntry, optional, icon }) => {
                         const isFocused = focusedField === key;
                         const hasError = !!errors[key];
-                        const hasValue = !!form[key as keyof typeof form]; // Check if the field has any value
+                        const hasValue = !!form[key as keyof typeof form];
 
                         // Only for password field: show/hide logic and eye icon
                         if (key === "password") {
@@ -302,8 +406,8 @@ const DealerForm = ({
                                         <TextInput
                                             placeholder={optional ? `${label} (optional)` : `Enter ${label.toLowerCase()}`}
                                             className={`
-                      border-2 rounded-xl px-4 py-4 bg-white text-gray-800 font-medium
-                      ${hasError
+                                                border-2 rounded-xl px-4 py-4 bg-white text-gray-800 font-medium
+                                                ${hasError
                                                     ? 'border-red-300 bg-red-50'
                                                     : isFocused
                                                         ? 'border-blue-400 bg-blue-50'
@@ -311,8 +415,8 @@ const DealerForm = ({
                                                             ? 'border-green-300 bg-green-50'
                                                             : 'border-gray-200'
                                                 }
-                      shadow-sm
-                    `}
+                                                shadow-sm
+                                            `}
                                             value={
                                                 typeof form[key as keyof typeof form] === "boolean"
                                                     ? form[key as keyof typeof form]
@@ -367,8 +471,8 @@ const DealerForm = ({
                                     <TextInput
                                         placeholder={optional ? `${label} (optional)` : `Enter ${label.toLowerCase()}`}
                                         className={`
-                      border-2 rounded-xl px-4 py-4 bg-white text-gray-800 font-medium
-                      ${hasError
+                                            border-2 rounded-xl px-4 py-4 bg-white text-gray-800 font-medium
+                                            ${hasError
                                                 ? 'border-red-300 bg-red-50'
                                                 : isFocused
                                                     ? 'border-blue-400 bg-blue-50'
@@ -376,8 +480,8 @@ const DealerForm = ({
                                                         ? 'border-green-300 bg-green-50'
                                                         : 'border-gray-200'
                                             }
-                      shadow-sm
-                    `}
+                                            shadow-sm
+                                        `}
                                         value={
                                             typeof form[key as keyof typeof form] === "boolean"
                                                 ? form[key as keyof typeof form]
@@ -423,23 +527,23 @@ const DealerForm = ({
                                 handleChange('is_active', !form.is_active)
                             }}
                             className={`
-                flex-row items-center justify-between p-4 rounded-xl border-2
-                ${form.is_active
+                                flex-row items-center justify-between p-4 rounded-xl border-2
+                                ${form.is_active
                                     ? 'bg-green-50 border-green-300'
                                     : 'bg-gray-50 border-gray-300'
                                 }
-              `}
+                            `}
                             activeOpacity={0.8}
                         >
                             <Text className="text-gray-700 font-medium">Active Account</Text>
                             <View className={`
-                w-12 h-6 rounded-full p-1
-                ${form.is_active ? 'bg-green-500' : 'bg-gray-400'}
-              `}>
+                                w-12 h-6 rounded-full p-1
+                                ${form.is_active ? 'bg-green-500' : 'bg-gray-400'}
+                            `}>
                                 <View className={`
-                  w-4 h-4 bg-white rounded-full transition-all duration-200
-                  ${form.is_active ? 'ml-6' : 'ml-0'}
-                `} />
+                                    w-4 h-4 bg-white rounded-full transition-all duration-200
+                                    ${form.is_active ? 'ml-6' : 'ml-0'}
+                                `} />
                             </View>
                         </TouchableOpacity>
                     </View>
@@ -451,31 +555,29 @@ const DealerForm = ({
                                     setForm((prev) => ({ ...form, is_prize_set: !prev?.is_prize_set }))
                                 }}
                                 className={`
-                flex-row items-center justify-between p-4 rounded-xl border-2
-                ${form.is_active
+                                    flex-row items-center justify-between p-4 rounded-xl border-2
+                                    ${form.is_active
                                         ? 'bg-green-50 border-green-300'
                                         : 'bg-gray-50 border-gray-300'
                                     }
-              `}
+                                `}
                                 activeOpacity={0.8}
                             >
                                 <Text className="text-gray-700 font-medium">Prize Config</Text>
                                 <View className={`
-                w-12 h-6 rounded-full p-1
-                ${form?.is_prize_set ? 'bg-green-500' : 'bg-gray-400'}
-              `}>
+                                    w-12 h-6 rounded-full p-1
+                                    ${form?.is_prize_set ? 'bg-green-500' : 'bg-gray-400'}
+                                `}>
                                     <View className={`
-                  w-4 h-4 bg-white rounded-full transition-all duration-200
-                  ${form?.is_prize_set ? 'ml-6' : 'ml-0'}
-                `} />
+                                        w-4 h-4 bg-white rounded-full transition-all duration-200
+                                        ${form?.is_prize_set ? 'ml-6' : 'ml-0'}
+                                    `} />
                                 </View>
                             </TouchableOpacity>
                         </View>
                         {
                             form?.is_prize_set &&
                             <PrizeConfigBlock form={form} errors={errors} onChange={(data) => {
-                                console.log("data", data);
-
                                 if (Object.keys.length > 0) {
                                     setErrors({})
                                 }
@@ -483,7 +585,6 @@ const DealerForm = ({
                             }} />
                         }
                     </Card>
-
 
                     <View className="pb-20 my-12 mb-12">
                         {/* Added padding-bottom for the submit button */}
@@ -508,11 +609,6 @@ const DealerForm = ({
 
 const DealerCard = ({ item, onEdit, onDelete }: { item: Dealer; onEdit: () => void; onDelete: () => void }) => {
     const { user } = useAuthStore();
-    const router = useRouter()
-
-    const onReport = () => {
-        router.push("/reports/[id]")
-    }
 
     return (
         < View className="bg-white mx-4 mb-4 rounded-xl border border-gray-200 overflow-hidden" >
@@ -521,7 +617,6 @@ const DealerCard = ({ item, onEdit, onDelete }: { item: Dealer; onEdit: () => vo
                 <View className="flex-row justify-between mb-4">
                     <Text className="text-lg font-semibold">{item.username}</Text>
                     <View className="flex-row gap-2">
-
                         <TouchableOpacity onPress={() => {
                             router.push(`/agent/${item.id}`)
                         }} className="px-3 py-1 bg-gray-100 rounded-md">
@@ -560,16 +655,17 @@ const DealerCard = ({ item, onEdit, onDelete }: { item: Dealer; onEdit: () => vo
                         ₹{amountHandler(item.cap_amount)}
                     </Text>
                 </View>
+            </View>
 
-                <View className="flex-row justify-end">
-                    {
-                        user?.user_type === "ADMIN" &&
-                        <TouchableOpacity onPress={() => {
-                            router.push({ pathname: "/reports/[id]", params: { id: String(item.id) } })
-                        }} className="px-3 py-1 w-24 mt-3 bg-green-100 rounded-md">
-                            <Text className="text-center" >Report</Text>
-                        </TouchableOpacity>}
-                </View>
+            <View className="flex-row justify-end">
+                {
+                    user?.user_type === "ADMIN" &&
+                    <TouchableOpacity onPress={() => {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        router.push({ pathname: "/reports/[id]", params: { id: String(item.id) } })
+                    }} className="px-3 py-1 w-24 mt-3 bg-green-100 rounded-md">
+                        <Text className="text-center" >Report</Text>
+                    </TouchableOpacity>}
             </View>
         </View >
     )
@@ -597,10 +693,7 @@ export default function DealerManagement() {
     });
     const { createDealer, editDealer, deleteDealer } = useDealer();
 
-
-
     const filteredDealers = dealers.filter(d => d.username.toLowerCase().includes(searchQuery.toLowerCase()));
-    console.log("filteredDealers", filteredDealers);
 
     const handleCreate = (data: any) => {
         setSubmitting(true)
@@ -612,10 +705,8 @@ export default function DealerManagement() {
             },
             onError: (error) => {
                 setSubmitting(false)
-                console.log("error", error);
                 let errorMsg = "Failed to create dealer.";
 
-                // Handle the specific error: {"message": ["Dealer with this calculate_str and secret_pin already exists."], "status": 400}
                 if (
                     error?.message &&
                     Array.isArray(error.message) &&
@@ -624,7 +715,6 @@ export default function DealerManagement() {
                 ) {
                     errorMsg = error.message[0];
                 } else if (error?.message && typeof error.message === "object") {
-                    // Find the first field with an error message
                     const field = Object.keys(error.message)[0];
                     if (field && Array.isArray(error.message[field]) && error.message[field][0]) {
                         errorMsg = error.message[field][0];
@@ -638,11 +728,9 @@ export default function DealerManagement() {
     };
 
     const handleEdit = (data: any) => {
-        setSubmitting(true)
-
+        setSubmitting(true);
         editDealer({ ...data, id: editData?.id }, {
             onSuccess: (updated) => {
-                console.log("Success")
                 setShowForm(false);
                 setSubmitting(false)
                 queryClient.setQueryData<any[]>(["dealers"], (old) =>
@@ -651,29 +739,24 @@ export default function DealerManagement() {
                 setEditData(null);
             },
             onError: (err) => {
-                console.log("Error", err)
                 setSubmitting(false);
                 let errorMsg = "Failed to update dealer.";
 
                 if (err?.message) {
-                    // If error is an array like: ["Dealer with this calculate_str and secret_pin already exists."]
                     if (Array.isArray(err.message) && err.message.length > 0 && typeof err.message[0] === "string") {
                         errorMsg = err.message[0];
                     } else if (typeof err.message === "string") {
-                        // If error is a string and looks like HTML, show generic message
                         if (err.message.trim().startsWith("<!DOCTYPE html") || err.message.trim().startsWith("<html")) {
                             errorMsg = "Something went wrong. Please try again.";
                         } else {
                             errorMsg = err.message;
                         }
                     } else if (typeof err.message === "object" && err.message !== null) {
-                        // Handle non_field_errors (array of messages)
                         if (Array.isArray((err.message as any).non_field_errors) && (err.message as any).non_field_errors.length > 0) {
                             errorMsg = (err.message as any).non_field_errors.join("\n");
                         } else if ((err.message as any).detail) {
                             errorMsg = (err.message as any).detail;
                         } else {
-                            // Try to get the first field error
                             const firstField = Object.keys(err.message)[0];
                             if (
                                 firstField &&
@@ -736,7 +819,6 @@ export default function DealerManagement() {
                                     : "An error occurred while loading dealers. Please try again.")
                         }
                     </Text>
-                    {/* {((error as any)?.status !== 403) && ( */}
                     <TouchableOpacity
                         onPress={() => refetch()}
                         className="flex-row items-center justify-center bg-blue-600 px-8 py-3 rounded-xl shadow active:scale-95"
@@ -745,7 +827,6 @@ export default function DealerManagement() {
                         <Text className="text-white font-bold text-lg mr-2">Retry</Text>
                         <Text className="text-white text-xl">↻</Text>
                     </TouchableOpacity>
-                    {/* )} */}
                 </View>
             </View>
         )
