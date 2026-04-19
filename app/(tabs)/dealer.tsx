@@ -98,6 +98,13 @@ const DealerForm = ({
     const [focusedField, setFocusedField] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
 
+    const isEdit = !!defaultValues?.id;
+    const { data: nextUserId } = useQuery<number>({
+        queryKey: ["new-user-id", "DEALER"],
+        queryFn: () => api.get("/user/get-new-user-id/?user_type=DEALER").then((res) => res.data),
+        enabled: !isEdit,
+        staleTime: 0,
+    });
 
     const validate = () => {
         const newErrors: Record<string, string> = {};
@@ -265,6 +272,18 @@ const DealerForm = ({
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{ paddingBottom: 50 }} // Add padding to the bottom
                 >
+                    {!isEdit && (
+                        <View className="mb-6 p-4 rounded-xl bg-blue-50 border-2 border-blue-200">
+                            <Text className="text-gray-700 font-semibold mb-1 ml-1">
+                                <Text>🆔 </Text>
+                                <Text>Next Dealer ID</Text>
+                            </Text>
+                            <Text className="text-blue-900 font-bold text-2xl ml-1">
+                                {nextUserId ?? "…"}
+                            </Text>
+                        </View>
+                    )}
+
                     {inputFields.map(({ key, label, keyboardType, secureTextEntry, optional, icon }) => {
                         const isFocused = focusedField === key;
                         const hasError = !!errors[key];

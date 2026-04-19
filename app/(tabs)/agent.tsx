@@ -120,6 +120,14 @@ const AgentForm = ({
   // Add state for password visibility
   const [showPassword, setShowPassword] = useState(false);
 
+  const isEdit = !!defaultValues?.id;
+  const { data: nextUserId } = useQuery<number>({
+    queryKey: ["new-user-id", "AGENT"],
+    queryFn: () => api.get("/user/get-new-user-id/?user_type=AGENT").then((res) => res.data),
+    enabled: !isEdit,
+    staleTime: 0,
+  });
+
   const handleChange = (key: string, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     setErrors((prev) => ({ ...prev, [key]: "" }));
@@ -286,6 +294,17 @@ const AgentForm = ({
               <Text className="text-red-600 text-base font-semibold text-center">{generalError}</Text>
             </View>
           ) : null}
+          {!isEdit && (
+            <View className="mb-6 p-4 rounded-xl bg-blue-50 border-2 border-blue-200">
+              <Text className="text-gray-700 font-semibold mb-1 ml-1">
+                <Text>🆔 </Text>
+                <Text>Next Agent ID</Text>
+              </Text>
+              <Text className="text-blue-900 font-bold text-2xl ml-1">
+                {nextUserId ?? "…"}
+              </Text>
+            </View>
+          )}
           {inputFields.map(({ key, label, keyboardType, secureTextEntry, optional, icon }) => {
             const isFocused = focusedField === key;
             const hasError = !!errors[key];
