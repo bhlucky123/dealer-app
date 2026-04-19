@@ -518,13 +518,104 @@ const BookingScreen: React.FC = () => {
 
     // --- Non-default draw types (kerala, tamil_nadu) ---
     if (!isDefaultDraw) {
+      const parseNum = (val: string | undefined) => parseInt(val ?? "") || 0;
+      const countVal = parseNum(countInput);
+
+      // Helper to build a booking entry for Kerala / Tamil Nadu draws
+      const digitsRequired = isKeralaDraw ? 4 : 3;
+      const entryType = isKeralaDraw ? "four_digit" : "triple_digit";
+      const buildEntry = (n: string): BookingDetail => {
+        const price = DrawSessionDetails?.non_single_digit_price || 0;
+        const commission = user?.commission ?? 0;
+        const amt = countVal * price;
+        let d_amount: number;
+        if (commission > 1) {
+          d_amount = parseFloat((amt - (amt * (commission / 100))).toFixed(2));
+        } else {
+          d_amount = parseFloat((amt - (countVal * commission)).toFixed(2));
+        }
+        return {
+          lsk: "",
+          number: n,
+          count: countVal,
+          amount: price,
+          d_amount,
+          c_amount: amt,
+          type: entryType,
+          sub_type: "",
+        };
+      };
+
+      // ---------- Range booking (Kerala: 4-digit, Tamil Nadu: 3-digit) ----------
+      if (selectedRange === "Range") {
+        const startStr = numberInput.trim();
+        const endStr = endNumberInput.trim();
+        if (!isValidNumberString(startStr) || startStr.length !== digitsRequired) {
+          Alert.alert("Invalid input", `Start must be a ${digitsRequired}-digit number.`);
+          return;
+        }
+        if (!isValidNumberString(endStr) || endStr.length !== digitsRequired) {
+          Alert.alert("Invalid input", `End must be a ${digitsRequired}-digit number.`);
+          return;
+        }
+        const start = parseNum(startStr);
+        const end = parseNum(endStr);
+        if (start > end) {
+          Alert.alert("Invalid Range", "Start should be less than or equal to end.");
+          return;
+        }
+        if (!isValidPositiveNumber(countVal)) {
+          Alert.alert("Invalid input", "Please enter a valid count.");
+          return;
+        }
+        const newEntries: BookingDetail[] = [];
+        for (let i = start; i <= end; i++) {
+          newEntries.push(buildEntry(i.toString().padStart(digitsRequired, "0")));
+        }
+        setBookingDetails((prev) => [...newEntries, ...prev]);
+        clearInputs();
+        setEndNumberInput("");
+        return;
+      }
+
+      // ---------- Set booking (Tamil Nadu only, 3-digit permutations) ----------
+      if (selectedRange === "Set" && isTamilNaduDraw) {
+        const startStr = numberInput.trim();
+        if (!isValidNumberString(startStr) || startStr.length !== 3) {
+          Alert.alert("Invalid input", "Set requires a 3-digit number.");
+          return;
+        }
+        if (!isValidPositiveNumber(countVal)) {
+          Alert.alert("Invalid input", "Please enter a valid count.");
+          return;
+        }
+        const digits = startStr.split("");
+        const perms = new Set<string>();
+        const permute = (path: string[], used: boolean[]) => {
+          if (path.length === digits.length) {
+            perms.add(path.join(""));
+            return;
+          }
+          for (let i = 0; i < digits.length; i++) {
+            if (used[i]) continue;
+            used[i] = true;
+            permute([...path, digits[i]], [...used]);
+            used[i] = false;
+          }
+        };
+        permute([], Array(digits.length).fill(false));
+        const newEntries: BookingDetail[] = Array.from(perms).map(buildEntry);
+        setBookingDetails((prev) => [...newEntries, ...prev]);
+        clearInputs();
+        return;
+      }
+
+      // ---------- Plain single-number booking ----------
       const numbers = numberInput
         .split(/[\s,]+/)
         .map((n) => n.trim())
         .filter((n) => n.length > 0);
 
-      const parseNum = (val: string | undefined) => parseInt(val ?? "") || 0;
-      const countVal = parseNum(countInput);
       let invalids: string[] = [];
       let allEntries: BookingDetail[] = [];
 
@@ -2100,8 +2191,14 @@ const BookingScreen: React.FC = () => {
               ))}
               <View className="flex-1 ml-1">
                 <View style={{ flexDirection: "row", gap: 6 }}>
-                  {isDefaultDraw && rangeOptions
-                    .filter(option => option.value !== "Book") // Exclude 'Book'
+                  {rangeOptions
+                    .filter(option => {
+                      if (option.value === "Book") return false;
+                      if (isDefaultDraw) return true;
+                      if (isKeralaDraw) return option.value === "Range";
+                      if (isTamilNaduDraw) return option.value === "Range" || option.value === "Set";
+                      return false;
+                    })
                     .map(option => (
                       <TouchableOpacity
                         key={option.value}
