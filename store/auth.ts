@@ -21,6 +21,7 @@ interface AuthState {
   preLoginToken: string | null;
   preLoginUserType: UserType | null;
   login: (username: string, password: string) => Promise<void>;
+  setSessionFromV2: (data: { access: string; user_details: any }, userType: UserType) => void;
   logout: () => void;
   setUser: (user: User | null) => void;
   setPreLogin: (token: string, userType: UserType) => void;
@@ -46,6 +47,23 @@ export const useAuthStore = create<AuthState>((set, get) => {
     application_status: true,
 
     setPreLogin: (token, userType) => set({ preLoginToken: token, preLoginUserType: userType }),
+
+    setSessionFromV2: (data, userType) => {
+      set({
+        user: {
+          id: data.user_details?.user_id,
+          user_type: userType,
+          superuser: data.user_details?.superuser || false,
+          ...data.user_details,
+        },
+        token: data.access,
+        loading: false,
+        error: null,
+        preLoginToken: null,
+        preLoginUserType: null,
+      });
+      router.push("/(tabs)");
+    },
 
     login: async (username, password) => {
       const { preLoginToken, preLoginUserType } = get();

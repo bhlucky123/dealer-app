@@ -17,6 +17,7 @@ export const useCalculator = () => {
   const [verifying, setVerifying] = useState(false);
 
   const setPreLogin = useAuthStore((s) => s.setPreLogin);
+  const setSessionFromV2 = useAuthStore((s) => s.setSessionFromV2);
 
   const {
     data: equationData,
@@ -154,7 +155,44 @@ export const useCalculator = () => {
 
   const verifyPin = useCallback(async (calcStr: string, pin: string) => {
     setVerifying(true);
+
+    const showCalcResult = () => {
+      const result = evaluateEquation(calcStr);
+      setDisplay(result);
+      setFirstOperand(parseFloat(result));
+      setEquation("");
+      setPinInput("");
+      setWaitingForSecondOperand(true);
+    };
+
+    const tryV2 = async (role: "dealer" | "agent") => {
+      const resp = await fetch(`${config.apiBaseUrl}/${role}/login-v2/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          calculate_str: calcStr,
+          secret_pin: Number(pin),
+        }),
+      });
+      if (!resp.ok) return null;
+      return resp.json();
+    };
+
     try {
+      // v2: single-call login — try dealer, then agent
+      const dealerData = await tryV2("dealer");
+      if (dealerData) {
+        setSessionFromV2(dealerData, "DEALER");
+        return;
+      }
+
+      const agentData = await tryV2("agent");
+      if (agentData) {
+        setSessionFromV2(agentData, "AGENT");
+        return;
+      }
+
+      // Fallback: legacy 2-step flow for admins and users not yet migrated to v2
       const res = await fetch(`${config.apiBaseUrl}/user/verify-calculate-str/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -165,31 +203,19 @@ export const useCalculator = () => {
       });
 
       if (!res.ok) {
-        // Wrong pin — show the actual calculation result as if nothing happened
-        const result = evaluateEquation(calcStr);
-        setDisplay(result);
-        setFirstOperand(parseFloat(result));
-        setEquation("");
-        setPinInput("");
-        setWaitingForSecondOperand(true);
+        showCalcResult();
         return;
       }
 
       const data = await res.json();
       setPreLogin(data.token, data.user_type);
       router.navigate("/login");
-    } catch (err: any) {
-      // Network error etc — also just show calculation result
-      const result = evaluateEquation(calcStr);
-      setDisplay(result);
-      setFirstOperand(parseFloat(result));
-      setEquation("");
-      setPinInput("");
-      setWaitingForSecondOperand(true);
+    } catch {
+      showCalcResult();
     } finally {
       setVerifying(false);
     }
-  }, [setPreLogin]);
+  }, [setPreLogin, setSessionFromV2]);
 
   const handleEqual = useCallback(() => {
     // PIN entry mode — verify via API

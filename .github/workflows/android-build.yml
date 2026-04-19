@@ -9,8 +9,29 @@ permissions:
   contents: write
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read build flag from utils/config.ts
+        id: check
+        run: |
+          BUILD=$(grep -E '^\s*build:\s*(true|false)' utils/config.ts | head -1 | sed -E 's/.*build:[[:space:]]*(true|false).*/\1/')
+          if [ -z "$BUILD" ]; then
+            echo "Could not find 'build' flag in utils/config.ts — defaulting to false"
+            BUILD=false
+          fi
+          echo "build flag: $BUILD"
+          echo "build=$BUILD" >> $GITHUB_OUTPUT
+
   build:
     runs-on: ubuntu-latest
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
 
     steps:
       - name: Checkout repository
