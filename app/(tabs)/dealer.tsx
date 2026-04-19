@@ -223,10 +223,9 @@ const DealerForm = ({
         if (!validate()) {
             return
         }
-        // Compose calculate_str as full expression (e.g. "45+9") — the current create
-        // endpoint still validates against ^\d+[+\-*/%]\d+$. Switch to suffix-only
-        // (`${op}${num}`) once the backend relaxes the regex to ^\d*[+\-*/%]\d+$.
-        const str = `${form.calculate_first_number}${form.calculate_operator}${form.calculate_second_number}`
+        // Suffix-only (e.g. "+9"). BE stores as-is; /dealer/login-v2/ parses leading
+        // digits of the typed input as user_id and matches against this suffix.
+        const str = `${form.calculate_operator}${form.calculate_second_number}`
 
         const preparedData: Partial<Dealer> = {
             ...form,
