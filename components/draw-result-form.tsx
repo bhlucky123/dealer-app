@@ -105,8 +105,20 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
     const keralaRefs = useRef<Record<string, (TextInput | null)[]>>({});
 
     const [pdfUploading, setPdfUploading] = useState(false);
+    // Tracks which specific section is busy uploading. ``null`` when no
+    // per-section upload is in flight. The global "Upload Kerala Result PDF"
+    // button still uses ``pdfUploading``.
+    const [uploadingSection, setUploadingSection] = useState<string | null>(null);
 
-    const handleUploadKeralaPdf = async () => {
+    /**
+     * Upload a PDF and populate Kerala prize inputs from the backend's parse.
+     *
+     * - Without ``sectionKey`` → fills every section (global upload).
+     * - With ``sectionKey`` → only that section is overwritten, every other
+     *   section is left alone. Useful when the PDF has the right content for
+     *   one row but a different/better PDF is needed for another.
+     */
+    const handleUploadKeralaPdf = async (sectionKey?: string) => {
         try {
             const pick = await DocumentPicker.getDocumentAsync({
                 type: "application/pdf",
@@ -123,12 +135,30 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
                 type: "application/pdf",
             } as any);
 
-            setPdfUploading(true);
+            if (sectionKey) {
+                setUploadingSection(sectionKey);
+            } else {
+                setPdfUploading(true);
+            }
             const res = await api.post("/draw-result/parse-kerala-pdf/", formData, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
 
             const parsed = (res?.data ?? {}) as Record<string, string[] | undefined>;
+
+            if (sectionKey) {
+                const arr = parsed[sectionKey];
+                if (!Array.isArray(arr) || arr.length === 0) {
+                    Alert.alert(
+                        "No numbers found",
+                        "The PDF didn't contain numbers for this section."
+                    );
+                    return;
+                }
+                setKeralaForm((prev) => ({ ...prev, [sectionKey]: arr }));
+                return;
+            }
+
             setKeralaForm(() => {
                 const next: Record<string, string[]> = {};
                 for (const { key } of KL_FIELDS) {
@@ -149,9 +179,23 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
                 "Failed to parse PDF.";
             Alert.alert("Upload failed", msg);
         } finally {
-            setPdfUploading(false);
+            if (sectionKey) {
+                setUploadingSection(null);
+            } else {
+                setPdfUploading(false);
+            }
         }
     };
+
+    const clearKeralaSection = (fieldKey: string) => {
+        setKeralaForm((prev) => ({
+            ...prev,
+            [fieldKey]: Array(KL_COUNTS[fieldKey] || 1).fill(""),
+        }));
+    };
+
+    const sectionHasValues = (fieldKey: string) =>
+        (keralaForm[fieldKey] || []).some((v) => !!v && v.trim() !== "");
 
     const handleInput = (key: PrizeKey, value: string, idx: number) => {
         setForm((prev) => ({ ...prev, [key]: value }));
@@ -302,7 +346,7 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
                         // Kerala form: 6 dynamic-length number list inputs
                         <View className="mx-4 mt-6">
                             <TouchableOpacity
-                                onPress={handleUploadKeralaPdf}
+                                onPress={() => handleUploadKeralaPdf()}
                                 disabled={pdfUploading}
                                 activeOpacity={0.85}
                                 className="flex-row items-center justify-center bg-indigo-600 rounded-xl py-3 px-4 mb-2"
@@ -320,20 +364,51 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
                                 )}
                             </TouchableOpacity>
                             <Text className="text-[11px] text-gray-500 text-center mb-4">
-                                Fills prize numbers from an official Kerala State Lotteries result PDF.
+                                Fills all prize numbers at once. Each section below also has its own Upload / Clear.
                             </Text>
-                            {KL_FIELDS.map(({ key, label }, fieldIdx) => (
+                            {KL_FIELDS.map(({ key, label }, fieldIdx) => {
+                                const isUploadingThis = uploadingSection === key;
+                                const hasValues = sectionHasValues(key);
+                                return (
                                 <View key={key} className={`mb-4 border border-gray-300 rounded-lg overflow-hidden`}>
                                     <View className={`flex-row items-center justify-between px-3 py-2 ${PRIZE_COLOURS[fieldIdx]}`}>
-                                        <Text className="text-[14px] font-bold text-gray-800">{label}</Text>
-                                        <TouchableOpacity
-                                            onPress={() => addKeralaRow(key)}
-                                            className="flex-row items-center bg-white/80 rounded-md px-2 py-1 border border-gray-300"
-                                            activeOpacity={0.7}
-                                        >
-                                            <Plus size={14} color="#16a34a" />
-                                            <Text className="ml-1 text-green-700 text-xs font-semibold">Add</Text>
-                                        </TouchableOpacity>
+                                        <Text className="text-[14px] font-bold text-gray-800 flex-shrink">{label}</Text>
+                                        <View className="flex-row items-center" style={{ gap: 6 }}>
+                                            <TouchableOpacity
+                                                onPress={() => handleUploadKeralaPdf(key)}
+                                                disabled={isUploadingThis}
+                                                className="flex-row items-center bg-white/80 rounded-md px-2 py-1 border border-gray-300"
+                                                activeOpacity={0.7}
+                                                style={isUploadingThis ? { opacity: 0.7 } : undefined}
+                                            >
+                                                {isUploadingThis ? (
+                                                    <ActivityIndicator size="small" color="#4f46e5" />
+                                                ) : (
+                                                    <>
+                                                        <Upload size={12} color="#4f46e5" />
+                                                        <Text className="ml-1 text-indigo-700 text-xs font-semibold">Upload</Text>
+                                                    </>
+                                                )}
+                                            </TouchableOpacity>
+                                            {hasValues && (
+                                                <TouchableOpacity
+                                                    onPress={() => clearKeralaSection(key)}
+                                                    className="flex-row items-center bg-white/80 rounded-md px-2 py-1 border border-gray-300"
+                                                    activeOpacity={0.7}
+                                                >
+                                                    <X size={12} color="#dc2626" />
+                                                    <Text className="ml-1 text-red-700 text-xs font-semibold">Clear</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                            <TouchableOpacity
+                                                onPress={() => addKeralaRow(key)}
+                                                className="flex-row items-center bg-white/80 rounded-md px-2 py-1 border border-gray-300"
+                                                activeOpacity={0.7}
+                                            >
+                                                <Plus size={14} color="#16a34a" />
+                                                <Text className="ml-1 text-green-700 text-xs font-semibold">Add</Text>
+                                            </TouchableOpacity>
+                                        </View>
                                     </View>
                                     <View className="flex-row flex-wrap p-2 bg-white gap-2">
                                         {(keralaForm[key] || []).map((val, idx) => (
@@ -362,7 +437,8 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
                                         ))}
                                     </View>
                                 </View>
-                            ))}
+                                );
+                            })}
                         </View>
                     ) : (
                         <>
