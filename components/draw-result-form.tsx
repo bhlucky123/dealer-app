@@ -1,7 +1,9 @@
-import { Clipboard, Plus, X } from "lucide-react-native";
+import api from "@/utils/axios";
+import * as DocumentPicker from "expo-document-picker";
+import { Clipboard, Plus, Upload, X } from "lucide-react-native";
 import { useRef, useState } from "react";
 import * as RNClipboard from "react-native"; // For Clipboard.getString()
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 type PrizeKey = "first_prize" | "second_prize" | "third_prize" | "fourth_prize" | "fifth_prize";
 const PRIZE_LABELS: Record<PrizeKey, string> = {
@@ -101,6 +103,55 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
 
     // Refs for Kerala prize inputs
     const keralaRefs = useRef<Record<string, (TextInput | null)[]>>({});
+
+    const [pdfUploading, setPdfUploading] = useState(false);
+
+    const handleUploadKeralaPdf = async () => {
+        try {
+            const pick = await DocumentPicker.getDocumentAsync({
+                type: "application/pdf",
+                copyToCacheDirectory: true,
+                multiple: false,
+            });
+            if (pick.canceled || !pick.assets?.[0]) return;
+            const asset = pick.assets[0];
+
+            const formData = new FormData();
+            formData.append("file", {
+                uri: asset.uri,
+                name: asset.name || "result.pdf",
+                type: "application/pdf",
+            } as any);
+
+            setPdfUploading(true);
+            const res = await api.post("/draw-result/parse-kerala-pdf/", formData, {
+                headers: { "Content-Type": "multipart/form-data" },
+            });
+
+            const parsed = (res?.data ?? {}) as Record<string, string[] | undefined>;
+            setKeralaForm(() => {
+                const next: Record<string, string[]> = {};
+                for (const { key } of KL_FIELDS) {
+                    const arr = parsed[key];
+                    if (Array.isArray(arr) && arr.length > 0) {
+                        next[key] = arr;
+                    } else {
+                        next[key] = Array(KL_COUNTS[key] || 1).fill("");
+                    }
+                }
+                return next;
+            });
+        } catch (err: any) {
+            const msg =
+                err?.message?.detail ||
+                err?.response?.data?.detail ||
+                (typeof err?.message === "string" ? err.message : null) ||
+                "Failed to parse PDF.";
+            Alert.alert("Upload failed", msg);
+        } finally {
+            setPdfUploading(false);
+        }
+    };
 
     const handleInput = (key: PrizeKey, value: string, idx: number) => {
         setForm((prev) => ({ ...prev, [key]: value }));
@@ -250,6 +301,27 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
                     {isKerala ? (
                         // Kerala form: 6 dynamic-length number list inputs
                         <View className="mx-4 mt-6">
+                            <TouchableOpacity
+                                onPress={handleUploadKeralaPdf}
+                                disabled={pdfUploading}
+                                activeOpacity={0.85}
+                                className="flex-row items-center justify-center bg-indigo-600 rounded-xl py-3 px-4 mb-2"
+                                style={pdfUploading ? { opacity: 0.7 } : undefined}
+                            >
+                                {pdfUploading ? (
+                                    <ActivityIndicator size="small" color="#ffffff" />
+                                ) : (
+                                    <>
+                                        <Upload size={18} color="#ffffff" />
+                                        <Text className="ml-2 text-white font-semibold text-sm">
+                                            Upload Kerala Result PDF
+                                        </Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                            <Text className="text-[11px] text-gray-500 text-center mb-4">
+                                Fills prize numbers from an official Kerala State Lotteries result PDF.
+                            </Text>
                             {KL_FIELDS.map(({ key, label }, fieldIdx) => (
                                 <View key={key} className={`mb-4 border border-gray-300 rounded-lg overflow-hidden`}>
                                     <View className={`flex-row items-center justify-between px-3 py-2 ${PRIZE_COLOURS[fieldIdx]}`}>
