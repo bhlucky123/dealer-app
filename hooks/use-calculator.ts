@@ -5,6 +5,9 @@ import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useCallback, useState } from "react";
 
+type ServerUserType = "ADMIN" | "DEALER" | "AGENT";
+type InitialCred = { calculate_str: string; user_type: ServerUserType };
+
 export const useCalculator = () => {
   const [display, setDisplay] = useState("0");
   const [expression, setExpression] = useState("");
@@ -13,6 +16,9 @@ export const useCalculator = () => {
   const [waitingForSecondOperand, setWaitingForSecondOperand] = useState(false);
   const [secondOperand, setSecondOperand] = useState<string | null>(null);
   const [equation, setEquation] = useState<string>("");
+  const [equationUserType, setEquationUserType] = useState<ServerUserType | null>(
+    null
+  );
   const [pinInput, setPinInput] = useState("");
   const [verifying, setVerifying] = useState(false);
 
@@ -24,13 +30,20 @@ export const useCalculator = () => {
     isLoading,
     isError,
     error,
-    refetch
-  } = useQuery<string[]>({
+    refetch,
+  } = useQuery<InitialCred[]>({
     queryKey: ["/user/get-initial-user-creds/", "new"],
     queryFn: async () => {
-      console.log("api calling");
       const res = await api.get("/user/get-initial-user-creds/?type=new");
-      return res.data;
+      const raw = res.data;
+      // Defensive: tolerate legacy response shape (flat list of strings).
+      if (Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string") {
+        return (raw as string[]).map((s) => ({
+          calculate_str: s,
+          user_type: "DEALER" as ServerUserType,
+        }));
+      }
+      return Array.isArray(raw) ? (raw as InitialCred[]) : [];
     },
   });
 
@@ -62,6 +75,7 @@ export const useCalculator = () => {
         setWaitingForSecondOperand(false);
         setSecondOperand(null);
         setEquation("");
+        setEquationUserType(null);
         setPinInput("");
         return;
       }
@@ -153,84 +167,87 @@ export const useCalculator = () => {
     }
   };
 
-  const verifyPin = useCallback(async (calcStr: string, pin: string) => {
-    setVerifying(true);
+  const verifyPin = useCallback(
+    async (calcStr: string, pin: string, userType: ServerUserType | null) => {
+      setVerifying(true);
 
-    const showCalcResult = () => {
-      const result = evaluateEquation(calcStr);
-      setDisplay(result);
-      setFirstOperand(parseFloat(result));
-      setEquation("");
-      setPinInput("");
-      setWaitingForSecondOperand(true);
-    };
+      const showCalcResult = () => {
+        const result = evaluateEquation(calcStr);
+        setDisplay(result);
+        setFirstOperand(parseFloat(result));
+        setEquation("");
+        setEquationUserType(null);
+        setPinInput("");
+        setWaitingForSecondOperand(true);
+      };
 
-    // v2-only one-step login per 3DLN spec. Do NOT fall back to non-v2 calc+pin URLs —
-    // they exist but reject calc+pin on this backend.
-    const tryV2 = async (role: "dealer" | "agent") => {
-      try {
-        const resp = await fetch(`${config.apiBaseUrl}/${role}/login-v2/`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            calculate_str: calcStr,
-            secret_pin: Number(pin),
-          }),
-        });
-        if (!resp.ok) return null;
-        const data = await resp.json();
-        return data?.access ? data : null;
-      } catch {
-        return null;
-      }
-    };
-
-    try {
-      // One-step login: try dealer then agent
-      const dealerData = await tryV2("dealer");
-      if (dealerData) {
-        setSessionFromV2(dealerData, "DEALER");
-        return;
-      }
-
-      const agentData = await tryV2("agent");
-      if (agentData) {
-        setSessionFromV2(agentData, "AGENT");
-        return;
-      }
-
-      // Fallback: legacy 2-step flow via verify-calculate-str → /login
-      //   - Admins (v2 not supported for admins)
-      //   - Legacy dealers/agents whose DB row still stores the full-expression calculate_str
-      const res = await fetch(`${config.apiBaseUrl}/user/verify-calculate-str/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          calculate_str: calcStr,
-          secret_pin: Number(pin),
-        }),
+      const body = JSON.stringify({
+        calculate_str: calcStr,
+        secret_pin: Number(pin),
       });
 
-      if (!res.ok) {
-        showCalcResult();
-        return;
-      }
+      try {
+        if (userType === "DEALER" || userType === "AGENT") {
+          // One-step JWT login — endpoint is picked directly from the user type
+          // returned by /user/get-initial-user-creds/, no blind trial-and-error.
+          const role = userType === "DEALER" ? "dealer" : "agent";
+          const resp = await fetch(`${config.apiBaseUrl}/${role}/login-v2/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+          });
+          if (!resp.ok) {
+            showCalcResult();
+            return;
+          }
+          const data = await resp.json();
+          if (!data?.access) {
+            showCalcResult();
+            return;
+          }
+          setSessionFromV2(data, userType);
+          return;
+        }
 
-      const data = await res.json();
-      setPreLogin(data.token, data.user_type);
-      router.navigate("/login");
-    } catch {
-      showCalcResult();
-    } finally {
-      setVerifying(false);
-    }
-  }, [setPreLogin, setSessionFromV2]);
+        if (userType === "ADMIN") {
+          // Admins still use the legacy 2-step verify → /login flow because
+          // there's no /administrator/login-v2/.
+          const res = await fetch(
+            `${config.apiBaseUrl}/user/verify-calculate-str/`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body,
+            }
+          );
+          if (!res.ok) {
+            showCalcResult();
+            return;
+          }
+          const data = await res.json();
+          setPreLogin(data.token, data.user_type);
+          router.navigate("/login");
+          return;
+        }
+
+        // No user_type resolved (shouldn't happen since we only enter PIN mode
+        // when the typed expression matches a cred entry). Degrade gracefully.
+        showCalcResult();
+      } catch {
+        showCalcResult();
+      } finally {
+        setVerifying(false);
+      }
+    },
+    [setPreLogin, setSessionFromV2]
+  );
 
   const handleEqual = useCallback(() => {
-    // PIN entry mode — verify via API
+    // PIN entry mode — verify via API using the user_type we captured when
+    // the equation was matched.
     if (equation) {
       if (!pinInput) return;
-      verifyPin(equation, pinInput);
+      verifyPin(equation, pinInput, equationUserType);
       return;
     }
 
@@ -240,12 +257,14 @@ export const useCalculator = () => {
     const result = performCalculation(operator, firstOperand, inputValue);
 
     const equationStr = `${firstOperand}${operator}${secondOperand ?? display}`;
-    if (equationData && equationData.includes(equationStr)) {
+    const match = equationData?.find((e) => e.calculate_str === equationStr);
+    if (match) {
       setDisplay(""); // Clear display for PIN entry
       setFirstOperand(null);
       setEquation(equationStr);
+      setEquationUserType(match.user_type);
       setPinInput("");
-      } else {
+    } else {
       setDisplay(String(result));
       setFirstOperand(result);
     }
@@ -254,7 +273,17 @@ export const useCalculator = () => {
     setExpression("");
     setWaitingForSecondOperand(true);
     setSecondOperand(null);
-  }, [display, firstOperand, operator, secondOperand, equationData, equation, pinInput, verifyPin]);
+  }, [
+    display,
+    firstOperand,
+    operator,
+    secondOperand,
+    equationData,
+    equation,
+    equationUserType,
+    pinInput,
+    verifyPin,
+  ]);
 
   const handleClear = useCallback(() => {
     setDisplay("0");
@@ -264,6 +293,7 @@ export const useCalculator = () => {
     setWaitingForSecondOperand(false);
     setSecondOperand(null);
     setEquation("");
+    setEquationUserType(null);
     setPinInput("");
   }, []);
 
@@ -285,6 +315,7 @@ export const useCalculator = () => {
         setWaitingForSecondOperand(false);
         setSecondOperand(null);
         setEquation("");
+        setEquationUserType(null);
         setPinInput("");
       }
     } else {
@@ -294,6 +325,7 @@ export const useCalculator = () => {
       setWaitingForSecondOperand(false);
       setSecondOperand(null);
       setEquation("");
+      setEquationUserType(null);
       setPinInput("");
     }
   }, [display, equation, pinInput]);
