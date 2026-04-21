@@ -35,15 +35,7 @@ export const useCalculator = () => {
     queryKey: ["/user/get-initial-user-creds/", "new"],
     queryFn: async () => {
       const res = await api.get("/user/get-initial-user-creds/?type=new");
-      const raw = res.data;
-      // Defensive: tolerate legacy response shape (flat list of strings).
-      if (Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string") {
-        return (raw as string[]).map((s) => ({
-          calculate_str: s,
-          user_type: "DEALER" as ServerUserType,
-        }));
-      }
-      return Array.isArray(raw) ? (raw as InitialCred[]) : [];
+      return Array.isArray(res.data) ? (res.data as InitialCred[]) : [];
     },
   });
 
