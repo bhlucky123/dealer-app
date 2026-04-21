@@ -143,6 +143,22 @@ export default function RootLayout() {
           />
 
           <Stack.Screen
+            name="transfer-log"
+            options={{
+              headerShown: true,
+              title: "Transfer Log",
+              headerStyle: { backgroundColor: themeColors.headerBackground },
+              headerTitleStyle: {
+                color: themeColors.headerTitle,
+                fontWeight: "bold",
+                fontSize: 22,
+              },
+              headerTintColor: themeColors.headerTint,
+              headerShadowVisible: false,
+            }}
+          />
+
+          <Stack.Screen
             name="limit-count"
             options={{
               headerShown: true,
