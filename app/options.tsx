@@ -26,6 +26,10 @@ const OptionsPage = () => {
       route: `/winnings`,
     },
     {
+      label: "Transfer Log",
+      route: `/transfer-log`,
+    },
+    {
       label: "Last Sale",
       route: `/last-sale`,
     },
