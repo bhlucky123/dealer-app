@@ -1,6 +1,6 @@
 import api from "@/utils/axios";
 import * as DocumentPicker from "expo-document-picker";
-import { Clipboard, Plus, Upload, X } from "lucide-react-native";
+import { ChevronDown, ChevronUp, Clipboard, Plus, Upload, X } from "lucide-react-native";
 import { useRef, useState } from "react";
 import * as RNClipboard from "react-native"; // For Clipboard.getString()
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -109,6 +109,12 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
     // per-section upload is in flight. The global "Upload Kerala Result PDF"
     // button still uses ``pdfUploading``.
     const [uploadingSection, setUploadingSection] = useState<string | null>(null);
+    // Sections collapsed by default; user-initiated edits auto-expand the section.
+    const [expandedKeys, setExpandedKeys] = useState<Record<string, boolean>>({});
+    const toggleExpanded = (key: string) =>
+        setExpandedKeys((prev) => ({ ...prev, [key]: !prev[key] }));
+    const expandSection = (key: string) =>
+        setExpandedKeys((prev) => ({ ...prev, [key]: true }));
 
     /**
      * Upload a PDF and populate Kerala prize inputs from the backend's parse.
@@ -156,6 +162,7 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
                     return;
                 }
                 setKeralaForm((prev) => ({ ...prev, [sectionKey]: arr }));
+                expandSection(sectionKey);
                 return;
             }
 
@@ -192,6 +199,58 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
             ...prev,
             [fieldKey]: Array(KL_COUNTS[fieldKey] || 1).fill(""),
         }));
+    };
+
+    // Mirrors handlePasteComplementary but for Kerala sections: 4-digit chunks,
+    // target count comes from KL_COUNTS[fieldKey].
+    const handlePasteKeralaSection = async (fieldKey: string) => {
+        try {
+            // @ts-ignore
+            const clipboardContent: string = await RNClipboard.Clipboard.getString();
+            const target = KL_COUNTS[fieldKey] || 1;
+
+            const tokens = clipboardContent
+                .replace(/[^0-9\s,]/g, "")
+                .split(/[\s,]+/)
+                .filter(Boolean)
+                .map((x) => x.trim())
+                .filter((x) => x.length > 0);
+
+            let expanded: string[] = [];
+            for (const t of tokens) {
+                if (t.length === 4) {
+                    expanded.push(t);
+                } else if (t.length > 4) {
+                    for (let i = 0; i < t.length; i += 4) {
+                        const chunk = t.slice(i, i + 4);
+                        if (chunk.length === 4) expanded.push(chunk);
+                    }
+                }
+            }
+
+            expanded.sort((a, b) => parseInt(a) - parseInt(b));
+            expanded = expanded.slice(0, target);
+
+            if (expanded.length < target) {
+                Alert.alert(
+                    "Not enough numbers",
+                    `Found only ${expanded.length} numbers in clipboard. ${target} required.`
+                );
+                while (expanded.length < target) expanded.push("");
+            }
+
+            setKeralaForm((prev) => ({ ...prev, [fieldKey]: expanded }));
+            expandSection(fieldKey);
+
+            setTimeout(() => {
+                const refs = keralaRefs.current[fieldKey];
+                if (!refs) return;
+                const firstEmpty = expanded.findIndex((v) => !v);
+                if (firstEmpty !== -1) refs[firstEmpty]?.focus();
+            }, 100);
+        } catch (err) {
+            Alert.alert("Paste Error", "Failed to read from clipboard.");
+        }
     };
 
     const sectionHasValues = (fieldKey: string) =>
@@ -243,6 +302,7 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
             ...prev,
             [fieldKey]: [...(prev[fieldKey] || []), ""],
         }));
+        expandSection(fieldKey);
     };
 
     const removeKeralaRow = (fieldKey: string, index: number) => {
@@ -369,73 +429,153 @@ const DrawResultForm = ({ onSubmit, initialData, loading, drawType = "default" }
                             {KL_FIELDS.map(({ key, label }, fieldIdx) => {
                                 const isUploadingThis = uploadingSection === key;
                                 const hasValues = sectionHasValues(key);
+                                const isExpanded = !!expandedKeys[key];
                                 return (
                                 <View key={key} className={`mb-4 border border-gray-300 rounded-lg overflow-hidden`}>
-                                    <View className={`flex-row items-center justify-between px-3 py-2 ${PRIZE_COLOURS[fieldIdx]}`}>
-                                        <Text className="text-[14px] font-bold text-gray-800 flex-shrink">{label}</Text>
-                                        <View className="flex-row items-center" style={{ gap: 6 }}>
-                                            <TouchableOpacity
-                                                onPress={() => handleUploadKeralaPdf(key)}
-                                                disabled={isUploadingThis}
-                                                className="flex-row items-center bg-white/80 rounded-md px-2 py-1 border border-gray-300"
-                                                activeOpacity={0.7}
-                                                style={isUploadingThis ? { opacity: 0.7 } : undefined}
+                                    <View className={`flex-row items-center px-3 py-2.5 ${PRIZE_COLOURS[fieldIdx]}`} style={{ gap: 6 }}>
+                                        <TouchableOpacity
+                                            onPress={() => toggleExpanded(key)}
+                                            activeOpacity={0.7}
+                                            className="flex-row items-center"
+                                            style={{ gap: 6 }}
+                                            accessibilityLabel={`${isExpanded ? "Collapse" : "Expand"} section ${fieldIdx + 1} (${label})`}
+                                            accessibilityRole="button"
+                                            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                                        >
+                                            <View
+                                                className="bg-white rounded-full px-3 py-1 border border-gray-200"
+                                                style={{
+                                                    shadowColor: "#000",
+                                                    shadowOffset: { width: 0, height: 1 },
+                                                    shadowOpacity: 0.06,
+                                                    shadowRadius: 2,
+                                                    elevation: 1,
+                                                }}
                                             >
-                                                {isUploadingThis ? (
-                                                    <ActivityIndicator size="small" color="#4f46e5" />
-                                                ) : (
-                                                    <>
-                                                        <Upload size={12} color="#4f46e5" />
-                                                        <Text className="ml-1 text-indigo-700 text-xs font-semibold">Upload</Text>
-                                                    </>
-                                                )}
-                                            </TouchableOpacity>
-                                            {hasValues && (
-                                                <TouchableOpacity
-                                                    onPress={() => clearKeralaSection(key)}
-                                                    className="flex-row items-center bg-white/80 rounded-md px-2 py-1 border border-gray-300"
-                                                    activeOpacity={0.7}
-                                                >
-                                                    <X size={12} color="#dc2626" />
-                                                    <Text className="ml-1 text-red-700 text-xs font-semibold">Clear</Text>
-                                                </TouchableOpacity>
-                                            )}
-                                            <TouchableOpacity
-                                                onPress={() => addKeralaRow(key)}
-                                                className="flex-row items-center bg-white/80 rounded-md px-2 py-1 border border-gray-300"
-                                                activeOpacity={0.7}
-                                            >
-                                                <Plus size={14} color="#16a34a" />
-                                                <Text className="ml-1 text-green-700 text-xs font-semibold">Add</Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    </View>
-                                    <View className="flex-row flex-wrap p-2 bg-white gap-2">
-                                        {(keralaForm[key] || []).map((val, idx) => (
-                                            <View key={idx} className="relative">
-                                                <TextInput
-                                                    ref={(el) => {
-                                                        if (!keralaRefs.current[key]) keralaRefs.current[key] = [];
-                                                        keralaRefs.current[key][idx] = el;
-                                                    }}
-                                                    className="w-14 text-center text-[13px] font-mono font-bold text-gray-900 bg-gray-50 rounded-md border border-gray-300 py-1"
-                                                    keyboardType="numeric"
-                                                    placeholder="0000"
-                                                    value={val}
-                                                    onChangeText={(text) => handleKeralaChange(key, idx, text)}
-                                                    maxLength={4}
-                                                    placeholderTextColor="#9ca3af"
-                                                />
-                                                <TouchableOpacity
-                                                    onPress={() => removeKeralaRow(key, idx)}
-                                                    className="absolute -top-1 -right-1 bg-red-500 rounded-full w-4 h-4 items-center justify-center border border-white"
-                                                    activeOpacity={0.7}
-                                                >
-                                                    <X size={8} color="#fff" />
-                                                </TouchableOpacity>
+                                                <Text className="text-[15px] font-extrabold text-gray-900">#{fieldIdx + 1}</Text>
                                             </View>
-                                        ))}
+                                            <View className="bg-white/70 rounded-full px-2 py-0.5 border border-gray-200">
+                                                <Text className="text-[11px] font-semibold text-gray-700">
+                                                    {(keralaForm[key] || []).filter((v) => !!v && v.trim() !== "").length}/{KL_COUNTS[key] || 0}
+                                                </Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={() => handleUploadKeralaPdf(key)}
+                                            disabled={isUploadingThis}
+                                            className="w-8 h-8 rounded-full bg-white items-center justify-center border border-gray-200"
+                                            activeOpacity={0.6}
+                                            style={[
+                                                {
+                                                    shadowColor: "#000",
+                                                    shadowOffset: { width: 0, height: 1 },
+                                                    shadowOpacity: 0.08,
+                                                    shadowRadius: 2,
+                                                    elevation: 1,
+                                                },
+                                                isUploadingThis ? { opacity: 0.7 } : undefined,
+                                            ]}
+                                            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                                            accessibilityLabel={`Upload PDF for section ${fieldIdx + 1}`}
+                                        >
+                                            {isUploadingThis ? (
+                                                <ActivityIndicator size="small" color="#4f46e5" />
+                                            ) : (
+                                                <Upload size={14} color="#4f46e5" />
+                                            )}
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={() => handlePasteKeralaSection(key)}
+                                            className="w-8 h-8 rounded-full bg-white items-center justify-center border border-gray-200"
+                                            activeOpacity={0.6}
+                                            style={{
+                                                shadowColor: "#000",
+                                                shadowOffset: { width: 0, height: 1 },
+                                                shadowOpacity: 0.08,
+                                                shadowRadius: 2,
+                                                elevation: 1,
+                                            }}
+                                            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                                            accessibilityLabel={`Paste from clipboard into section ${fieldIdx + 1}`}
+                                        >
+                                            <Clipboard size={13} color="#16a34a" />
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={() => addKeralaRow(key)}
+                                            className="w-8 h-8 rounded-full bg-white items-center justify-center border border-gray-200"
+                                            activeOpacity={0.6}
+                                            style={{
+                                                shadowColor: "#000",
+                                                shadowOffset: { width: 0, height: 1 },
+                                                shadowOpacity: 0.08,
+                                                shadowRadius: 2,
+                                                elevation: 1,
+                                            }}
+                                            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                                            accessibilityLabel={`Add a number to section ${fieldIdx + 1}`}
+                                        >
+                                            <Plus size={15} color="#16a34a" />
+                                        </TouchableOpacity>
+                                        {hasValues && (
+                                            <TouchableOpacity
+                                                onPress={() => clearKeralaSection(key)}
+                                                className="w-8 h-8 rounded-full bg-white items-center justify-center border border-gray-200"
+                                                activeOpacity={0.6}
+                                                style={{
+                                                    shadowColor: "#000",
+                                                    shadowOffset: { width: 0, height: 1 },
+                                                    shadowOpacity: 0.08,
+                                                    shadowRadius: 2,
+                                                    elevation: 1,
+                                                }}
+                                                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                                                accessibilityLabel={`Clear section ${fieldIdx + 1}`}
+                                            >
+                                                <X size={13} color="#dc2626" />
+                                            </TouchableOpacity>
+                                        )}
+                                        <TouchableOpacity
+                                            onPress={() => toggleExpanded(key)}
+                                            activeOpacity={0.6}
+                                            style={{ marginLeft: "auto" }}
+                                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                            accessibilityLabel={`${isExpanded ? "Collapse" : "Expand"} section ${fieldIdx + 1}`}
+                                        >
+                                            {isExpanded ? (
+                                                <ChevronUp size={20} color="#374151" />
+                                            ) : (
+                                                <ChevronDown size={20} color="#374151" />
+                                            )}
+                                        </TouchableOpacity>
                                     </View>
+                                    {isExpanded && (
+                                        <View className="flex-row flex-wrap p-2 bg-white gap-2">
+                                            {(keralaForm[key] || []).map((val, idx) => (
+                                                <View key={idx} className="relative">
+                                                    <TextInput
+                                                        ref={(el) => {
+                                                            if (!keralaRefs.current[key]) keralaRefs.current[key] = [];
+                                                            keralaRefs.current[key][idx] = el;
+                                                        }}
+                                                        className="w-14 text-center text-[13px] font-mono font-bold text-gray-900 bg-gray-50 rounded-md border border-gray-300 py-1"
+                                                        keyboardType="numeric"
+                                                        placeholder="0000"
+                                                        value={val}
+                                                        onChangeText={(text) => handleKeralaChange(key, idx, text)}
+                                                        maxLength={4}
+                                                        placeholderTextColor="#9ca3af"
+                                                    />
+                                                    <TouchableOpacity
+                                                        onPress={() => removeKeralaRow(key, idx)}
+                                                        className="absolute -top-1 -right-1 bg-red-500 rounded-full w-4 h-4 items-center justify-center border border-white"
+                                                        activeOpacity={0.7}
+                                                    >
+                                                        <X size={8} color="#fff" />
+                                                    </TouchableOpacity>
+                                                </View>
+                                            ))}
+                                        </View>
+                                    )}
                                 </View>
                                 );
                             })}
