@@ -107,34 +107,36 @@ function validateDrawResultFields(data: Partial<DrawResult> & { complementary_pr
         data.fourth_prize,
         data.fifth_prize,
     ];
-    const mainPrizeEntered = mainPrizes.some((prize) => !!prize && String(prize).trim() !== "");
-    const complementaryEntered = Array.isArray(data.complementary_prizes) && data.complementary_prizes.some((val) => !!val && String(val).trim() !== "");
+    const labels = ["First", "Second", "Third", "Fourth", "Fifth"];
 
-    // If neither main nor complementary prizes are entered, require at least one
-    if (!mainPrizeEntered && !complementaryEntered) {
-        return "Please enter at least one main prize or one complementary prize.";
-    }
+    let anyEntered = false;
 
-    // If any main prize is entered, validate all main prizes
-    if (mainPrizeEntered) {
-        for (let i = 0; i < mainPrizes.length; i++) {
-            if (!mainPrizes[i] || typeof mainPrizes[i] !== "string" || !isThreeDigitNumber(mainPrizes[i]!)) {
-                return `Please enter a valid 3-digit number for ${["First", "Second", "Third", "Fourth", "Fifth"][i]} Prize.`;
+    // Validate every entered main prize, but don't require all of them.
+    for (let i = 0; i < mainPrizes.length; i++) {
+        const prize = mainPrizes[i];
+        if (prize && String(prize).trim() !== "") {
+            if (!isThreeDigitNumber(String(prize))) {
+                return `Please enter a valid 3-digit number for ${labels[i]} Prize.`;
             }
+            anyEntered = true;
         }
     }
 
-    // If any complementary prize is entered, validate all complementary prizes
-    if (complementaryEntered) {
-        if (!Array.isArray(data.complementary_prizes) || data.complementary_prizes.length === 0) {
-            return "Please enter all complementary prizes.";
-        }
+    // Validate every entered complementary prize, but don't require a full list.
+    if (Array.isArray(data.complementary_prizes)) {
         for (let i = 0; i < data.complementary_prizes.length; i++) {
             const val = data.complementary_prizes[i];
-            if (!val || !isThreeDigitNumber(val)) {
-                return `Complementary Prize ${i + 1} must be a valid 3-digit number (e.g., 123). Please check your entry.`;
+            if (val && String(val).trim() !== "") {
+                if (!isThreeDigitNumber(String(val))) {
+                    return `Complementary Prize ${i + 1} must be a valid 3-digit number (e.g., 123).`;
+                }
+                anyEntered = true;
             }
         }
+    }
+
+    if (!anyEntered) {
+        return "Please enter at least one main prize or one complementary prize.";
     }
 
     return null;
