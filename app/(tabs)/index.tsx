@@ -199,6 +199,54 @@ const styles = StyleSheet.create({
     marginTop: 80,
     fontSize: 18,
   },
+  tabBar: {
+    flexDirection: "row",
+    backgroundColor: "#eef2ff",
+    borderRadius: 999,
+    padding: 4,
+    marginBottom: 16,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabBtnActive: {
+    backgroundColor: "#4f46e5",
+    shadowColor: "#4f46e5",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  tabBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#4f46e5",
+  },
+  tabBtnTextActive: {
+    color: "#fff",
+  },
+  tabBadge: {
+    marginLeft: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 1,
+    borderRadius: 999,
+    backgroundColor: "#c7d2fe",
+  },
+  tabBadgeActive: {
+    backgroundColor: "rgba(255,255,255,0.25)",
+  },
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#4f46e5",
+  },
+  tabBadgeTextActive: {
+    color: "#fff",
+  },
   // DrawForm styles
   formContainer: {
     flex: 1,
@@ -707,6 +755,7 @@ export default function HomeScreen() {
   const [showForm, setShowForm] = useState(false);
   const [editDraw, setEditDraw] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [drawTypeTab, setDrawTypeTab] = useState<"default" | "other">("default");
 
   // For delete confirmation modal
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
@@ -737,6 +786,9 @@ export default function HomeScreen() {
   });
 
   const draws = data || [];
+  const defaultDraws = draws.filter((d: any) => (d?.type ?? "default") === "default");
+  const otherDraws = draws.filter((d: any) => (d?.type ?? "default") !== "default");
+  const filteredDraws = drawTypeTab === "default" ? defaultDraws : otherDraws;
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -825,8 +877,73 @@ export default function HomeScreen() {
         </View>
       )}
 
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          onPress={() => setDrawTypeTab("default")}
+          activeOpacity={0.85}
+          style={[styles.tabBtn, drawTypeTab === "default" && styles.tabBtnActive]}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Text
+              style={[
+                styles.tabBtnText,
+                drawTypeTab === "default" && styles.tabBtnTextActive,
+              ]}
+            >
+              Default
+            </Text>
+            <View
+              style={[
+                styles.tabBadge,
+                drawTypeTab === "default" && styles.tabBadgeActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabBadgeText,
+                  drawTypeTab === "default" && styles.tabBadgeTextActive,
+                ]}
+              >
+                {defaultDraws.length}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setDrawTypeTab("other")}
+          activeOpacity={0.85}
+          style={[styles.tabBtn, drawTypeTab === "other" && styles.tabBtnActive]}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Text
+              style={[
+                styles.tabBtnText,
+                drawTypeTab === "other" && styles.tabBtnTextActive,
+              ]}
+            >
+              Other
+            </Text>
+            <View
+              style={[
+                styles.tabBadge,
+                drawTypeTab === "other" && styles.tabBadgeActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabBadgeText,
+                  drawTypeTab === "other" && styles.tabBadgeTextActive,
+                ]}
+              >
+                {otherDraws.length}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+
       <FlatList
-        data={draws || []}
+        data={filteredDraws}
         keyExtractor={(item) => item?.id?.toString()}
         renderItem={({ item }) => {
           const textColor = getContrastYIQ(item.color_theme || "#8B5CF6");
@@ -941,7 +1058,11 @@ export default function HomeScreen() {
         }}
         ListEmptyComponent={
           !isLoading && !error ? (
-            <Text style={styles.emptyText}>No draws available.</Text>
+            <Text style={styles.emptyText}>
+              {drawTypeTab === "default"
+                ? "No default draws available."
+                : "No other draws available."}
+            </Text>
           ) : null
         }
         refreshControl={
@@ -953,7 +1074,7 @@ export default function HomeScreen() {
           />
         }
         contentContainerStyle={{
-          ...(draws.length === 0 && !isLoading && !error
+          ...(filteredDraws.length === 0 && !isLoading && !error
             ? { flex: 1, justifyContent: "center" }
             : {}),
           paddingBottom: 50, // Add extra bottom padding for navbar
