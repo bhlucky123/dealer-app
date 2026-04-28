@@ -141,7 +141,7 @@ const LastSaleReportScreen = () => {
                     <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">
                         ₹{amountHandler(Number(item.total_booking_amount))}
                     </Text>
-                    {canDeleteBooking && (user?.user_type !== "ADMIN" || user?.superuser) && (
+                    {canDeleteBooking && (
                         <View className="w-4 items-end ml-1">
                             <Pressable
                                 onPress={(e) => {
