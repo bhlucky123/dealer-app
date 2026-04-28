@@ -7,5 +7,5 @@ interface Config {
 
 export const config: Config = {
   apiBaseUrl: "https://alfarah.in",
-  build: false,
+  build: true,
 };
