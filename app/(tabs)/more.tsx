@@ -429,9 +429,9 @@ export default function MoreTab() {
 
   // --- Prize Config for ADMIN ---
   const { data: prizeConfig, isLoading: isPrizeConfigLoading, refetch: refetchPrizeConfig } = useQuery<PrizeConfig>({
-    queryKey: ["/administrator/prize-configuration", user?.id],
+    queryKey: ["/administrator/prize-configuration/me", user?.id],
     queryFn: async () => {
-      const res = await api.get(`/administrator/prize-configuration/${user?.id}/`);
+      const res = await api.get(`/administrator/prize-configuration/me/`);
       return res.data as PrizeConfig;
     },
     enabled: user?.user_type === "ADMIN",
@@ -439,7 +439,7 @@ export default function MoreTab() {
 
   const { mutate: prizeConfigMutation, isPending: isPrizeConfigSaving } = useMutation({
     mutationFn: async (payload: PrizeConfig) => {
-      return await api.patch(`/administrator/prize-configuration/${user?.id}/`, payload);
+      return await api.patch(`/administrator/prize-configuration/me/`, payload);
     },
     onSuccess: () => {
       setIsEditingPrizeConfig(false);
@@ -535,9 +535,9 @@ export default function MoreTab() {
 
   // --- Prize Config Query Fetching State ---
   const { isFetching: isFetchingPrizeConfig } = useQuery<PrizeConfig>({
-    queryKey: ["/administrator/prize-configuration", user?.id],
+    queryKey: ["/administrator/prize-configuration/me", user?.id],
     queryFn: async () => {
-      const res = await api.get(`/administrator/prize-configuration/${user?.id}/`);
+      const res = await api.get(`/administrator/prize-configuration/me/`);
       return res.data as PrizeConfig;
     },
     enabled: false, // Only for fetching state, not for data
