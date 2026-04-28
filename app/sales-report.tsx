@@ -27,8 +27,8 @@ import { Agent } from "./(tabs)/agent";
 // --- Memoized Row Component for FlatList performance ---
 const ROW_HEIGHT = 58;
 
-const SalesRow = React.memo(({ item, index, userType, isSuperuser, onPress, onDelete }: {
-    item: any; index: number; userType: string | undefined; isSuperuser: boolean;
+const SalesRow = React.memo(({ item, index, userType, canDelete, onPress, onDelete }: {
+    item: any; index: number; userType: string | undefined; canDelete: boolean;
     onPress: (item: any) => void; onDelete: (item: any) => void;
 }) => (
     <TouchableOpacity
@@ -64,7 +64,7 @@ const SalesRow = React.memo(({ item, index, userType, isSuperuser, onPress, onDe
             <Text className="flex-1 text-sm text-center text-gray-700">{item.total_booking_count}</Text>
             <Text className="flex-1 text-sm text-right text-violet-700 font-semibold">₹{amountHandler(Number(userType === 'AGENT' ? item.calculated_agent_amount : item.calculated_dealer_amount))}</Text>
             <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">₹{amountHandler(Number(item.total_booking_amount))}</Text>
-            {isSuperuser && (
+            {canDelete && (
                 <View className="w-4 items-end">
                     <TouchableOpacity onPress={() => onDelete(item)} hitSlop={10}>
                         <Ionicons name="trash-outline" size={17} color="#ef4444" />
@@ -485,7 +485,6 @@ const SalesReportScreen = () => {
     };
 
     // Delete a booking (entire bill) with confirmation
-    const isSuperuser = !!user?.superuser;
     const canDeleteBooking = hasFeature("delete_booking");
 
     const handleRowPress = useCallback((item: any) => {
@@ -524,11 +523,11 @@ const SalesReportScreen = () => {
             item={item}
             index={index}
             userType={user?.user_type}
-            isSuperuser={isSuperuser && canDeleteBooking}
+            canDelete={canDeleteBooking}
             onPress={handleRowPress}
             onDelete={handleDeleteBooking}
         />
-    ), [user?.user_type, isSuperuser, canDeleteBooking, handleRowPress, handleDeleteBooking]);
+    ), [user?.user_type, canDeleteBooking, handleRowPress, handleDeleteBooking]);
 
     const getItemLayout = useCallback((_data: any, index: number) => ({
         length: ROW_HEIGHT,
