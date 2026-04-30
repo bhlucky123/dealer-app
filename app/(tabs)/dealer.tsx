@@ -133,20 +133,24 @@ const DealerForm = ({
     const [errorCalcId, setErrorCalcId] = useState(false);
     const fetchedRef = useRef(false);
 
+    const fetchCalcId = () => {
+        setLoadingCalcId(true);
+        setErrorCalcId(false);
+        api.get(`/user/get-new-user-id/?user_type=DEALER`)
+            .then((res) => {
+                setNewUserIdData(res.data);
+                fetchedRef.current = true;
+                setLoadingCalcId(false);
+            })
+            .catch(() => {
+                setErrorCalcId(true);
+                setLoadingCalcId(false);
+            });
+    };
+
     useEffect(() => {
         if (!skipCalculateIdFetch && !fetchedRef.current) {
-            setLoadingCalcId(true);
-            setErrorCalcId(false);
-            api.get(`/user/get-new-user-id/?user_type=DEALER`)
-                .then((res) => {
-                    setNewUserIdData(res.data);
-                    fetchedRef.current = true;
-                    setLoadingCalcId(false);
-                })
-                .catch((e) => {
-                    setErrorCalcId(true);
-                    setLoadingCalcId(false);
-                });
+            fetchCalcId();
         }
         // eslint-disable-next-line
     }, [skipCalculateIdFetch]);
@@ -312,12 +316,19 @@ const DealerForm = ({
                             <View style={{ flex: 1 }}>
                                 <Text className="text-xs text-gray-500 mb-1">User ID</Text>
                                 <View className={`
-                                    border-2 rounded-xl px-4 py-3 bg-gray-100 text-gray-800
-                                    ${focusedField === "calculate_first_number" ? "border-blue-300 bg-blue-50" : "border-gray-200"}
+                                    border-2 rounded-xl px-4 py-3 bg-gray-100
+                                    ${errorCalcId ? "border-red-300" : "border-gray-200"}
                                 `}>
-                                    <Text className="text-lg font-medium">
-                                        {form.calculate_first_number ? form.calculate_first_number : (loadingCalcId ? "Loading..." : (errorCalcId ? "Error" : "--"))}
-                                    </Text>
+                                    {form.calculate_first_number ? (
+                                        <Text className="text-lg font-medium text-gray-800">{form.calculate_first_number}</Text>
+                                    ) : errorCalcId ? (
+                                        <TouchableOpacity onPress={fetchCalcId} activeOpacity={0.7} className="flex-row items-center">
+                                            <Text className="text-red-500 font-medium text-xs mr-1">Failed</Text>
+                                            <Text className="text-blue-600 font-bold text-xs">Retry</Text>
+                                        </TouchableOpacity>
+                                    ) : (
+                                        {loadingCalcId ? <ActivityIndicator size="small" color="#3B82F6" /> : <Text className="text-gray-400 text-lg font-medium">--</Text>}
+                                    )}
                                 </View>
                             </View>
 
