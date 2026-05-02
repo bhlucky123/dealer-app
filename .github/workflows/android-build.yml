@@ -38,20 +38,22 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Send Telegram build started
+        env:
+          TG_TEXT: |
+            🚀 *Build Started*
+
+            📱 *App:* calculator-app
+            🌿 *Branch:* `${{ github.ref_name }}`
+            👤 *Author:* ${{ github.actor }}
+
+            💬 *Commit:* ${{ github.event.head_commit.message }}
+
+            ⏳ Build is in progress...
         run: |
-          COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1)
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d parse_mode="Markdown" \
-            -d text="🚀 *Build Started*
-
-📱 *App:* calculator-app
-🌿 *Branch:* \`${{ github.ref_name }}\`
-👤 *Author:* ${{ github.actor }}
-
-💬 *Commit:* ${COMMIT_MSG}
-
-⏳ Build is in progress..."
+            --data-urlencode "text=${TG_TEXT}"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -269,24 +271,25 @@ jobs:
 
       - name: Send Telegram build complete
         if: always() && needs.build.result == 'success'
-        run: |
-          GOFILE_LINKS="${{ steps.gofile-upload.outputs.gofile_copy }}"
+        env:
+          TG_TEXT: |
+            ✅ *Build Successful*
 
+            📱 *App:* calculator-app
+            🌿 *Branch:* `${{ github.ref_name }}`
+            👤 *Author:* ${{ github.actor }}
+            🏷️ *Tag:* `${{ env.RELEASE_TAG }}`
+
+            💬 *Commit:* ${{ github.event.head_commit.message }}
+
+            🔗 *Download Links:*
+            ${{ steps.gofile-upload.outputs.gofile_copy }}
+            [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }})
+        run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d parse_mode="Markdown" \
-            -d text="✅ *Build Successful*
-
-📱 *App:* calculator-app
-🌿 *Branch:* \`${{ github.ref_name }}\`
-👤 *Author:* ${{ github.actor }}
-🏷️ *Tag:* \`${{ env.RELEASE_TAG }}\`
-
-💬 *Commit:* ${{ github.event.head_commit.message }}
-
-🔗 *Download Links:*
-${GOFILE_LINKS}
-[GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }})"
+            --data-urlencode "text=${TG_TEXT}"
 
   notify-failure:
     runs-on: ubuntu-latest
@@ -294,24 +297,60 @@ ${GOFILE_LINKS}
     if: always() && (needs.build.result == 'failure' || needs.release.result == 'failure')
 
     steps:
-      - name: Send Telegram build failed
+      - name: Fetch error details
+        id: error-details
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ needs.build.result }}" = "failure" ]; then
-            FAILED_STAGE="Build"
+            echo "failed_stage=Build" >> $GITHUB_OUTPUT
           else
-            FAILED_STAGE="Release"
+            echo "failed_stage=Release" >> $GITHUB_OUTPUT
           fi
 
+          JOBS_JSON=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs 2>/dev/null || echo '{}')
+
+          FAILED_JOB_ID=$(echo "$JOBS_JSON" | jq -r '[.jobs[] | select(.conclusion == "failure")][0].id // empty')
+          FAILED_STEP=$(echo "$JOBS_JSON" | jq -r '
+            [.jobs[] | select(.conclusion == "failure")][0].steps[]
+            | select(.conclusion == "failure") | .name
+          ' 2>/dev/null | head -1)
+          echo "failed_step=${FAILED_STEP:-Unknown step}" >> $GITHUB_OUTPUT
+
+          ERROR_LOG="Could not fetch detailed logs"
+          if [ -n "$FAILED_JOB_ID" ]; then
+            gh api "repos/${{ github.repository }}/actions/jobs/${FAILED_JOB_ID}/logs" > /tmp/job.log 2>/dev/null || true
+            if [ -s /tmp/job.log ]; then
+              ERROR_LOG=$(grep -i -E "error|fail|exception|FAILURE|fatal|cannot|unable" /tmp/job.log | tail -20 | sed 's/^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[^ ]* //' | head -c 1500)
+              if [ -z "$ERROR_LOG" ]; then
+                ERROR_LOG=$(tail -20 /tmp/job.log | sed 's/^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[^ ]* //' | head -c 1500)
+              fi
+            fi
+          fi
+
+          echo "error_log<<ERREOF" >> $GITHUB_OUTPUT
+          echo "$ERROR_LOG" >> $GITHUB_OUTPUT
+          echo "ERREOF" >> $GITHUB_OUTPUT
+
+      - name: Send Telegram build failed
+        env:
+          TG_TEXT: |
+            ❌ <b>Build Failed</b>
+
+            📱 <b>App:</b> calculator-app
+            🌿 <b>Branch:</b> <code>${{ github.ref_name }}</code>
+            👤 <b>Author:</b> ${{ github.actor }}
+            ⚠️ <b>Failed Stage:</b> ${{ steps.error-details.outputs.failed_stage }}
+            📋 <b>Failed Step:</b> ${{ steps.error-details.outputs.failed_step }}
+
+            💬 <b>Commit:</b> ${{ github.event.head_commit.message }}
+
+            📄 <b>Error Log:</b>
+            <pre>${{ steps.error-details.outputs.error_log }}</pre>
+
+            🔗 <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">View Full Logs</a>
+        run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d parse_mode="Markdown" \
-            -d text="❌ *Build Failed*
-
-📱 *App:* calculator-app
-🌿 *Branch:* \`${{ github.ref_name }}\`
-👤 *Author:* ${{ github.actor }}
-⚠️ *Failed Stage:* ${FAILED_STAGE}
-
-💬 *Commit:* ${{ github.event.head_commit.message }}
-
-🔗 [View Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            -d parse_mode="HTML" \
+            --data-urlencode "text=${TG_TEXT}"
