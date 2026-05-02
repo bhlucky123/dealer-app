@@ -327,7 +327,7 @@ const DealerForm = ({
                                             <Text className="text-blue-600 font-bold text-xs">Retry</Text>
                                         </TouchableOpacity>
                                     ) : (
-                                        {loadingCalcId ? <ActivityIndicator size="small" color="#3B82F6" /> : <Text className="text-gray-400 text-lg font-medium">--</Text>}
+                                        loadingCalcId ? <ActivityIndicator size="small" color="#3B82F6" /> : <Text className="text-gray-400 text-lg font-medium">--</Text>
                                     )}
                                 </View>
                             </View>
