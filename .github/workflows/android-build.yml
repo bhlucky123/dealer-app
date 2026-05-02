@@ -250,3 +250,32 @@ jobs:
               </div>
               <p style="text-align:center;color:#94a3b8;font-size:11px;margin:16px 0 0;">Automated build by GitHub Actions</p>
             </div>
+
+      - name: Send Telegram notification with APK
+        if: always() && needs.build.result == 'success'
+        run: |
+          APK_FILE=$(ls apks/*.apk | head -1)
+          APK_NAME=$(basename "$APK_FILE")
+          GOFILE_LINKS="${{ steps.gofile-upload.outputs.gofile_copy }}"
+
+          CAPTION=$(cat <<TGEOF
+          ✅ *Build Successful*
+
+          📱 *App:* calculator-app
+          🌿 *Branch:* \`${{ github.ref_name }}\`
+          👤 *Author:* ${{ github.actor }}
+          🏷️ *Tag:* \`${{ env.RELEASE_TAG }}\`
+
+          💬 *Commit:* ${{ github.event.head_commit.message }}
+
+          🔗 *Download Links:*
+          ${GOFILE_LINKS}
+          [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }})
+          TGEOF
+          )
+
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument" \
+            -F chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -F document=@"${APK_FILE}" \
+            -F caption="${CAPTION}" \
+            -F parse_mode="Markdown"
