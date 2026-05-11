@@ -45,10 +45,10 @@ const SalesRow = React.memo(({ item, index, userType, canDelete, onPress, onDele
             </View>
             {userType !== 'AGENT' && (
                 <View className="flex-[1.2]">
-                    <Text className="flex-[1.2] text-sm text-center text-gray-700" numberOfLines={1} ellipsizeMode="tail" style={{ minWidth: 0 }}>
-                        {item.booked_by_name}
+                    <Text className={`flex-[1.2] text-sm text-center ${item.is_bh ? 'text-red-400 font-bold' : 'text-gray-700'}`} numberOfLines={1} ellipsizeMode="tail" style={{ minWidth: 0 }}>
+                        {item.is_bh ? 'bh' : item.booked_by_name}
                     </Text>
-                    {item?.booked_by_type && (
+                    {item?.booked_by_type && !item.is_bh && (
                         <Text className="text-xs text-center text-violet-700" numberOfLines={1} ellipsizeMode="tail" style={{ minWidth: 0 }}>
                             {item.booked_by_type}
                         </Text>
