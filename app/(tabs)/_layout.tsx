@@ -60,7 +60,7 @@ export default function TabLayout() {
           options={{
             title: 'Staff',
             tabBarIcon: ({ color }) => <Users size={24} color={color} />,
-            tabBarItemStyle: { display: user?.superuser ? 'flex' : "none" }
+            tabBarItemStyle: { display: (user?.superuser || user?.is_main_vendor) ? 'flex' : "none" }
           }}
         />
         

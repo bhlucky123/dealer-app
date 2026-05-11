@@ -1,3 +1,4 @@
+import { queryClient } from "@/providers/react-query-provider";
 import { useAuthStore } from "@/store/auth";
 import axios from "axios";
 import { router } from "expo-router";
@@ -88,6 +89,7 @@ api.interceptors.response.use(
       }
 
       if (status === 401) {
+        queryClient.clear();
         router.push("/")
         return
       }
