@@ -10,6 +10,7 @@ interface User {
   single_digit_number_commission: number;
   cap_amount: number;
   superuser?: boolean;
+  is_main_vendor?: boolean;
   vendor_features?: string[];
 }
 

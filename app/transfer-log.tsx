@@ -2,7 +2,7 @@ import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { ArrowLeft, ArrowRight } from "lucide-react-native";
+import { ArrowLeft } from "lucide-react-native";
 import React, { useMemo } from "react";
 import {
   ActivityIndicator,
@@ -146,7 +146,7 @@ const TransferLogScreen = () => {
                 When
               </Text>
               <Text className="flex-[2] text-[10px] font-bold text-violet-700 uppercase">
-                From → To
+                To
               </Text>
               <Text className="flex-[1] text-[10px] font-bold text-violet-700 uppercase text-center">
                 Number
@@ -179,17 +179,8 @@ const TransferLogScreen = () => {
                       className="text-[12px] font-semibold text-gray-800"
                       numberOfLines={1}
                     >
-                      {item.from_vendor_name || `#${item.from_vendor}`}
+                      {item.to_vendor_name || `#${item.to_vendor}`}
                     </Text>
-                    <View className="flex-row items-center mt-0.5">
-                      <ArrowRight size={11} color="#7c3aed" />
-                      <Text
-                        className="text-[12px] font-semibold text-violet-700 ml-1"
-                        numberOfLines={1}
-                      >
-                        {item.to_vendor_name || `#${item.to_vendor}`}
-                      </Text>
-                    </View>
                     <Text className="text-[9px] text-gray-400 mt-0.5">
                       {TYPE_LABEL[item.type] || item.type} · {item.sub_type}
                     </Text>
