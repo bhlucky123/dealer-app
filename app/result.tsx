@@ -231,9 +231,10 @@ const ResultPage: React.FC = () => {
     const isSkipped = !!rawData && typeof rawData === "object" && !Array.isArray(rawData) && (rawData as any).skipped === true;
     const data = !isSkipped && Array.isArray(rawData) ? rawData?.[0] : undefined;
 
-    // Add skip state
+    // Add skip/unskip state
     const [skipError, setSkipError] = useState<string | null>(null);
     const [skipLoading, setSkipLoading] = useState<boolean>(false);
+    const [unskipLoading, setUnskipLoading] = useState<boolean>(false);
     const [loading, setLoading] = useState<boolean>(false);
 
     const skipDrawSessionMutation = useMutation({
@@ -273,6 +274,43 @@ const ResultPage: React.FC = () => {
             }, 3000);
         }
     });
+
+    const unskipDrawSessionMutation = useMutation({
+        mutationFn: (payload: { draw_id: number; session_date: string }) => {
+            return api.post("/draw-result/unskip-draw-session/", payload);
+        },
+        onError: (error: any) => {
+            let errorMessage = "Failed to unskip draw session.";
+            if (error?.message?.message) errorMessage = error.message.message;
+            else if (error?.detail) errorMessage = error.detail;
+            else if (typeof error?.message === "string") errorMessage = error.message;
+            Alert.alert("Error", typeof errorMessage === "string" ? errorMessage : "Failed to unskip result.");
+        }
+    });
+
+    const handleUnskipResult = async () => {
+        if (!selectedDraw?.id || !filterDateString) return;
+        setUnskipLoading(true);
+        Alert.alert(
+            "Unskip Result",
+            "Are you sure you want to unskip this draw session? This will allow result publishing again.",
+            [
+                { text: "Cancel", style: "cancel", onPress: () => setUnskipLoading(false) },
+                {
+                    text: "Unskip",
+                    onPress: async () => {
+                        await unskipDrawSessionMutation.mutateAsync({
+                            draw_id: selectedDraw.id,
+                            session_date: filterDateString,
+                        });
+                        setUnskipLoading(false);
+                        refetch();
+                        Alert.alert("Unskipped", "Draw session has been unskipped successfully.");
+                    }
+                }
+            ]
+        );
+    };
 
     // ------------------- helpers -------------------
     const handleFormSubmit = async (resultData: any) => {
@@ -464,6 +502,23 @@ const ResultPage: React.FC = () => {
                     <Text className="mt-2 text-base text-gray-500 text-center">
                         You cannot add or edit a result for this date.
                     </Text>
+                    {user?.user_type === "ADMIN" && (
+                        <TouchableOpacity
+                            onPress={handleUnskipResult}
+                            className="mt-4 bg-indigo-600 px-6 py-3 rounded-full"
+                            disabled={unskipLoading}
+                            style={{ opacity: unskipLoading ? 0.6 : 1 }}
+                            activeOpacity={0.85}
+                        >
+                            {unskipLoading ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <Text className="text-white font-semibold text-base">
+                                    Unskip this result
+                                </Text>
+                            )}
+                        </TouchableOpacity>
+                    )}
                 </View>
                 {/* Date picker modal */}
                 {showDatePicker && (
