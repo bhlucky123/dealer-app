@@ -7,7 +7,7 @@ import { formatDateDDMMYYYY } from "@/utils/date";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import * as Sharing from "expo-sharing";
-import { AlertCircle, AlertTriangle, Ban, Calendar, Clock, Pencil, Plus, Share2, X } from "lucide-react-native";
+import { AlertCircle, AlertTriangle, Ban, Calendar, Clock, Pencil, Plus, RotateCcw, Share2, X } from "lucide-react-native";
 import React, { useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -236,6 +236,7 @@ const ResultPage: React.FC = () => {
     const [skipLoading, setSkipLoading] = useState<boolean>(false);
     const [unskipLoading, setUnskipLoading] = useState<boolean>(false);
     const [loading, setLoading] = useState<boolean>(false);
+    const [undoLoading, setUndoLoading] = useState<boolean>(false);
 
     const skipDrawSessionMutation = useMutation({
         mutationFn: (payload: { draw_id: number; session_date: string }) => {
@@ -308,6 +309,42 @@ const ResultPage: React.FC = () => {
                         Alert.alert("Unskipped", "Draw session has been unskipped successfully.");
                     }
                 }
+            ]
+        );
+    };
+
+    const undoResultMutation = useMutation({
+        mutationFn: (payload: { result_id: number }) =>
+            api.post("/draw-result/undo-result/", payload),
+        onError: (error: any) => {
+            let errorMessage = "Failed to undo result.";
+            if (error?.message?.message) errorMessage = error.message.message;
+            else if (error?.detail) errorMessage = error.detail;
+            else if (typeof error?.message === "string") errorMessage = error.message;
+            Alert.alert("Error", typeof errorMessage === "string" ? errorMessage : "Failed to undo result.");
+        },
+    });
+
+    const handleUndoResult = (resultToUndo: DrawResult) => {
+        setUndoLoading(true);
+        Alert.alert(
+            "Undo Result",
+            "Are you sure you want to undo this published result? This will delete the result and all associated winners. This action cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel", onPress: () => setUndoLoading(false) },
+                {
+                    text: "Undo",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await undoResultMutation.mutateAsync({ result_id: resultToUndo.id });
+                            refetch();
+                            Alert.alert("Success", "Result has been undone successfully.");
+                        } finally {
+                            setUndoLoading(false);
+                        }
+                    },
+                },
             ]
         );
     };
@@ -667,6 +704,28 @@ const ResultPage: React.FC = () => {
                             activeOpacity={0.85}
                         >
                             <Pencil size={26} color="#fff" />
+                        </TouchableOpacity>
+                    )}
+                    {canEditIcon && (
+                        <TouchableOpacity
+                            onPress={() => handleUndoResult(data!)}
+                            disabled={undoLoading}
+                            className="w-14 h-14 rounded-full bg-red-500 items-center justify-center shadow-lg border-4 border-white ml-2"
+                            style={{
+                                elevation: 6,
+                                shadowColor: "#ef4444",
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.2,
+                                shadowRadius: 4,
+                                opacity: undoLoading ? 0.6 : 1,
+                            }}
+                            activeOpacity={0.85}
+                        >
+                            {undoLoading ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <RotateCcw size={24} color="#fff" />
+                            )}
                         </TouchableOpacity>
                     )}
                 </View>
