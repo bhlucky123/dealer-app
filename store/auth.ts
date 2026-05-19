@@ -1,4 +1,5 @@
 import { config, UserType } from "@/utils/config";
+import { queryClient } from "@/providers/react-query-provider";
 import { router } from "expo-router";
 import { create } from "zustand";
 
@@ -50,6 +51,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
     setPreLogin: (token, userType) => set({ preLoginToken: token, preLoginUserType: userType }),
 
     setSessionFromV2: (data, userType) => {
+      queryClient.clear();
       set({
         user: {
           id: data.user_details?.user_id,
@@ -137,7 +139,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         }
 
         const data = await response.json();
-        console.log("data", data);
+        queryClient.clear();
         set({
           user: {
             id: data.user_details?.user_id,
