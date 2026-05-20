@@ -22,6 +22,9 @@ import { Dropdown } from "react-native-element-dropdown";
 
 type Dealer = { id: number; username: string };
 
+type NumberType = "single_digit" | "double_digit" | "triple_digit" | "four_digit";
+type DrawType = "default" | "kerala" | "tamil_nadu";
+
 type LimitCount = {
     id: number;
     number: string | null;
@@ -30,8 +33,22 @@ type LimitCount = {
     limit_type: "single_number" | "range";
     range_start: string | null;
     range_end: string | null;
-    number_type?: "single_digit" | "double_digit" | "triple_digit";
+    number_type?: NumberType;
     dealer_details?: { id: number; username: string; user_type?: string } | null;
+};
+
+const DRAW_TYPE_NUMBER_TYPES: Record<DrawType, { value: NumberType; label: string }[]> = {
+    default: [
+        { value: "single_digit", label: "1 Digit" },
+        { value: "double_digit", label: "2 Digit" },
+        { value: "triple_digit", label: "3 Digit" },
+    ],
+    kerala: [
+        { value: "four_digit", label: "4 Digit" },
+    ],
+    tamil_nadu: [
+        { value: "triple_digit", label: "3 Digit" },
+    ],
 };
 
 // Full-width pill tab
@@ -88,7 +105,7 @@ const LimitCountRow = memo(
                 : item.number;
 
         const typeLabel = item.number_type
-            ? { single_digit: "1D", double_digit: "2D", triple_digit: "3D" }[item.number_type]
+            ? { single_digit: "1D", double_digit: "2D", triple_digit: "3D", four_digit: "4D" }[item.number_type]
             : "";
 
         const colWidths = showDealer
@@ -213,9 +230,12 @@ const LimitCountScreen = () => {
     const queryClient = useQueryClient();
     const apiBase = LIMIT_API_BASE(user?.user_type);
 
+    const drawType = (selectedDraw?.type as DrawType) || "default";
+    const numberTypeOptions = DRAW_TYPE_NUMBER_TYPES[drawType] || DRAW_TYPE_NUMBER_TYPES.default;
+
     const [limitType, setLimitType] = useState<"single_number" | "range">("single_number");
-    const [numberType, setNumberType] = useState<"single_digit" | "double_digit" | "triple_digit">("single_digit");
-    const [filterNumberType, setFilterNumberType] = useState<"all" | "single_digit" | "double_digit" | "triple_digit">("all");
+    const [numberType, setNumberType] = useState<NumberType>(numberTypeOptions[0].value);
+    const [filterNumberType, setFilterNumberType] = useState<NumberType | "all">("all");
     const [filterDealerId, setFilterDealerId] = useState<number | "">("");
     const [selectedDealerForCreate, setSelectedDealerForCreate] = useState<number | null>(null);
 
@@ -264,7 +284,7 @@ const LimitCountScreen = () => {
             range_start: string;
             range_end: string;
             draw: number;
-            number_type: "single_digit" | "double_digit" | "triple_digit";
+            number_type: NumberType;
             dealer?: number | null;
         }) => {
             const body = { ...payload };
@@ -326,7 +346,7 @@ const LimitCountScreen = () => {
             range_start: string;
             range_end: string;
             number: string;
-            number_type: "single_digit" | "double_digit" | "triple_digit"
+            number_type: NumberType;
         }) => {
             return api.patch(`/draw/limit-number-count/${payload.id}/`, {
                 count: payload.count,
@@ -389,11 +409,12 @@ const LimitCountScreen = () => {
         setDeleteItem(null);
     }, []);
 
-    const getDigitsForType = (type: "single_digit" | "double_digit" | "triple_digit") => {
+    const getDigitsForType = (type: NumberType) => {
         switch (type) {
             case "single_digit": return 1;
             case "double_digit": return 2;
             case "triple_digit": return 3;
+            case "four_digit": return 4;
             default: return 1;
         }
     };
@@ -542,24 +563,22 @@ const LimitCountScreen = () => {
             )}
 
             {/* Number type */}
-            <View className="mb-3">
-                <PillTabs
-                    options={[
-                        { value: "single_digit", label: "1 Digit" },
-                        { value: "double_digit", label: "2 Digit" },
-                        { value: "triple_digit", label: "3 Digit" },
-                    ]}
-                    selected={numberType}
-                    onSelect={(v) => {
-                        clearValidation();
-                        setNumberType(v as any);
-                        setNewNumber("");
-                        setNewRangeStart("");
-                        setNewRangeEnd("");
-                    }}
-                    disabled={isSubmitting}
-                />
-            </View>
+            {numberTypeOptions.length > 1 && (
+                <View className="mb-3">
+                    <PillTabs
+                        options={numberTypeOptions}
+                        selected={numberType}
+                        onSelect={(v) => {
+                            clearValidation();
+                            setNumberType(v as NumberType);
+                            setNewNumber("");
+                            setNewRangeStart("");
+                            setNewRangeEnd("");
+                        }}
+                        disabled={isSubmitting}
+                    />
+                </View>
+            )}
 
             {/* Limit type */}
             <View className="mb-3">
@@ -727,24 +746,24 @@ const LimitCountScreen = () => {
                                     {renderHeader()}
 
                                     {/* Filters row */}
-                                    <View className="mb-3">
-                                        <PillTabs
-                                            options={[
-                                                { value: "all", label: "All" },
-                                                { value: "single_digit", label: "1 Digit" },
-                                                { value: "double_digit", label: "2 Digit" },
-                                                { value: "triple_digit", label: "3 Digit" },
-                                            ]}
-                                            selected={filterNumberType}
-                                            onSelect={(v) => setFilterNumberType(v as any)}
-                                            disabled={isLoading}
-                                        />
-                                        {isFetching && (
-                                            <View className="items-center mt-2">
-                                                <ActivityIndicator size="small" color="#3B82F6" />
-                                            </View>
-                                        )}
-                                    </View>
+                                    {numberTypeOptions.length > 1 && (
+                                        <View className="mb-3">
+                                            <PillTabs
+                                                options={[
+                                                    { value: "all", label: "All" },
+                                                    ...numberTypeOptions,
+                                                ]}
+                                                selected={filterNumberType}
+                                                onSelect={(v) => setFilterNumberType(v as any)}
+                                                disabled={isLoading}
+                                            />
+                                            {isFetching && (
+                                                <View className="items-center mt-2">
+                                                    <ActivityIndicator size="small" color="#3B82F6" />
+                                                </View>
+                                            )}
+                                        </View>
+                                    )}
 
                                     {isAdmin && (
                                         <Dropdown
