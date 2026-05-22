@@ -30,6 +30,10 @@ const OptionsPage = () => {
       route: `/transfer-log`,
     },
     {
+      label: "Recall Log",
+      route: `/recall-log`,
+    },
+    {
       label: "Last Sale",
       route: `/last-sale`,
     },
