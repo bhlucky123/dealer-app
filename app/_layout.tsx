@@ -159,6 +159,22 @@ export default function RootLayout() {
           />
 
           <Stack.Screen
+            name="recall-log"
+            options={{
+              headerShown: true,
+              title: "Recall Log",
+              headerStyle: { backgroundColor: themeColors.headerBackground },
+              headerTitleStyle: {
+                color: themeColors.headerTitle,
+                fontWeight: "bold",
+                fontSize: 22,
+              },
+              headerTintColor: themeColors.headerTint,
+              headerShadowVisible: false,
+            }}
+          />
+
+          <Stack.Screen
             name="limit-count"
             options={{
               headerShown: true,
