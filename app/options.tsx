@@ -26,12 +26,8 @@ const OptionsPage = () => {
       route: `/winnings`,
     },
     {
-      label: "Transfer Log",
+      label: "Transfer & Recall Log",
       route: `/transfer-log`,
-    },
-    {
-      label: "Recall Log",
-      route: `/recall-log`,
     },
     {
       label: "Last Sale",

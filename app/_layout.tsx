@@ -146,23 +146,7 @@ export default function RootLayout() {
             name="transfer-log"
             options={{
               headerShown: true,
-              title: "Transfer Log",
-              headerStyle: { backgroundColor: themeColors.headerBackground },
-              headerTitleStyle: {
-                color: themeColors.headerTitle,
-                fontWeight: "bold",
-                fontSize: 22,
-              },
-              headerTintColor: themeColors.headerTint,
-              headerShadowVisible: false,
-            }}
-          />
-
-          <Stack.Screen
-            name="recall-log"
-            options={{
-              headerShown: true,
-              title: "Recall Log",
+              title: "Transfer & Recall Log",
               headerStyle: { backgroundColor: themeColors.headerBackground },
               headerTitleStyle: {
                 color: themeColors.headerTitle,
