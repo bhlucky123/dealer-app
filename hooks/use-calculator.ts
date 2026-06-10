@@ -45,14 +45,13 @@ export const useCalculator = () => {
   const handleNumberInput = useCallback(
     (digit: string) => {
       if (equation) {
-        // User is entering PIN — just accumulate digits
-        if (display !== "" || pinInput === "") {
-          setDisplay("");
-          setPinInput(digit);
-        } else {
-          setPinInput((prev) => prev + digit);
-        }
-
+        // PIN entry mode — accumulate digits. Always use a functional update
+        // so rapid taps can't read a stale `pinInput` from the callback
+        // closure and overwrite digits already entered. (`handleEqual` already
+        // clears the display and resets `pinInput` when PIN mode begins, so the
+        // first append onto "" correctly yields just the first digit.)
+        setDisplay("");
+        setPinInput((prev) => prev + digit);
         return;
       }
 
