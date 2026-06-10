@@ -159,7 +159,7 @@ const SalesReportScreen = () => {
     const [totalAgentAmount, setTotalAgentAmount] = useState(0);
     const [totalCustomerAmount, setTotalCustomerAmount] = useState(0);
 
-    const { user, hasFeature } = useAuthStore();
+    const { user } = useAuthStore();
     const router = useRouter();
     const queryClient = useQueryClient();
     const cachedAgents = queryClient.getQueryData<Agent[]>(["agents"]);
@@ -484,8 +484,11 @@ const SalesReportScreen = () => {
         }
     };
 
-    // Delete a booking (entire bill) with confirmation
-    const canDeleteBooking = hasFeature("delete_booking");
+    // Delete a booking (entire bill) with confirmation.
+    // Everyone sees the delete button — before the cutoff anyone can delete.
+    // After the cutoff the backend only allows the super admin / main vendor
+    // admin (with delete permission) and rejects others with a message.
+    const canDeleteBooking = true;
 
     const handleRowPress = useCallback((item: any) => {
         router.push({ pathname: "/booking-details", params: { bill_number: String(item.bill_number), ...(debouncedSearch ? { search: debouncedSearch } : {}) } });
@@ -509,8 +512,9 @@ const SalesReportScreen = () => {
                             // Refresh server data
                             queryClient.invalidateQueries({ queryKey: ["/draw-booking/booking-report/"] });
                             refetch();
-                        } catch (err) {
-                            Alert.alert("Delete Failed", "Could not delete booking.");
+                        } catch (err: any) {
+                            const msg = err?.response?.data?.message || "Could not delete booking.";
+                            Alert.alert("Delete Failed", msg);
                         }
                     }
                 }

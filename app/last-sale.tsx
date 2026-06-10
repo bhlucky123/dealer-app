@@ -30,10 +30,13 @@ const getTomorrow = () => {
 
 const LastSaleReportScreen = () => {
     const { selectedDraw } = useDrawStore();
-    const { user, hasFeature } = useAuthStore();
+    const { user } = useAuthStore();
     const router = useRouter();
     const queryClient = useQueryClient();
-    const canDeleteBooking = hasFeature("delete_booking");
+    // Everyone sees the delete button — before the cutoff anyone can delete.
+    // After the cutoff the backend only allows the super admin / main vendor
+    // admin (with delete permission) and rejects others with a message.
+    const canDeleteBooking = true;
 
     // Delete booking state
     const [deleteBookingLoading, setDeleteBookingLoading] = React.useState(false);
@@ -83,7 +86,8 @@ const LastSaleReportScreen = () => {
                             queryClient.invalidateQueries({ queryKey: ["booking-report-detail"] });
                             refetch();
                         } catch (err: any) {
-                            Alert.alert("Delete Failed", "Could not delete booking.");
+                            const msg = err?.response?.data?.message || "Could not delete booking.";
+                            Alert.alert("Delete Failed", msg);
                         } finally {
                             setDeleteBookingLoading(false);
                         }
