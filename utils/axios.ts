@@ -104,6 +104,25 @@ api.interceptors.response.use(
       });
     }
 
+    // Retry transient transport failures (no HTTP response received). okhttp —
+    // React Native's HTTP client — transparently retries idempotent GETs on a
+    // stale/dropped keep-alive connection but NOT POST/PUT/PATCH, so those fail
+    // outright on a dead reused connection (Railway's new edge drops idle
+    // HTTP/2 connections). A fresh attempt opens a new connection and almost
+    // always succeeds. Only retries pure transport errors; any real HTTP
+    // response (handled below) is never retried.
+    const retryCfg: any = error.config || {};
+    if (!error.response && (retryCfg.__retryCount || 0) < 2) {
+      retryCfg.__retryCount = (retryCfg.__retryCount || 0) + 1;
+      const backoff = 300 * retryCfg.__retryCount;
+      console.log(
+        `[Axios] retrying ${retryCfg.method?.toUpperCase()} ${retryCfg.url} (attempt ${retryCfg.__retryCount + 1}) after ${backoff}ms`
+      );
+      return new Promise((resolve) => setTimeout(resolve, backoff)).then(() =>
+        api(retryCfg)
+      );
+    }
+
     if (error.request) {
       console.log("🚨 Raw response text:", error.request.responseText);
       console.log("🚨 Raw status:", error.request.status);
