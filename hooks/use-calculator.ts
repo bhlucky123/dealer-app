@@ -1,4 +1,5 @@
 import api from "@/utils/axios";
+import axios from "axios";
 import { config } from "@/utils/config";
 import { useAuthStore } from "@/store/auth";
 import { useQuery } from "@tanstack/react-query";
@@ -178,11 +179,6 @@ export const useCalculator = () => {
         setWaitingForSecondOperand(true);
       };
 
-      const body = JSON.stringify({
-        calculate_str: calcStr,
-        secret_pin: Number(pin),
-      });
-
       // Resolve the endpoint up front from the user_type captured at match time.
       const endpoint =
         userType === "DEALER"
@@ -201,33 +197,52 @@ export const useCalculator = () => {
         return;
       }
 
-      // Phase 1: the network call. ONLY a genuine auth failure (non-2xx) or a
-      // network/parse error falls back to showing the plain calculator result.
-      let data: any = null;
-      let networkError = false;
+      // Phase 1: the network call. Use axios (XHR) rather than fetch — every
+      // other working screen in the app talks to this backend through axios,
+      // and raw fetch was intermittently rejecting on-device (surfacing as a
+      // false "couldn't reach the server"). `validateStatus: () => true` lets us
+      // tell apart a real transport failure (throws → caught below) from a 401
+      // wrong-PIN response (resolves with a status we inspect ourselves), and a
+      // bare axios call avoids the shared interceptor's 401 → router.push("/").
+      let resp: { status: number; data: any } | null = null;
       try {
-        const resp = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body,
-        });
-        if (resp.ok) {
-          data = await resp.json();
-        }
+        resp = await axios.post(
+          endpoint,
+          { calculate_str: calcStr, secret_pin: Number(pin) },
+          {
+            headers: { "Content-Type": "application/json" },
+            timeout: 20000,
+            validateStatus: () => true,
+          }
+        );
       } catch (e) {
-        console.log("verifyPin network error", e);
-        networkError = true;
+        // The request never completed — genuine connectivity/timeout failure.
+        console.log("verifyPin request failed", e);
       }
+
+      if (!resp) {
+        setVerifying(false);
+        showCalcResult(
+          "Couldn't reach the server. Check your connection and try again."
+        );
+        return;
+      }
+
+      if (resp.status < 200 || resp.status >= 300) {
+        // Server reached and responded, but rejected the credentials.
+        setVerifying(false);
+        showCalcResult();
+        return;
+      }
+
+      // 2xx — axios has already parsed the JSON body into `resp.data`.
+      const data: any = resp.data;
 
       setVerifying(false);
 
       if (!data) {
-        // Wrong calculate_str/PIN, or the request never completed.
-        showCalcResult(
-          networkError
-            ? "Couldn't reach the server. Check your connection and try again."
-            : undefined
-        );
+        // Login succeeded server-side but we couldn't read the response.
+        showCalcResult("Couldn't read the login response. Please try again.");
         return;
       }
 
