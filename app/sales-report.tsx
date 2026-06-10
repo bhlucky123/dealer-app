@@ -805,7 +805,6 @@ const SalesReportScreen = () => {
                                 refreshing={isFetching}
                                 onRefresh={() => {
                                     setPage(1);
-                                    setAllData([]);
                                     refetch();
                                 }}
                             />
