@@ -4,6 +4,7 @@ import { useAuthStore } from "@/store/auth";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useCallback, useState } from "react";
+import { ALERT_TYPE, Toast } from "react-native-alert-notification";
 
 type ServerUserType = "ADMIN" | "DEALER" | "AGENT";
 type InitialCred = { calculate_str: string; user_type: ServerUserType };
@@ -162,7 +163,12 @@ export const useCalculator = () => {
     async (calcStr: string, pin: string, userType: ServerUserType | null) => {
       setVerifying(true);
 
-      const showCalcResult = () => {
+      const showCalcResult = (message = "Incorrect calculation or secret PIN. Please try again.") => {
+        Toast.show({
+          type: ALERT_TYPE.DANGER,
+          title: "Login failed",
+          textBody: message,
+        });
         const result = evaluateEquation(calcStr);
         setDisplay(result);
         setFirstOperand(parseFloat(result));
@@ -198,6 +204,7 @@ export const useCalculator = () => {
       // Phase 1: the network call. ONLY a genuine auth failure (non-2xx) or a
       // network/parse error falls back to showing the plain calculator result.
       let data: any = null;
+      let networkError = false;
       try {
         const resp = await fetch(endpoint, {
           method: "POST",
@@ -209,13 +216,18 @@ export const useCalculator = () => {
         }
       } catch (e) {
         console.log("verifyPin network error", e);
+        networkError = true;
       }
 
       setVerifying(false);
 
       if (!data) {
         // Wrong calculate_str/PIN, or the request never completed.
-        showCalcResult();
+        showCalcResult(
+          networkError
+            ? "Couldn't reach the server. Check your connection and try again."
+            : undefined
+        );
         return;
       }
 
