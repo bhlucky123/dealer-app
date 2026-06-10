@@ -177,58 +177,68 @@ export const useCalculator = () => {
         secret_pin: Number(pin),
       });
 
-      try {
-        if (userType === "DEALER" || userType === "AGENT") {
-          // One-step JWT login — endpoint is picked directly from the user type
-          // returned by /user/get-initial-user-creds/, no blind trial-and-error.
-          const role = userType === "DEALER" ? "dealer" : "agent";
-          const resp = await fetch(`${config.apiBaseUrl}/${role}/login-v2/`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body,
-          });
-          if (!resp.ok) {
-            showCalcResult();
-            return;
-          }
-          const data = await resp.json();
-          if (!data?.access) {
-            showCalcResult();
-            return;
-          }
-          setSessionFromV2(data, userType);
-          return;
-        }
+      // Resolve the endpoint up front from the user_type captured at match time.
+      const endpoint =
+        userType === "DEALER"
+          ? `${config.apiBaseUrl}/dealer/login-v2/`
+          : userType === "AGENT"
+          ? `${config.apiBaseUrl}/agent/login-v2/`
+          : userType === "ADMIN"
+          ? `${config.apiBaseUrl}/user/verify-calculate-str/`
+          : null;
 
-        if (userType === "ADMIN") {
-          // Admins still use the legacy 2-step verify → /login flow because
-          // there's no /administrator/login-v2/.
-          const res = await fetch(
-            `${config.apiBaseUrl}/user/verify-calculate-str/`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body,
-            }
-          );
-          if (!res.ok) {
-            showCalcResult();
-            return;
-          }
-          const data = await res.json();
-          setPreLogin(data.token, data.user_type);
-          router.navigate("/login");
-          return;
-        }
-
-        // No user_type resolved (shouldn't happen since we only enter PIN mode
-        // when the typed expression matches a cred entry). Degrade gracefully.
+      if (!endpoint) {
+        // No user_type resolved (shouldn't happen — we only enter PIN mode when
+        // the typed expression matches a cred entry). Degrade gracefully.
         showCalcResult();
-      } catch {
-        showCalcResult();
-      } finally {
         setVerifying(false);
+        return;
       }
+
+      // Phase 1: the network call. ONLY a genuine auth failure (non-2xx) or a
+      // network/parse error falls back to showing the plain calculator result.
+      let data: any = null;
+      try {
+        const resp = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        });
+        if (resp.ok) {
+          data = await resp.json();
+        }
+      } catch (e) {
+        console.log("verifyPin network error", e);
+      }
+
+      setVerifying(false);
+
+      if (!data) {
+        // Wrong calculate_str/PIN, or the request never completed.
+        showCalcResult();
+        return;
+      }
+
+      // Phase 2: success. Hand off to the auth store / login screen. This is
+      // deliberately OUTSIDE the try above — a routing or state-update hiccup
+      // here must NOT masquerade as a failed login and show the calc sum.
+      if (userType === "DEALER" || userType === "AGENT") {
+        if (!data.access) {
+          showCalcResult();
+          return;
+        }
+        setSessionFromV2(data, userType);
+        return;
+      }
+
+      // ADMIN — stash the pre-login token and go to the username/password screen.
+      // Use router.replace (same imperative API the rest of the app relies on)
+      // so the calculator isn't left underneath to be navigated back to.
+      setEquation("");
+      setEquationUserType(null);
+      setPinInput("");
+      setPreLogin(data.token, data.user_type);
+      router.replace("/login");
     },
     [setPreLogin, setSessionFromV2]
   );
