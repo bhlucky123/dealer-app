@@ -74,6 +74,37 @@ api.interceptors.response.use(
       });
     }
 
+    // React Native sometimes routes a fully successful response into the error
+    // handler without building an `error.response` — the server completed the
+    // request (e.g. creating a dealer returns 201 and the row is created) but the
+    // client still surfaces a "Network Error". When the underlying XHR reports a
+    // 2xx status, treat it as the success it actually was and recover the body.
+    const xhrStatus = error.request?.status;
+    if (
+      !error.response &&
+      typeof xhrStatus === "number" &&
+      xhrStatus >= 200 &&
+      xhrStatus < 300
+    ) {
+      console.warn("⚠️ Recovering 2xx response misreported as a network error...");
+      let data: any = null;
+      const raw = error.request?.responseText ?? error.request?._response;
+      if (typeof raw === "string" && raw.length > 0) {
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          data = raw;
+        }
+      }
+      return Promise.resolve({
+        status: xhrStatus,
+        statusText: "OK",
+        data,
+        headers: {},
+        config: error.config,
+      });
+    }
+
     if (error.request) {
       console.log("🚨 Raw response text:", error.request.responseText);
       console.log("🚨 Raw status:", error.request.status);
