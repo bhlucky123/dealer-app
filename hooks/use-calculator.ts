@@ -204,20 +204,33 @@ export const useCalculator = () => {
       // tell apart a real transport failure (throws → caught below) from a 401
       // wrong-PIN response (resolves with a status we inspect ourselves), and a
       // bare axios call avoids the shared interceptor's 401 → router.push("/").
+      // okhttp (React Native's HTTP client) silently retries idempotent GETs on
+      // a stale/dropped keep-alive connection but NOT POSTs, so a POST sent on a
+      // dead reused connection fails outright. Retry the transport failure
+      // ourselves — a fresh attempt opens a new connection and succeeds. We only
+      // retry when no HTTP response came back; any real response (200, 401, …)
+      // breaks the loop and is handled below.
       let resp: { status: number; data: any } | null = null;
-      try {
-        resp = await axios.post(
-          endpoint,
-          { calculate_str: calcStr, secret_pin: Number(pin) },
-          {
-            headers: { "Content-Type": "application/json" },
-            timeout: 20000,
-            validateStatus: () => true,
+      const MAX_ATTEMPTS = 3;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          resp = await axios.post(
+            endpoint,
+            { calculate_str: calcStr, secret_pin: Number(pin) },
+            {
+              headers: { "Content-Type": "application/json" },
+              timeout: 20000,
+              validateStatus: () => true,
+            }
+          );
+          break;
+        } catch (e) {
+          // The request never completed — transport/connection failure.
+          console.log(`verifyPin request failed (attempt ${attempt})`, e);
+          if (attempt < MAX_ATTEMPTS) {
+            await new Promise((r) => setTimeout(r, 300 * attempt));
           }
-        );
-      } catch (e) {
-        // The request never completed — genuine connectivity/timeout failure.
-        console.log("verifyPin request failed", e);
+        }
       }
 
       if (!resp) {
