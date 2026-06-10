@@ -6,7 +6,7 @@ interface Config {
 }
 
 export const config: Config = {
-  apiBaseUrl: "https://alfarah.in",
+  apiBaseUrl: "https://3dlnbe-production.up.railway.app",
   build: true,
 };
 // claude --dangerously-skip-permissions --model claude-opus-4-6
