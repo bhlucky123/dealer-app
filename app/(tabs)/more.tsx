@@ -1,9 +1,12 @@
 import { useAuthStore } from "@/store/auth";
 import api from "@/utils/axios";
+import { getLogFilePaths } from "@/utils/file-logger";
 import { useFocusEffect } from "@react-navigation/native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
+import * as FileSystem from "expo-file-system";
 import { router } from "expo-router";
+import * as Sharing from "expo-sharing";
 import React, { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -1131,6 +1134,49 @@ export default function MoreTab() {
           ) : (
             renderBankDetailsSection()
           )}
+
+          {/* Send Logs Button */}
+          <TouchableOpacity
+            onPress={async () => {
+              try {
+                const paths = await getLogFilePaths();
+                if (paths.length === 0) {
+                  Alert.alert("No Logs", "No log files found.");
+                  return;
+                }
+                let combined = "";
+                for (const p of paths) {
+                  const name = p.split("/").pop() || p;
+                  const content = await FileSystem.readAsStringAsync(p);
+                  combined += `=== ${name} ===\n${content}\n\n`;
+                }
+                const tmpPath = `${FileSystem.cacheDirectory}app-logs.txt`;
+                await FileSystem.writeAsStringAsync(tmpPath, combined);
+                await Sharing.shareAsync(tmpPath, {
+                  mimeType: "text/plain",
+                  dialogTitle: "Send App Logs",
+                });
+              } catch {
+                Alert.alert("Error", "Failed to share logs.");
+              }
+            }}
+            style={{
+              width: "100%",
+              backgroundColor: "#6366f1",
+              borderRadius: 16,
+              padding: 16,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              marginTop: 18,
+              gap: 10,
+            }}
+          >
+            <Ionicons name="document-text-outline" size={22} color="#fff" />
+            <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>
+              Send Logs
+            </Text>
+          </TouchableOpacity>
 
           {/* Image Extract Button */}
           <TouchableOpacity
