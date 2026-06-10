@@ -171,7 +171,10 @@ const BookingDetailsScreen = () => {
     const billNumber = params.bill_number as string | undefined;
     const initialSearch = (params.search as string) || "";
     const canEditBooking = hasFeature("edit_booking");
-    const canDeleteBooking = hasFeature("delete_booking");
+    // Everyone sees the delete option — before the cutoff anyone can delete.
+    // After the cutoff the backend only allows the super admin / main vendor
+    // admin (with delete permission) and rejects others with a message.
+    const canDeleteBooking = true;
     const isEditable = params.editable === "true" && (user?.user_type !== "ADMIN" || !!user?.superuser) && canEditBooking;
     const isSuperuser = !!user?.superuser;
     const showDeleteOnly = canDeleteBooking && (isSuperuser || !isEditable);
@@ -240,8 +243,9 @@ const BookingDetailsScreen = () => {
                             queryClient.invalidateQueries({ queryKey: ["booking-report-detail"] });
                             queryClient.invalidateQueries({ queryKey: ["/draw-booking/booking-report/"] });
                             refetch();
-                        } catch (err) {
-                            Alert.alert("Delete Failed", "Could not delete booking detail.");
+                        } catch (err: any) {
+                            const msg = err?.response?.data?.message || "Could not delete booking detail.";
+                            Alert.alert("Delete Failed", msg);
                         }
                     }
                 }
