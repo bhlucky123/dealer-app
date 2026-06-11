@@ -6,7 +6,7 @@ interface Config {
 }
 
 export const config: Config = {
-  apiBaseUrl: "https://do.alfarah.in",
+  apiBaseUrl: "https://alfarah.in",
   build: true,
 };
 // claude --dangerously-skip-permissions --model claude-opus-4-6
