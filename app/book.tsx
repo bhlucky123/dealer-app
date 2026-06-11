@@ -2071,6 +2071,15 @@ const BookingScreen: React.FC = () => {
                         setSelectedAgent("")
                       }}
                       placeholder="Select Dealer"
+                      search
+                      searchPlaceholder="Search dealer..."
+                      inputSearchStyle={{
+                        height: 40,
+                        borderRadius: 6,
+                        borderColor: "#9ca3af",
+                        color: "#000",
+                        fontSize: 14,
+                      }}
                       style={{
                         borderColor: "#9ca3af",
                         borderWidth: 1,
@@ -2129,6 +2138,15 @@ const BookingScreen: React.FC = () => {
                       setSelectedAgent(item.value)
                     }}
                     placeholder="Select Agent"
+                    search
+                    searchPlaceholder="Search agent..."
+                    inputSearchStyle={{
+                      height: 40,
+                      borderRadius: 6,
+                      borderColor: "#9ca3af",
+                      color: "#000",
+                      fontSize: 14,
+                    }}
                     style={{
                       borderColor: "#9ca3af",
                       borderWidth: 1,
