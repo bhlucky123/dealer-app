@@ -5,7 +5,6 @@ import { useAuthStore } from "@/store/auth";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useCallback, useState } from "react";
-import { ALERT_TYPE, Toast } from "react-native-alert-notification";
 
 type ServerUserType = "ADMIN" | "DEALER" | "AGENT";
 type InitialCred = { calculate_str: string; user_type: ServerUserType };
@@ -164,12 +163,7 @@ export const useCalculator = () => {
     async (calcStr: string, pin: string, userType: ServerUserType | null) => {
       setVerifying(true);
 
-      const showCalcResult = (message = "Incorrect calculation or secret PIN. Please try again.") => {
-        Toast.show({
-          type: ALERT_TYPE.DANGER,
-          title: "Login failed",
-          textBody: message,
-        });
+      const showCalcResult = () => {
         const result = evaluateEquation(calcStr);
         setDisplay(result);
         setFirstOperand(parseFloat(result));
@@ -235,9 +229,7 @@ export const useCalculator = () => {
 
       if (!resp) {
         setVerifying(false);
-        showCalcResult(
-          "Couldn't reach the server. Check your connection and try again."
-        );
+        showCalcResult();
         return;
       }
 
@@ -255,7 +247,7 @@ export const useCalculator = () => {
 
       if (!data) {
         // Login succeeded server-side but we couldn't read the response.
-        showCalcResult("Couldn't read the login response. Please try again.");
+        showCalcResult();
         return;
       }
 
