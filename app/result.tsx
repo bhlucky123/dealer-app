@@ -12,6 +12,7 @@ import React, { useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    RefreshControl,
     ScrollView,
     Text,
     TouchableOpacity,
@@ -629,7 +630,12 @@ const ResultPage: React.FC = () => {
         !isSkipped;
 
     return (
-        <ScrollView className="flex-1" >
+        <ScrollView
+            className="flex-1"
+            refreshControl={
+                <RefreshControl refreshing={isLoading} onRefresh={refetch} />
+            }
+        >
             <SafeAreaView edges={["bottom"]}>
                 {/* Date filter */}
                 <View className="px-4 pt-4 flex-row items-end justify-between">
@@ -820,12 +826,12 @@ const ResultPage: React.FC = () => {
                                 </View>
                                 {isKerala ? (
                                     // Kerala prize display
-                                    [{ label: "1st Prize", numbers: data.kl_first_prize_numbers || [] },
-                                    { label: "2nd Prize", numbers: data.kl_second_prize_numbers || [] },
-                                    { label: "3rd Prize", numbers: data.kl_third_prize_numbers || [] },
-                                    { label: "4th Prize", numbers: data.kl_fourth_prize_numbers || [] },
-                                    { label: "5th Prize", numbers: data.kl_fifth_prize_numbers || [] },
-                                    { label: "6th Prize", numbers: data.kl_sixth_prize_numbers || [] }
+                                    [{ label: "1", numbers: data.kl_first_prize_numbers || [] },
+                                    { label: "2", numbers: data.kl_second_prize_numbers || [] },
+                                    { label: "3", numbers: data.kl_third_prize_numbers || [] },
+                                    { label: "4", numbers: data.kl_fourth_prize_numbers || [] },
+                                    { label: "5", numbers: data.kl_fifth_prize_numbers || [] },
+                                    { label: "6", numbers: data.kl_sixth_prize_numbers || [] }
                                     ].map((row, idx) => (
                                         <View key={row.label} className={`${PRIZE_COLOURS[idx % PRIZE_COLOURS.length]} border-b border-gray-300`}>
                                             <View className="flex-row items-center">
@@ -851,23 +857,20 @@ const ResultPage: React.FC = () => {
                                     ))
                                 ) : (
                                     (isTamilNadu
-                                        ? [{ label: "First Price", value: data.first_prize }]
+                                        ? [{ label: "1", value: data.first_prize }]
                                         : [
-                                            { label: "First Price", value: data.first_prize },
-                                            { label: "Second Price", value: data.second_prize },
-                                            { label: "Third Price", value: data.third_prize },
-                                            { label: "Fourth Price", value: data.fourth_prize },
-                                            { label: "Fifth Price", value: data.fifth_prize },
+                                            { label: "1", value: data.first_prize },
+                                            { label: "2", value: data.second_prize },
+                                            { label: "3", value: data.third_prize },
+                                            { label: "4", value: data.fourth_prize },
+                                            { label: "5", value: data.fifth_prize },
                                         ]
                                     ).map((row, idx) => (
                                         <View key={row.label} className={`flex-row ${PRIZE_COLOURS[idx]} border-b border-gray-300`}>
-                                            <Text className="w-10 text-center py-1.5 text-[11px] font-medium border-r border-gray-300 bg-white/20">
-                                                {idx + 1}
-                                            </Text>
-                                            <Text className="flex-1 py-1.5 text-[16px] font-bold text-center text-gray-800">
+                                            <Text className="w-10 py-1.5 text-[16px] font-bold text-center text-gray-800">
                                                 {row.label}
                                             </Text>
-                                            <Text className="w-20 py-1.5 text-[17px] font-mono font-bold text-center border-l border-gray-300">
+                                            <Text className="flex-1 py-1.5 text-[17px] font-mono font-bold text-center border-l border-gray-300">
                                                 {row.value}
                                             </Text>
                                         </View>
@@ -876,27 +879,30 @@ const ResultPage: React.FC = () => {
                             </View>
 
                             {/* Complementary grid — hidden for Tamil Nadu and Kerala */}
-                            {!isTamilNadu && !isKerala && <View className="mx-4 mt-4 border border-gray-300 rounded-lg overflow-hidden">
-                                {/* Top-to-bottom grid, 3 columns */}
-                                <View className="flex-row border-b border-gray-200">
-                                    {Array.from({ length: 3 }).map((_, colIdx) => (
-                                        <View key={`col-${colIdx}`} className="flex-1">
-                                            {Array.from({ length: Math.ceil(data.complementary_prizes.length / 3) }).map((_, rowIdx) => {
-                                                const idx = rowIdx + colIdx * Math.ceil(data.complementary_prizes.length / 3);
-                                                const prize = data.complementary_prizes[idx];
-                                                return (
-                                                    <Text
-                                                        key={`prize-${colIdx}-${rowIdx}`}
-                                                        className={`py-2 text-center text-[15px] font-mono font-bold border-b border-gray-200 ${colIdx < 2 ? "border-r border-gray-200" : ""}`}
-                                                    >
-                                                        {prize || ""}
-                                                    </Text>
-                                                );
-                                            })}
-                                        </View>
-                                    ))}
+                            {!isTamilNadu && !isKerala && data.complementary_prizes?.length > 0 && (
+                                <View className="mx-4 mt-2 flex-row">
+                                    {Array.from({ length: 3 }).map((_, colIdx) => {
+                                        const itemsPerCol = Math.ceil(data.complementary_prizes.length / 3);
+                                        return (
+                                            <View key={`col-${colIdx}`} className="flex-1">
+                                                {Array.from({ length: itemsPerCol }).map((_, rowIdx) => {
+                                                    const idx = rowIdx + colIdx * itemsPerCol;
+                                                    const prize = data.complementary_prizes[idx];
+                                                    if (!prize) return null;
+                                                    return (
+                                                        <Text
+                                                            key={`prize-${idx}`}
+                                                            className="py-1 text-center text-[15px] font-mono font-bold text-gray-900"
+                                                        >
+                                                            {prize}
+                                                        </Text>
+                                                    );
+                                                })}
+                                            </View>
+                                        );
+                                    })}
                                 </View>
-                            </View>}
+                            )}
                         </View>
                     </ViewShot>
                 )}
