@@ -1129,6 +1129,10 @@ const BookingScreen: React.FC = () => {
       Alert.alert("No bookings", "Please add at least one booking before submitting.");
       return;
     }
+    if (user?.user_type === "ADMIN" && !selectedDealer && !selectedAgent) {
+      Alert.alert("Select Dealer or Agent", "Please select a Dealer or Agent before submitting.");
+      return;
+    }
     if (DrawSessionDetails?.session?.active_session_id) {
       let bookedAgent = null;
       let booked_dealer = null;
