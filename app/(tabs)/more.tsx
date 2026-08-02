@@ -1199,6 +1199,29 @@ export default function MoreTab() {
             </Text>
           </TouchableOpacity>
 
+          {/* Deleted Bookings (admin audit log) */}
+          {user?.user_type === "ADMIN" && (
+            <TouchableOpacity
+              onPress={() => router.push("/booking-deletions" as any)}
+              style={{
+                width: "100%",
+                backgroundColor: "#dc2626",
+                borderRadius: 16,
+                padding: 16,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                marginTop: 18,
+                gap: 10,
+              }}
+            >
+              <Ionicons name="trash-outline" size={22} color="#fff" />
+              <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>
+                Deleted Bookings
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {/* Logout Button */}
           <TouchableOpacity
             onPress={() => {

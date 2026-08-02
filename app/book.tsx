@@ -1435,6 +1435,9 @@ const BookingScreen: React.FC = () => {
       const abcDashNumberDashCount = /^\s*Abc\s*-\s*(\d+)\s*-\s*(\d+)\s*$/i;
       // --- 3-value booking ---
       const numberCount1Count2Regex = /^\s*(\d{1,4})\s+(\d+)\s+(\d+)\s*$/;
+      // --- "691 2+2" — number, space, then the two counts joined by a symbol.
+      // Same meaning as "691 2 2" / "691+2+2": first count SUPER, second BOX.
+      const numberSpaceDualCountRegex = /^\s*(\d{1,4})\s+(\d+)\s*[-=+:\/\.\#\&\*,]\s*(\d+)\s*$/;
       // --- C+7+100 ---
       const subtypePlusNumberPlusCount = /^\s*([A-Za-z]+)\+(\d+)\+(\d+)\s*$/;
       // --- Abc=6=25 ---
@@ -1650,6 +1653,26 @@ const BookingScreen: React.FC = () => {
             }
           } else {
             let ok = pushBooking(m[1], m[2]) && pushBooking(m[1], m[3]);
+            if (!ok) {
+              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+              failedLines.push(origLine);
+            }
+          }
+          continue;
+        }
+
+        // --- "691 2+2" (also "691 2-2", "691 2 + 2") — space before the counts,
+        // symbol between them. Handled like the "691 2 2" case above.
+        m = line.match(numberSpaceDualCountRegex);
+        if (m) {
+          if (m[1].length === 3) {
+            let ok = pushBooking(m[1], Number(m[2]), "SUPER") && pushBooking(m[1], Number(m[3]), "BOX");
+            if (!ok) {
+              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+              failedLines.push(origLine);
+            }
+          } else {
+            let ok = pushBooking(m[1], Number(m[2])) && pushBooking(m[1], Number(m[3]));
             if (!ok) {
               if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
               failedLines.push(origLine);
