@@ -211,6 +211,18 @@ export default function RootLayout() {
             headerTintColor: "#fff",
           }} />
 
+          <Stack.Screen name="booking-deletions" options={{
+            headerShown: true,
+            title: "Deleted Bookings",
+            headerStyle: { backgroundColor: "#6366f1" },
+            headerTitleStyle: {
+              color: "#fff",
+              fontWeight: "bold",
+              fontSize: 22,
+            },
+            headerTintColor: "#fff",
+          }} />
+
           <Stack.Screen name="dashboard" options={{
             headerShown: true,
             title: "Dashboard",
