@@ -9,16 +9,14 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
-  Clock,
   Hash,
   Search,
   ShieldAlert,
   Ticket,
   Trash2,
-  User,
   X,
 } from "lucide-react-native";
-import { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -97,13 +95,6 @@ const TYPE_TABS: { key: "" | "booking" | "number"; label: string }[] = [
   { key: "number", label: "Numbers" },
 ];
 
-// Keys are the backend UserType values (project_3dln/enums.py) — admin is "ADMIN".
-const USER_TYPE_COLORS: Record<string, { bg: string; text: string }> = {
-  ADMIN: { bg: "#EEF2FF", text: "#4338CA" },
-  DEALER: { bg: "#ECFDF5", text: "#047857" },
-  AGENT: { bg: "#FFF7ED", text: "#C2410C" },
-};
-
 /** yyyy-mm-dd in the device's local calendar (the API filters on IST dates). */
 function toApiDate(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -117,6 +108,24 @@ function daysAgo(n: number) {
   return d;
 }
 
+/** Short DD/MM/YY — matches the sales report row. */
+function formatShortDate(date?: Date | null) {
+  if (!date || isNaN(date.getTime())) return "";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = String(date.getFullYear()).slice(-2);
+  return `${day}/${month}/${year}`;
+}
+
+function formatTime(date?: Date | null) {
+  if (!date || isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 function fmtDateTime(iso?: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -125,12 +134,7 @@ function fmtDateTime(iso?: string | null) {
     day: "2-digit",
     month: "short",
   });
-  const time = d.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
-  return `${date}, ${time}`;
+  return `${date}, ${formatTime(d)}`;
 }
 
 function fmtDate(value?: string | null) {
@@ -142,11 +146,6 @@ function fmtDate(value?: string | null) {
     month: "short",
     year: "numeric",
   });
-}
-
-function numberLabel(row: DeletedNumber) {
-  const sub = row.sub_type && row.sub_type !== "SUPER" ? row.sub_type : "";
-  return `${sub ? `${sub} ` : ""}${row.number} × ${row.count}`;
 }
 
 function SummaryTile({
@@ -170,181 +169,182 @@ function SummaryTile({
   );
 }
 
-function LogCard({
-  log,
-  expanded,
-  onToggle,
-}: {
-  log: DeletionLog;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const isFullBooking = log.deletion_type === "booking";
-  const userColor = USER_TYPE_COLORS[log.deleted_by_user_type || ""] || {
-    bg: "#F3F4F6",
-    text: "#4B5563",
-  };
-
+function MetaCell({ label, value }: { label: string; value: string }) {
   return (
-    <TouchableOpacity
-      activeOpacity={0.8}
-      onPress={onToggle}
-      className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-3 overflow-hidden"
-    >
-      {/* Top row: what was deleted + when */}
-      <View className="flex-row items-center px-4 pt-4">
-        <View
-          className="w-9 h-9 rounded-xl items-center justify-center mr-3"
-          style={{ backgroundColor: isFullBooking ? "#FEF2F2" : "#FFF7ED" }}
-        >
-          <Trash2 size={16} color={isFullBooking ? "#DC2626" : "#EA580C"} />
-        </View>
-        <View className="flex-1">
-          <View className="flex-row items-center">
-            <Text className="text-gray-900 font-bold text-base">
-              Booking #{log.booking_id}
-            </Text>
-            <View
-              className="ml-2 px-2 py-0.5 rounded-md"
-              style={{ backgroundColor: isFullBooking ? "#FEE2E2" : "#FFEDD5" }}
-            >
-              <Text
-                className="text-[10px] font-bold uppercase"
-                style={{ color: isFullBooking ? "#B91C1C" : "#C2410C" }}
-              >
-                {isFullBooking ? "Full booking" : "1 number"}
-              </Text>
-            </View>
-          </View>
-          <View className="flex-row items-center mt-1">
-            <Clock size={11} color="#9CA3AF" />
-            <Text className="text-gray-400 text-xs ml-1">
-              {fmtDateTime(log.deleted_at)}
-            </Text>
-          </View>
-        </View>
-        {expanded ? (
-          <ChevronUp size={18} color="#9CA3AF" />
-        ) : (
-          <ChevronDown size={18} color="#9CA3AF" />
-        )}
-      </View>
-
-      {/* Who deleted it */}
-      <View className="px-4 mt-3">
-        <View
-          className="flex-row items-center rounded-xl px-3 py-2.5"
-          style={{ backgroundColor: userColor.bg }}
-        >
-          <User size={14} color={userColor.text} />
-          <Text
-            className="ml-2 font-bold text-sm flex-1"
-            numberOfLines={1}
-            style={{ color: userColor.text }}
-          >
-            {log.deleted_by_name || log.deleted_by_username || "Unknown user"}
-          </Text>
-          {log.deleted_by_user_type ? (
-            <Text
-              className="text-[10px] font-bold uppercase"
-              style={{ color: userColor.text }}
-            >
-              {log.deleted_by_user_type}
-            </Text>
-          ) : null}
-        </View>
-      </View>
-
-      {/* Context row */}
-      <View className="flex-row flex-wrap px-4 mt-3">
-        <View className="w-1/2 mb-2 pr-2">
-          <Text className="text-[10px] font-semibold uppercase text-gray-400">
-            Booked by
-          </Text>
-          <Text className="text-gray-800 text-sm font-medium" numberOfLines={1}>
-            {log.booked_by_display || "—"}
-          </Text>
-        </View>
-        <View className="w-1/2 mb-2 pl-2">
-          <Text className="text-[10px] font-semibold uppercase text-gray-400">
-            Draw
-          </Text>
-          <Text className="text-gray-800 text-sm font-medium" numberOfLines={1}>
-            {log.draw_name || "—"}
-          </Text>
-        </View>
-        <View className="w-1/2 mb-2 pr-2">
-          <Text className="text-[10px] font-semibold uppercase text-gray-400">
-            Session date
-          </Text>
-          <Text className="text-gray-800 text-sm font-medium">
-            {fmtDate(log.session_date)}
-          </Text>
-        </View>
-        <View className="w-1/2 mb-2 pl-2">
-          <Text className="text-[10px] font-semibold uppercase text-gray-400">
-            Customer
-          </Text>
-          <Text className="text-gray-800 text-sm font-medium" numberOfLines={1}>
-            {log.customer_name || "—"}
-          </Text>
-        </View>
-      </View>
-
-      {/* Footer: what it was worth */}
-      <View className="flex-row items-center justify-between px-4 py-3 mt-1 border-t border-gray-100 bg-gray-50">
-        <View className="flex-row items-center">
-          <Ticket size={13} color="#6B7280" />
-          <Text className="text-gray-600 text-xs ml-1.5 font-semibold">
-            {log.total_count} tickets
-          </Text>
-        </View>
-        <Text className="text-gray-900 text-sm font-bold">
-          ₹{amountHandler(log.total_amount || 0)}
-        </Text>
-        {log.is_after_cutoff ? (
-          <View className="flex-row items-center bg-amber-100 px-2 py-1 rounded-md">
-            <AlertTriangle size={11} color="#B45309" />
-            <Text className="text-amber-700 text-[10px] font-bold ml-1">
-              AFTER CUT-OFF
-            </Text>
-          </View>
-        ) : null}
-      </View>
-
-      {/* Expanded: the numbers that were removed */}
-      {expanded ? (
-        <View className="px-4 py-3 border-t border-gray-100">
-          <Text className="text-[10px] font-semibold uppercase text-gray-400 mb-2">
-            Deleted numbers ({log.numbers?.length || 0})
-          </Text>
-          {log.numbers?.length ? (
-            <View className="flex-row flex-wrap">
-              {log.numbers.map((row, index) => (
-                <View
-                  key={`${log.id}-${row.number}-${index}`}
-                  className="bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1.5 mr-2 mb-2"
-                >
-                  <Text className="text-indigo-800 text-xs font-bold">
-                    {numberLabel(row)}
-                  </Text>
-                  <Text className="text-indigo-400 text-[10px]">
-                    ₹{row.amount} each
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <Text className="text-gray-400 text-xs">No number snapshot</Text>
-          )}
-          <Text className="text-gray-400 text-xs mt-1">
-            Booked at {fmtDateTime(log.booked_at) || "—"}
-          </Text>
-        </View>
-      ) : null}
-    </TouchableOpacity>
+    <View className="w-1/2 mb-2 pr-2">
+      <Text className="text-[9px] font-semibold uppercase text-gray-400">
+        {label}
+      </Text>
+      <Text className="text-gray-700 text-xs font-medium" numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
   );
 }
+
+/** The numbers that were removed, laid out like the booking-details table. */
+function DeletedNumbers({ log }: { log: DeletionLog }) {
+  const numbers = log.numbers ?? [];
+  return (
+    <View className="bg-indigo-50/40 border-b border-gray-200 px-3 py-3">
+      <View className="flex-row flex-wrap">
+        <MetaCell label="Draw" value={log.draw_name || "—"} />
+        <MetaCell label="Session date" value={fmtDate(log.session_date)} />
+        <MetaCell label="Booked by" value={log.booked_by_display || "—"} />
+        <MetaCell label="Customer" value={log.customer_name || "—"} />
+        <MetaCell label="Booked at" value={fmtDateTime(log.booked_at) || "—"} />
+      </View>
+
+      <Text className="text-[10px] font-semibold uppercase text-gray-400 mb-1 mt-1">
+        Deleted numbers ({numbers.length})
+      </Text>
+
+      {numbers.length ? (
+        <View className="rounded-xl bg-white border border-gray-200 overflow-hidden">
+          <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-3 py-2">
+            <Text className="flex-1 text-[10px] font-semibold text-center text-gray-500 uppercase">
+              Number
+            </Text>
+            <Text className="flex-1 text-[10px] font-semibold text-center text-gray-500 uppercase">
+              Type
+            </Text>
+            <Text className="flex-[0.6] text-[10px] font-semibold text-center text-gray-500 uppercase">
+              Cnt
+            </Text>
+            <Text className="flex-1 text-[10px] font-semibold text-right text-gray-500 uppercase">
+              Amt
+            </Text>
+          </View>
+          {numbers.map((row, index) => (
+            <View
+              key={`${log.id}-${row.number}-${index}`}
+              className={`flex-row items-center px-3 py-2 border-b border-gray-100 ${
+                index % 2 === 0 ? "bg-white" : "bg-gray-50"
+              }`}
+            >
+              <Text className="flex-1 text-sm text-center text-emerald-700 font-bold tracking-wider">
+                {row.number}
+              </Text>
+              <View className="flex-1 items-center">
+                <Text className="text-[11px] text-violet-700 font-semibold">
+                  {row.sub_type || "—"}
+                </Text>
+                {row.type ? (
+                  <Text className="text-[9px] text-gray-500">
+                    {row.type.replace(/_/g, " ")}
+                  </Text>
+                ) : null}
+              </View>
+              <Text className="flex-[0.6] text-xs text-center text-gray-700">
+                {row.count}
+              </Text>
+              <Text className="flex-1 text-xs text-right text-violet-700 font-bold">
+                ₹{amountHandler(Number(row.amount || 0))}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text className="text-gray-400 text-xs">No number snapshot</Text>
+      )}
+    </View>
+  );
+}
+
+const DeletionRow = React.memo(
+  ({
+    log,
+    index,
+    expanded,
+    onToggle,
+  }: {
+    log: DeletionLog;
+    index: number;
+    expanded: boolean;
+    onToggle: (id: number) => void;
+  }) => {
+    const isFullBooking = log.deletion_type === "booking";
+    const deletedAt = new Date(log.deleted_at);
+
+    return (
+      <View className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+        <TouchableOpacity activeOpacity={0.7} onPress={() => onToggle(log.id)}>
+          <View className="flex-row px-3 py-3 items-center border-b border-gray-100">
+            <View className="flex-[1.1] justify-center">
+              <Text className="text-[10px] text-gray-800 font-medium">
+                {formatShortDate(deletedAt)}
+              </Text>
+              <Text className="text-[9px] text-gray-500 mt-0.5">
+                {formatTime(deletedAt)}
+              </Text>
+            </View>
+
+            <View className="flex-[1.3] px-1">
+              <Text
+                className="text-xs text-center text-gray-800 font-semibold"
+                numberOfLines={1}
+              >
+                {log.deleted_by_name ||
+                  log.deleted_by_username ||
+                  "Unknown user"}
+              </Text>
+              {log.deleted_by_user_type ? (
+                <Text
+                  className="text-[10px] text-center text-violet-700"
+                  numberOfLines={1}
+                >
+                  {log.deleted_by_user_type}
+                </Text>
+              ) : null}
+              {log.booked_by_display ? (
+                <Text
+                  className="text-[10px] text-center text-emerald-700"
+                  numberOfLines={1}
+                >
+                  {log.booked_by_display}
+                </Text>
+              ) : null}
+            </View>
+
+            <View className="flex-1 items-center">
+              <Text className="text-xs text-gray-700">#{log.booking_id}</Text>
+              <Text
+                className={`text-[9px] font-bold uppercase ${
+                  isFullBooking ? "text-red-500" : "text-orange-500"
+                }`}
+              >
+                {isFullBooking ? "Full" : "1 no."}
+              </Text>
+              {log.is_after_cutoff ? (
+                <Text className="text-[9px] font-bold text-amber-600">
+                  LATE
+                </Text>
+              ) : null}
+            </View>
+
+            <Text className="flex-[0.6] text-xs text-center text-gray-700">
+              {log.total_count}
+            </Text>
+            <Text className="flex-1 text-xs text-right text-emerald-700 font-semibold">
+              ₹{amountHandler(log.total_amount || 0)}
+            </Text>
+
+            <View className="w-5 items-end">
+              {expanded ? (
+                <ChevronUp size={14} color="#9CA3AF" />
+              ) : (
+                <ChevronDown size={14} color="#9CA3AF" />
+              )}
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {expanded ? <DeletedNumbers log={log} /> : null}
+      </View>
+    );
+  }
+);
+DeletionRow.displayName = "DeletionRow";
 
 export default function BookingDeletionsScreen() {
   const { user } = useAuthStore();
@@ -363,6 +363,7 @@ export default function BookingDeletionsScreen() {
   const [toDate, setToDate] = useState<Date>(new Date());
   const [showFrom, setShowFrom] = useState(false);
   const [showTo, setShowTo] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   // Debounce the search box so typing doesn't fire a request per keystroke.
@@ -428,8 +429,10 @@ export default function BookingDeletionsScreen() {
     () => data?.pages.flatMap((p) => p.results ?? []) ?? [],
     [data]
   );
+  const totalCount = data?.pages?.[0]?.count ?? 0;
   const summary = data?.pages?.[0]?.summary;
   const selectedDraw = draws.find((d: any) => d.id === drawId);
+  const shouldShowTotalFooter = !isLoading && !isError && logs.length > 0;
 
   const activeFilterCount =
     (search ? 1 : 0) +
@@ -444,6 +447,46 @@ export default function BookingDeletionsScreen() {
     setTypeFilter("");
     setRange("all");
   };
+
+  const handleToggle = useCallback((id: number) => {
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: DeletionLog; index: number }) => (
+      <DeletionRow
+        log={item}
+        index={index}
+        expanded={!!expanded[item.id]}
+        onToggle={handleToggle}
+      />
+    ),
+    [expanded, handleToggle]
+  );
+
+  const listHeader = useMemo(
+    () => (
+      <View className="flex-row bg-gray-100/80 border-b border-gray-200 px-3 py-3">
+        <Text className="flex-[1.1] text-[10px] font-semibold text-gray-600 uppercase">
+          Deleted
+        </Text>
+        <Text className="flex-[1.3] text-[10px] font-semibold text-center text-gray-600 uppercase">
+          Deleted by
+        </Text>
+        <Text className="flex-1 text-[10px] font-semibold text-center text-gray-600 uppercase">
+          Booking
+        </Text>
+        <Text className="flex-[0.6] text-[10px] font-semibold text-center text-gray-600 uppercase">
+          Cnt
+        </Text>
+        <Text className="flex-1 text-[10px] font-semibold text-right text-gray-600 uppercase">
+          Amt
+        </Text>
+        <View className="w-5" />
+      </View>
+    ),
+    []
+  );
 
   // Admin-only screen; the API returns 403 for dealers/agents anyway.
   if (!isAdmin) {
@@ -482,129 +525,154 @@ export default function BookingDeletionsScreen() {
 
       {/* Filters */}
       <View className="px-4 mt-3">
-        <View className="flex-row items-center bg-white border border-gray-200 rounded-xl px-3 mb-2">
-          <Search size={16} color="#9CA3AF" />
-          <TextInput
-            value={searchInput}
-            onChangeText={setSearchInput}
-            placeholder="Search user, dealer, agent, draw…"
-            placeholderTextColor="#9CA3AF"
-            className="flex-1 text-gray-800 text-sm py-2.5 px-2"
-          />
-          {searchInput ? (
-            <TouchableOpacity onPress={() => setSearchInput("")} hitSlop={10}>
-              <X size={16} color="#9CA3AF" />
-            </TouchableOpacity>
-          ) : null}
-        </View>
-
         <TouchableOpacity
-          onPress={() => setDrawPickerOpen(true)}
-          className="flex-row items-center justify-between border border-gray-200 bg-white rounded-xl px-3 py-3 mb-2"
+          onPress={() => setFiltersOpen((prev) => !prev)}
+          className="flex-row items-center justify-between py-3 px-3 mb-2 bg-gray-100 rounded-lg"
           activeOpacity={0.7}
         >
-          <View className="flex-row items-center flex-1">
-            <Ticket size={16} color="#6366F1" />
-            <View className="ml-2 flex-1">
-              <Text className="text-[10px] text-gray-400 font-semibold uppercase">
-                Draw
-              </Text>
-              <Text
-                className="text-gray-800 font-semibold text-sm mt-0.5"
-                numberOfLines={1}
-              >
-                {selectedDraw ? selectedDraw.name : "All Draws"}
-              </Text>
-            </View>
+          <Text className="text-sm font-semibold text-gray-700">Filters</Text>
+          <View
+            className="w-8 h-8 rounded-full bg-white items-center justify-center shadow-sm"
+            pointerEvents="none"
+          >
+            {filtersOpen ? (
+              <ChevronUp size={18} color="#4F46E5" />
+            ) : (
+              <ChevronDown size={18} color="#4F46E5" />
+            )}
           </View>
-          <ChevronDown size={16} color="#6366F1" />
         </TouchableOpacity>
 
-        {/* Type tabs */}
-        <View className="flex-row bg-gray-100 rounded-xl p-1 mb-2">
-          {TYPE_TABS.map((tab) => {
-            const active = typeFilter === tab.key;
-            return (
-              <TouchableOpacity
-                key={tab.key || "all"}
-                onPress={() => setTypeFilter(tab.key)}
-                className={`flex-1 py-2 rounded-lg items-center ${
-                  active ? "bg-white shadow-sm" : ""
-                }`}
-                activeOpacity={0.7}
-              >
-                <Text
-                  className={`text-xs font-semibold ${
-                    active ? "text-indigo-700" : "text-gray-500"
-                  }`}
-                >
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Date range chips */}
-        <View className="flex-row items-center">
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {RANGES.map((r) => {
-              const active = range === r.key;
-              return (
+        {filtersOpen ? (
+          <View>
+            <View className="flex-row items-center bg-white border border-gray-200 rounded-xl px-3 mb-2">
+              <Search size={16} color="#9CA3AF" />
+              <TextInput
+                value={searchInput}
+                onChangeText={setSearchInput}
+                placeholder="Search user, dealer, agent, draw…"
+                placeholderTextColor="#9CA3AF"
+                className="flex-1 text-gray-800 text-sm py-2.5 px-2"
+              />
+              {searchInput ? (
                 <TouchableOpacity
-                  key={r.key}
-                  onPress={() => setRange(r.key)}
-                  className={`px-3 py-1.5 rounded-full mr-2 border ${
-                    active
-                      ? "bg-indigo-600 border-indigo-600"
-                      : "bg-white border-gray-200"
-                  }`}
-                  activeOpacity={0.7}
+                  onPress={() => setSearchInput("")}
+                  hitSlop={10}
                 >
+                  <X size={16} color="#9CA3AF" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            <TouchableOpacity
+              onPress={() => setDrawPickerOpen(true)}
+              className="flex-row items-center justify-between border border-gray-200 bg-white rounded-xl px-3 py-3 mb-2"
+              activeOpacity={0.7}
+            >
+              <View className="flex-row items-center flex-1">
+                <Ticket size={16} color="#6366F1" />
+                <View className="ml-2 flex-1">
+                  <Text className="text-[10px] text-gray-400 font-semibold uppercase">
+                    Draw
+                  </Text>
                   <Text
-                    className={`text-xs font-semibold ${
-                      active ? "text-white" : "text-gray-600"
-                    }`}
+                    className="text-gray-800 font-semibold text-sm mt-0.5"
+                    numberOfLines={1}
                   >
-                    {r.label}
+                    {selectedDraw ? selectedDraw.name : "All Draws"}
+                  </Text>
+                </View>
+              </View>
+              <ChevronDown size={16} color="#6366F1" />
+            </TouchableOpacity>
+
+            {/* Type tabs */}
+            <View className="flex-row bg-gray-100 rounded-xl p-1 mb-2">
+              {TYPE_TABS.map((tab) => {
+                const active = typeFilter === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.key || "all"}
+                    onPress={() => setTypeFilter(tab.key)}
+                    className={`flex-1 py-2 rounded-lg items-center ${
+                      active ? "bg-white shadow-sm" : ""
+                    }`}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      className={`text-xs font-semibold ${
+                        active ? "text-indigo-700" : "text-gray-500"
+                      }`}
+                    >
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Date range chips */}
+            <View className="flex-row items-center">
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {RANGES.map((r) => {
+                  const active = range === r.key;
+                  return (
+                    <TouchableOpacity
+                      key={r.key}
+                      onPress={() => setRange(r.key)}
+                      className={`px-3 py-1.5 rounded-full mr-2 border ${
+                        active
+                          ? "bg-indigo-600 border-indigo-600"
+                          : "bg-white border-gray-200"
+                      }`}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        className={`text-xs font-semibold ${
+                          active ? "text-white" : "text-gray-600"
+                        }`}
+                      >
+                        {r.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              {activeFilterCount > 0 ? (
+                <TouchableOpacity
+                  onPress={clearFilters}
+                  className="flex-row items-center bg-gray-200 px-3 py-1.5 rounded-full ml-1"
+                >
+                  <X size={12} color="#4B5563" />
+                  <Text className="text-gray-600 text-xs font-semibold ml-1">
+                    Clear
                   </Text>
                 </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-          {activeFilterCount > 0 ? (
-            <TouchableOpacity
-              onPress={clearFilters}
-              className="flex-row items-center bg-gray-200 px-3 py-1.5 rounded-full ml-1"
-            >
-              <X size={12} color="#4B5563" />
-              <Text className="text-gray-600 text-xs font-semibold ml-1">
-                Clear
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
+              ) : null}
+            </View>
 
-        {range === "custom" ? (
-          <View className="flex-row mt-2">
-            <TouchableOpacity
-              onPress={() => setShowFrom(true)}
-              className="flex-1 flex-row items-center border border-gray-200 bg-white rounded-xl px-3 py-2.5 mr-2"
-            >
-              <Calendar size={14} color="#6366F1" />
-              <Text className="text-gray-700 text-xs font-semibold ml-2">
-                From {toApiDate(fromDate)}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setShowTo(true)}
-              className="flex-1 flex-row items-center border border-gray-200 bg-white rounded-xl px-3 py-2.5"
-            >
-              <Calendar size={14} color="#6366F1" />
-              <Text className="text-gray-700 text-xs font-semibold ml-2">
-                To {toApiDate(toDate)}
-              </Text>
-            </TouchableOpacity>
+            {range === "custom" ? (
+              <View className="flex-row mt-2">
+                <TouchableOpacity
+                  onPress={() => setShowFrom(true)}
+                  className="flex-1 flex-row items-center border border-gray-200 bg-white rounded-xl px-3 py-2.5 mr-2"
+                >
+                  <Calendar size={14} color="#6366F1" />
+                  <Text className="text-gray-700 text-xs font-semibold ml-2">
+                    From {toApiDate(fromDate)}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setShowTo(true)}
+                  className="flex-1 flex-row items-center border border-gray-200 bg-white rounded-xl px-3 py-2.5"
+                >
+                  <Calendar size={14} color="#6366F1" />
+                  <Text className="text-gray-700 text-xs font-semibold ml-2">
+                    To {toApiDate(toDate)}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -628,53 +696,82 @@ export default function BookingDeletionsScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <FlatList
-          data={logs}
-          keyExtractor={(item) => String(item.id)}
-          className="px-4 mt-3"
-          contentContainerStyle={{ paddingBottom: 40 }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={isFetching && !isFetchingNextPage}
-              onRefresh={refetch}
-              colors={["#4F46E5"]}
-              tintColor="#4F46E5"
-            />
-          }
-          onEndReachedThreshold={0.4}
-          onEndReached={() => {
-            if (hasNextPage && !isFetchingNextPage) fetchNextPage();
-          }}
-          renderItem={({ item }) => (
-            <LogCard
-              log={item}
-              expanded={!!expanded[item.id]}
-              onToggle={() =>
-                setExpanded((prev) => ({ ...prev, [item.id]: !prev[item.id] }))
-              }
-            />
-          )}
-          ListEmptyComponent={
-            <View className="items-center justify-center py-20">
-              <Trash2 size={32} color="#D1D5DB" />
-              <Text className="text-gray-400 text-sm mt-3">
-                No deletions recorded
-              </Text>
-              <Text className="text-gray-300 text-xs mt-1 text-center px-10">
-                Deleted bookings will appear here with who removed them.
-              </Text>
-            </View>
-          }
-          ListFooterComponent={
-            isFetchingNextPage ? (
-              <View className="py-4 items-center">
-                <ActivityIndicator size="small" color="#4F46E5" />
+        <View className="flex-1 mx-4 mt-3 rounded-2xl bg-white shadow-sm border border-gray-200 overflow-hidden">
+          <FlatList
+            data={logs}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderItem}
+            ListHeaderComponent={listHeader}
+            stickyHeaderIndices={[0]}
+            showsVerticalScrollIndicator={false}
+            initialNumToRender={20}
+            maxToRenderPerBatch={20}
+            windowSize={11}
+            refreshControl={
+              <RefreshControl
+                refreshing={isFetching && !isFetchingNextPage}
+                onRefresh={refetch}
+                colors={["#4F46E5"]}
+                tintColor="#4F46E5"
+              />
+            }
+            onEndReachedThreshold={0.4}
+            onEndReached={() => {
+              if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+            }}
+            ListEmptyComponent={
+              <View className="items-center justify-center py-20">
+                <Trash2 size={32} color="#D1D5DB" />
+                <Text className="text-gray-400 text-sm mt-3">
+                  No deletions recorded
+                </Text>
+                <Text className="text-gray-300 text-xs mt-1 text-center px-10">
+                  Deleted bookings will appear here with who removed them.
+                </Text>
               </View>
-            ) : null
-          }
-        />
+            }
+            ListFooterComponent={
+              isFetchingNextPage ? (
+                <View className="py-4 items-center">
+                  <ActivityIndicator size="small" color="#4F46E5" />
+                  <Text className="text-xs text-gray-500 mt-1">
+                    Loading more…
+                  </Text>
+                </View>
+              ) : logs.length > 0 ? (
+                <View className="py-3 items-center">
+                  <Text className="text-xs text-gray-400">
+                    {hasNextPage
+                      ? `${logs.length} of ${totalCount} deletions loaded`
+                      : `All ${totalCount || logs.length} deletions loaded`}
+                  </Text>
+                </View>
+              ) : null
+            }
+          />
+        </View>
       )}
+
+      {shouldShowTotalFooter ? (
+        <View className="border-t border-gray-200 py-3 bg-gray-100 px-3 mx-4 mt-3 mb-3 rounded-lg">
+          <View className="flex-row">
+            <Text className="flex-[1.1] font-bold text-xs text-gray-800">
+              TOTAL
+            </Text>
+            <Text className="flex-[1.3] text-xs text-center font-semibold text-gray-700">
+              {summary?.total_deletions ?? 0} del.
+            </Text>
+            <Text className="flex-1 text-xs"> </Text>
+            <Text className="flex-[0.6] text-xs text-center font-semibold text-gray-700">
+              {summary?.total_count ?? 0}
+            </Text>
+            <Text className="flex-1 text-xs text-right font-semibold text-emerald-700">
+              ₹{amountHandler(summary?.total_amount ?? 0)}
+            </Text>
+            <View className="w-5" />
+          </View>
+        </View>
+      ) : null}
 
       {/* Draw picker */}
       <Modal
