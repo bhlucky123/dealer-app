@@ -104,15 +104,25 @@ api.interceptors.response.use(
       });
     }
 
-    // Retry transient transport failures (no HTTP response received). okhttp —
-    // React Native's HTTP client — transparently retries idempotent GETs on a
-    // stale/dropped keep-alive connection but NOT POST/PUT/PATCH, so those fail
-    // outright on a dead reused connection (Railway's new edge drops idle
-    // HTTP/2 connections). A fresh attempt opens a new connection and almost
-    // always succeeds. Only retries pure transport errors; any real HTTP
-    // response (handled below) is never retried.
+    // Retry transient transport failures (no HTTP response received) — but only
+    // for safe/idempotent methods (GET/HEAD/OPTIONS). This used to also retry
+    // POST/PUT/PATCH, added for okhttp silently dropping stale keep-alive
+    // HTTP/2 connections on Railway's old edge proxy. Now that the backend is
+    // on DigitalOcean (no such edge), that no longer applies — and retrying a
+    // non-idempotent request is actively dangerous: if the original request
+    // was just slow (e.g. DB contention) rather than actually dropped, the
+    // first attempt can still complete server-side while the client times out
+    // and resends, creating a duplicate (this is exactly how a single slow
+    // booking submit turned into several booked rows). A client-side timeout
+    // (error.code === "ECONNABORTED") is never a dropped connection — it's a
+    // slow server — so it's excluded here too even for safe methods, since
+    // retrying immediately only adds more load onto an already-struggling
+    // server.
     const retryCfg: any = error.config || {};
-    if (!error.response && (retryCfg.__retryCount || 0) < 2) {
+    const retryMethod = (retryCfg.method || "get").toLowerCase();
+    const isRetryableMethod = ["get", "head", "options"].includes(retryMethod);
+    const isTimeout = error.code === "ECONNABORTED";
+    if (!error.response && !isTimeout && isRetryableMethod && (retryCfg.__retryCount || 0) < 2) {
       retryCfg.__retryCount = (retryCfg.__retryCount || 0) + 1;
       const backoff = 300 * retryCfg.__retryCount;
       console.log(

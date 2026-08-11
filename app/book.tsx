@@ -112,6 +112,11 @@ const BookingScreen: React.FC = () => {
   const numInputRef = useRef<TextInput>(null);
   const endNumInputRef = useRef<TextInput>(null);
   const differenceInputRef = useRef<TextInput>(null);
+  // Stable per-logical-submission key: kept across a client-side timeout +
+  // manual resubmit of the same booking (so the backend can recognize it as
+  // the same attempt), cleared once the submission actually succeeds so the
+  // next, different booking gets a fresh key.
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   const buttonsMap: Record<string, string[]> = {
     "1": ["A", "B", "C", "ALL"],
@@ -249,6 +254,7 @@ const BookingScreen: React.FC = () => {
       return response.data;
     },
     onSuccess: (data) => {
+      idempotencyKeyRef.current = null;
       const submitted = [...bookingDetails];
       setBookingDetails([]);
       clearInputs();
@@ -1143,6 +1149,9 @@ const BookingScreen: React.FC = () => {
         bookedAgent = Number(selectedAgent);
         booked_dealer = null;
       }
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      }
       const data = {
         customer_name: customerName,
         draw_session: DrawSessionDetails?.session?.active_session_id,
@@ -1154,6 +1163,7 @@ const BookingScreen: React.FC = () => {
             ? { number, count, type, sub_type }
             : { number, count, type }
         ),
+        idempotency_key: idempotencyKeyRef.current,
       };
       mutate(data);
     }
