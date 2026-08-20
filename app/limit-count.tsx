@@ -1,6 +1,7 @@
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { memo, useCallback, useState } from "react";
 import {
@@ -35,6 +36,30 @@ type LimitCount = {
     range_end: string | null;
     number_type?: NumberType;
     dealer_details?: { id: number; username: string; user_type?: string } | null;
+    window_start_time?: string | null;
+    window_end_time?: string | null;
+    is_active_now?: boolean;
+};
+
+const formatTime = (date: Date) => {
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+};
+
+const formatWindowTime = (time: string) => {
+    const [h, m] = time.split(":").map(Number);
+    return new Date(1970, 0, 1, h, m).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+    });
+};
+
+const windowLabel = (item: { window_start_time?: string | null; window_end_time?: string | null }) => {
+    if (!item.window_start_time && !item.window_end_time) return "All day";
+    const start = item.window_start_time ? formatWindowTime(item.window_start_time) : "00:00";
+    const end = item.window_end_time ? formatWindowTime(item.window_end_time) : "end of day";
+    return `${start} – ${end}`;
 };
 
 const DRAW_TYPE_NUMBER_TYPES: Record<DrawType, { value: NumberType; label: string }[]> = {
@@ -113,9 +138,10 @@ const LimitCountRow = memo(
             : { number: "30%", type: "15%", count: "20%", actions: "30%" };
 
         return (
-            <View className="flex-row items-center border-b border-gray-100 bg-white px-3 py-3"
+            <View className="border-b border-gray-100 bg-white px-3 py-3"
                 style={{ minHeight: 52 }}
             >
+            <View className="flex-row items-center">
                 {/* Number */}
                 <View style={{ width: colWidths.number }}>
                     <Text className="text-base font-bold text-gray-900">{displayNumber}</Text>
@@ -213,6 +239,15 @@ const LimitCountRow = memo(
                     )}
                 </View>
             </View>
+            <View className="flex-row items-center mt-1">
+                <View
+                    className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                        item.is_active_now ? "bg-green-500" : "bg-gray-300"
+                    }`}
+                />
+                <Text className="text-xs text-gray-500">{windowLabel(item)}</Text>
+            </View>
+            </View>
         );
     }
 );
@@ -249,9 +284,12 @@ const LimitCountScreen = () => {
     const [newRangeStart, setNewRangeStart] = useState("");
     const [newRangeEnd, setNewRangeEnd] = useState("");
     const [newCount, setNewCount] = useState("");
+    const [windowStart, setWindowStart] = useState<Date | null>(null);
+    const [windowEnd, setWindowEnd] = useState<Date | null>(null);
+    const [showTimePicker, setShowTimePicker] = useState<null | "start" | "end">(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [validationError, setValidationError] = useState<string | null>(null);
-    const [errorFields, setErrorFields] = useState<("number" | "rangeStart" | "rangeEnd" | "count" | "dealer")[]>([]);
+    const [errorFields, setErrorFields] = useState<("number" | "rangeStart" | "rangeEnd" | "count" | "dealer" | "window")[]>([]);
 
     const clearValidation = () => {
         setValidationError(null);
@@ -286,6 +324,8 @@ const LimitCountScreen = () => {
             draw: number;
             number_type: NumberType;
             dealer?: number | null;
+            window_start_time: string | null;
+            window_end_time: string | null;
         }) => {
             const body = { ...payload };
             if (user?.user_type === "ADMIN") {
@@ -301,6 +341,8 @@ const LimitCountScreen = () => {
             setNewRangeStart("");
             setNewRangeEnd("");
             setNewCount("");
+            setWindowStart(null);
+            setWindowEnd(null);
             setIsSubmitting(false);
             clearValidation();
             ToastAndroid.show("Limit added.", ToastAndroid.SHORT);
@@ -316,6 +358,17 @@ const LimitCountScreen = () => {
                 setSelectedDealerForCreate(null);
                 setValidationError(dealerError);
                 setErrorFields(["dealer"]);
+                return;
+            }
+
+            const windowError =
+                err?.message?.window_end_time?.[0] ||
+                err?.response?.data?.window_end_time?.[0] ||
+                err?.message?.window_start_time?.[0] ||
+                err?.response?.data?.window_start_time?.[0];
+            if (windowError) {
+                setValidationError(windowError);
+                setErrorFields(["window"]);
                 return;
             }
 
@@ -348,13 +401,13 @@ const LimitCountScreen = () => {
             number: string;
             number_type: NumberType;
         }) => {
-            return api.patch(`/draw/limit-number-count/${payload.id}/`, {
+            return api.patch(`${apiBase}/${payload.id}/`, {
                 count: payload.count,
             });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({
-                queryKey: ["/draw/limit-number-count/", selectedDraw?.id],
+                queryKey: [apiBase, selectedDraw?.id],
             });
             ToastAndroid.show("Limit updated.", ToastAndroid.SHORT);
         },
@@ -474,6 +527,17 @@ const LimitCountScreen = () => {
             return;
         }
 
+        if (windowStart && windowEnd && formatTime(windowEnd) <= formatTime(windowStart)) {
+            setValidationError("Window end time must be after window start time.");
+            setErrorFields(["window"]);
+            return;
+        }
+
+        const windowFields = {
+            window_start_time: windowStart ? formatTime(windowStart) : null,
+            window_end_time: windowEnd ? formatTime(windowEnd) : null,
+        };
+
         if (limitType === "single_number") {
             const trimmedNumber = newNumber.trim();
             const requiredDigits = getDigitsForType(numberType);
@@ -494,6 +558,7 @@ const LimitCountScreen = () => {
                 draw: selectedDraw.id,
                 number_type: numberType,
                 dealer: user?.user_type === "ADMIN" ? selectedDealerForCreate : undefined,
+                ...windowFields,
             });
         } else {
             const trimmedStart = newRangeStart.trim();
@@ -525,6 +590,7 @@ const LimitCountScreen = () => {
                 draw: selectedDraw.id,
                 number_type: numberType,
                 dealer: user?.user_type === "ADMIN" ? selectedDealerForCreate : undefined,
+                ...windowFields,
             });
         }
     };
@@ -651,6 +717,58 @@ const LimitCountScreen = () => {
                 />
             </View>
 
+            {/* Time window (optional) */}
+            <View className="mb-3">
+                <Text className="text-xs font-bold text-gray-500 uppercase mb-2">
+                    Time Window (optional)
+                </Text>
+                <View className="flex-row items-center gap-2">
+                    <TouchableOpacity
+                        className="flex-1 flex-row items-center justify-center bg-white rounded-lg px-3 py-3"
+                        style={{ borderWidth: 1, borderColor: borderColor(errorFields.includes("window")) }}
+                        onPress={() => setShowTimePicker("start")}
+                        disabled={isSubmitting}
+                        activeOpacity={0.7}
+                    >
+                        <Text className="text-sm text-gray-700">
+                            {windowStart
+                                ? windowStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })
+                                : "Start"}
+                        </Text>
+                    </TouchableOpacity>
+                    <Text className="text-gray-400 text-xs">to</Text>
+                    <TouchableOpacity
+                        className="flex-1 flex-row items-center justify-center bg-white rounded-lg px-3 py-3"
+                        style={{ borderWidth: 1, borderColor: borderColor(errorFields.includes("window")) }}
+                        onPress={() => setShowTimePicker("end")}
+                        disabled={isSubmitting}
+                        activeOpacity={0.7}
+                    >
+                        <Text className="text-sm text-gray-700">
+                            {windowEnd
+                                ? windowEnd.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })
+                                : "End"}
+                        </Text>
+                    </TouchableOpacity>
+                    {(windowStart || windowEnd) && (
+                        <TouchableOpacity
+                            onPress={() => {
+                                setWindowStart(null);
+                                setWindowEnd(null);
+                                clearValidation();
+                            }}
+                            disabled={isSubmitting}
+                            activeOpacity={0.7}
+                        >
+                            <Text className="text-red-500 text-xs font-bold">Clear</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+                <Text className="text-xs text-gray-400 mt-1">
+                    Leave blank for a limit that applies all day.
+                </Text>
+            </View>
+
             {/* Validation error */}
             {validationError && (
                 <Text className="text-red-500 text-sm mb-2">{validationError}</Text>
@@ -669,6 +787,21 @@ const LimitCountScreen = () => {
                     <Text className="text-white font-bold text-base">Add Limit</Text>
                 )}
             </TouchableOpacity>
+
+            {showTimePicker && (
+                <DateTimePicker
+                    mode="time"
+                    value={(showTimePicker === "start" ? windowStart : windowEnd) || new Date()}
+                    display={Platform.OS === "android" ? "default" : "spinner"}
+                    onChange={(event, date) => {
+                        if (date) {
+                            if (showTimePicker === "start") setWindowStart(date);
+                            else setWindowEnd(date);
+                        }
+                        setShowTimePicker(null);
+                    }}
+                />
+            )}
         </View>
     );
 
