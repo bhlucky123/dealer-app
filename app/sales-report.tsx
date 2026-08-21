@@ -1,3 +1,4 @@
+import { isDeleteWindowExpired, useCanBypassDeleteWindow, useNow } from "@/hooks/use-delete-window";
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import { amountHandler } from "@/utils/amount";
@@ -489,6 +490,10 @@ const SalesReportScreen = () => {
     // After the cutoff the backend only allows the super admin / main vendor
     // admin (with delete permission) and rejects others with a message.
     const canDeleteBooking = true;
+    // ...but once the draw's deletion-time window has passed for a booking, the
+    // button goes away for everyone who can't bypass it (see use-delete-window).
+    const canBypassDeleteWindow = useCanBypassDeleteWindow();
+    const now = useNow();
 
     const handleRowPress = useCallback((item: any) => {
         router.push({ pathname: "/booking-details", params: { bill_number: String(item.bill_number), ...(debouncedSearch ? { search: debouncedSearch } : {}) } });
@@ -513,7 +518,11 @@ const SalesReportScreen = () => {
                             queryClient.invalidateQueries({ queryKey: ["/draw-booking/booking-report/"] });
                             refetch();
                         } catch (err: any) {
-                            const msg = err?.response?.data?.message || "Could not delete booking.";
+                            const msg =
+                                err?.message?.message ||
+                                err?.message?.detail ||
+                                err?.response?.data?.message ||
+                                "Could not delete booking.";
                             Alert.alert("Delete Failed", msg);
                         }
                     }
@@ -527,11 +536,14 @@ const SalesReportScreen = () => {
             item={item}
             index={index}
             userType={user?.user_type}
-            canDelete={canDeleteBooking}
+            canDelete={
+                canDeleteBooking &&
+                (canBypassDeleteWindow || !isDeleteWindowExpired(item.deletable_until, now))
+            }
             onPress={handleRowPress}
             onDelete={handleDeleteBooking}
         />
-    ), [user?.user_type, canDeleteBooking, handleRowPress, handleDeleteBooking]);
+    ), [user?.user_type, canDeleteBooking, canBypassDeleteWindow, now, handleRowPress, handleDeleteBooking]);
 
     const getItemLayout = useCallback((_data: any, index: number) => ({
         length: ROW_HEIGHT,

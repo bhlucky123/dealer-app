@@ -1,3 +1,4 @@
+import { isDeleteWindowExpired, useCanBypassDeleteWindow, useNow } from "@/hooks/use-delete-window";
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import { amountHandler } from "@/utils/amount";
@@ -37,6 +38,10 @@ const LastSaleReportScreen = () => {
     // After the cutoff the backend only allows the super admin / main vendor
     // admin (with delete permission) and rejects others with a message.
     const canDeleteBooking = true;
+    // ...but once the draw's deletion-time window has passed for a booking, the
+    // button goes away for everyone who can't bypass it (see use-delete-window).
+    const canBypassDeleteWindow = useCanBypassDeleteWindow();
+    const now = useNow();
 
     // Delete booking state
     const [deleteBookingLoading, setDeleteBookingLoading] = React.useState(false);
@@ -86,7 +91,11 @@ const LastSaleReportScreen = () => {
                             queryClient.invalidateQueries({ queryKey: ["booking-report-detail"] });
                             refetch();
                         } catch (err: any) {
-                            const msg = err?.response?.data?.message || "Could not delete booking.";
+                            const msg =
+                                err?.message?.message ||
+                                err?.message?.detail ||
+                                err?.response?.data?.message ||
+                                "Could not delete booking.";
                             Alert.alert("Delete Failed", msg);
                         } finally {
                             setDeleteBookingLoading(false);
@@ -145,7 +154,9 @@ const LastSaleReportScreen = () => {
                     <Text className="flex-1 text-sm text-right text-emerald-700 font-semibold">
                         ₹{amountHandler(Number(item.total_booking_amount))}
                     </Text>
-                    {canDeleteBooking && (
+                    {canDeleteBooking &&
+                        (canBypassDeleteWindow ||
+                            !isDeleteWindowExpired(item.deletable_until, now)) && (
                         <View className="w-4 items-end ml-1">
                             <Pressable
                                 onPress={(e) => {
@@ -161,7 +172,7 @@ const LastSaleReportScreen = () => {
                 </View>
             </TouchableOpacity>
         ),
-        [user, handleDeleteBooking, router]
+        [user, handleDeleteBooking, router, canBypassDeleteWindow, now]
     );
 
     const keyExtractor = useCallback(

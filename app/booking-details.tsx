@@ -1,3 +1,4 @@
+import { isDeleteWindowExpired, useCanBypassDeleteWindow, useNow } from "@/hooks/use-delete-window";
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import { amountHandler } from "@/utils/amount";
@@ -37,6 +38,8 @@ type BookingDetail = {
 type BookingRetrieveResponse = {
     bill_number: number;
     date_time: string;
+    /** When this booking leaves its draw's deletion-time window; null = no limit. */
+    deletable_until: string | null;
     customer_name: string | null;
     booked_by_name: string | null;
     booked_by_type: string | null;
@@ -171,14 +174,12 @@ const BookingDetailsScreen = () => {
     const billNumber = params.bill_number as string | undefined;
     const initialSearch = (params.search as string) || "";
     const canEditBooking = hasFeature("edit_booking");
-    // Everyone sees the delete option — before the cutoff anyone can delete.
-    // After the cutoff the backend only allows the super admin / main vendor
-    // admin (with delete permission) and rejects others with a message.
-    const canDeleteBooking = true;
     const isEditable = params.editable === "true" && (user?.user_type !== "ADMIN" || !!user?.superuser) && canEditBooking;
     const isSuperuser = !!user?.superuser;
-    const showDeleteOnly = canDeleteBooking && (isSuperuser || !isEditable);
-    const showActionsCol = isEditable || showDeleteOnly;
+    // Once the draw's deletion-time window has passed for this booking, the delete
+    // option goes away for everyone who can't bypass it (see use-delete-window).
+    const canBypassDeleteWindow = useCanBypassDeleteWindow();
+    const now = useNow();
 
     const [search, setSearch] = useState(initialSearch);
     const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
@@ -216,6 +217,15 @@ const BookingDetailsScreen = () => {
         enabled: !!billNumber,
     });
 
+    // Before the cutoff anyone can delete; after it the backend only allows the
+    // super admin / main vendor admin with delete permission. The deletion-time
+    // window is the one rule the UI reflects up front, because it expires while
+    // the screen is open.
+    const canDeleteBooking =
+        canBypassDeleteWindow || !isDeleteWindowExpired(data?.deletable_until, now);
+    const showDeleteOnly = canDeleteBooking && (isSuperuser || !isEditable);
+    const showActionsCol = isEditable || showDeleteOnly;
+
     const displayRows = useMemo(() => {
         if (!data?.booking_details) return [];
         return prepareDisplayRows(data.booking_details);
@@ -244,7 +254,11 @@ const BookingDetailsScreen = () => {
                             queryClient.invalidateQueries({ queryKey: ["/draw-booking/booking-report/"] });
                             refetch();
                         } catch (err: any) {
-                            const msg = err?.response?.data?.message || "Could not delete booking detail.";
+                            const msg =
+                                err?.message?.message ||
+                                err?.message?.detail ||
+                                err?.response?.data?.message ||
+                                "Could not delete booking detail.";
                             Alert.alert("Delete Failed", msg);
                         }
                     }
