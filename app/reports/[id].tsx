@@ -35,18 +35,20 @@ type DayReport = {
   summary?: any;
 };
 
-// Order the number-type rows are shown/exported in. `super` / `box` are
-// sub-splits of `three_digit` (only default draws have them), so they are
-// indented under it.
-const BREAKDOWN_ROWS: { key: string; label: string; indent?: boolean }[] = [
-  { key: 'single', label: 'Single' },
-  { key: 'double', label: 'Double' },
-  { key: 'three_digit', label: '3-Digit' },
-  { key: 'super', label: 'Super', indent: true },
-  { key: 'box', label: 'Box', indent: true },
-  { key: 'four_digit', label: '4-Digit' },
+// Order and wording the report is read out in: the 3-digit splits first, then
+// down to 1-digit. Used for both the on-screen table and the exported text so
+// the two always say the same thing.
+const BREAKDOWN_ROWS: { key: string; label: string }[] = [
+  { key: 'super', label: 'Super' },
+  { key: 'box', label: 'Box' },
+  { key: 'three_digit', label: '3digit' },
+  { key: 'four_digit', label: '4digit' },
+  { key: 'double', label: '2digit' },
+  { key: 'single', label: '1digit' },
   { key: 'other', label: 'Other' },
 ];
+
+const SEPARATOR = '------------------------------------';
 
 const fmt = (val: number | string | null | undefined) => {
   if (val == null || val === '') return '';
@@ -91,9 +93,14 @@ const addDays = (d: Date, days: number) => {
 /** Rows of a breakdown that actually have numbers booked. */
 const visibleBuckets = (breakdown?: Breakdown) => {
   if (!breakdown) return [];
+  // `three_digit` is the parent of Super/Box. On a default draw it is just their
+  // sum, so listing it would double up; on a tamil_nadu draw the triple-digit
+  // rows carry no sub_type (Super/Box are empty) and it is the only line there is.
+  const splitCount = (breakdown.super?.count ?? 0) + (breakdown.box?.count ?? 0);
   return BREAKDOWN_ROWS
     .map((row) => ({ ...row, bucket: breakdown[row.key] }))
-    .filter((row) => (row.bucket?.count ?? 0) > 0);
+    .filter((row) => (row.bucket?.count ?? 0) > 0)
+    .filter((row) => row.key !== 'three_digit' || (row.bucket?.count ?? 0) > splitCount);
 };
 
 const SummaryRow = ({ label, value, color }: { label: string; value: string; color?: string }) => (
@@ -133,11 +140,8 @@ const BreakdownTable = ({ breakdown }: { breakdown?: Breakdown }) => {
           className="flex-row px-3 py-2 items-center"
           style={{ borderTopWidth: 1, borderTopColor: '#f1f5f9' }}
         >
-          <Text
-            className={`flex-1 text-xs ${row.indent ? 'text-gray-500' : 'font-semibold text-gray-700'}`}
-            style={row.indent ? { paddingLeft: 12 } : undefined}
-          >
-            {row.indent ? `↳ ${row.label}` : row.label}
+          <Text className="flex-1 text-xs font-semibold text-gray-700">
+            {row.label}
           </Text>
           <Text className="text-xs font-bold text-gray-900 text-right" style={{ width: 48 }}>
             {fmt(row.bucket?.count)}
@@ -378,18 +382,17 @@ const Report = () => {
 
   const dayReports: DayReport[] = reports || [];
 
-  const buildBreakdownLines = (bd?: Breakdown, indent = '   ') => {
+  // `Super =531×8=4248` — count × per-ticket rate = amount. When a bucket mixed
+  // several rates the server sends `rate: null`, so only count and amount go out.
+  const buildBreakdownLines = (bd?: Breakdown) => {
     let text = '';
     for (const row of visibleBuckets(bd)) {
       const count = fmt(row.bucket?.count);
       const amount = fmt(row.bucket?.amount);
-      const prefix = row.indent ? `${indent}  ` : indent;
-      // Mirrors how the counts are read out: `Single = 140*10.5=1470` when every
-      // number went at the same rate, otherwise just the count and the total.
-      const value = row.bucket?.rate != null
-        ? `${count}*${fmtRate(row.bucket.rate)}${amount ? `=${amount}` : ''}`
-        : `${count} nos${amount ? ` = ${amount}` : ''}`;
-      text += `${prefix}${row.label} = ${value}\n`;
+      const rate = row.bucket?.rate;
+      text += rate != null
+        ? `${row.label} =${count}×${fmtRate(rate)}=${amount}\n`
+        : `${row.label} =${count}=${amount}\n`;
     }
     return text;
   };
@@ -399,27 +402,26 @@ const Report = () => {
     const rows = report?.sales_details || [];
 
     text += `🕒 Sales Details:\n\n`;
+    text += `Time   | Sell         | Price\n`;
+    text += `${SEPARATOR}\n`;
     if (rows.length > 0) {
+      // One block per draw that had bookings, in cut-off order (the order the
+      // server sends them in).
       for (const item of rows) {
         const name = item?.draw_name || item?.name || item?.time || '';
         const sell = fmt(item?.sell ?? item?.total_sell);
         const price = fmt(item?.price ?? item?.total_price);
-        text += `${name} | Sell: ${sell}${price ? ` | Prize: ${price}` : ''}\n`;
+        text += `${name} sell=${sell}\n`;
+        text += `Winning = ${price || '0'}\n`;
         text += buildBreakdownLines(item?.breakdown);
+        text += `\n`;
       }
     } else {
-      text += `No sales\n`;
-    }
-
-    const totals = visibleBuckets(report?.breakdown);
-    if (totals.length > 0) {
-      text += `\n🔢 Number Counts:\n\n`;
-      text += buildBreakdownLines(report?.breakdown, '');
-      text += `Total = ${fmt(report?.breakdown?.total?.count)}\n`;
+      text += `No sales\n\n`;
     }
 
     const s = report?.summary;
-    text += `\n📌 Summary:\n\n`;
+    text += `📌 Summary:\n\n`;
     text += `Total Sell: ${fmt(s?.total_sell)}\n`;
     text += `Total Prize: ${fmt(s?.total_price)}\n`;
     text += `Agent Comm: ${fmt(s?.agent_comm)}\n`;
@@ -444,16 +446,16 @@ const Report = () => {
       }
 
       for (const report of dayReports) {
-        text += `====================================\n`;
+        text += `${SEPARATOR}\n`;
         text += `📅 ${report?.date_display || report?.date || ''}\n`;
-        text += `====================================\n`;
+        text += `${SEPARATOR}\n`;
         text += buildDayBlock(report);
         text += `\n`;
       }
 
-      text += `####################################\n`;
+      text += `${SEPARATOR}\n`;
       text += `🧾 PERIOD TOTAL (${date_display || ''})\n`;
-      text += `####################################\n\n`;
+      text += `${SEPARATOR}\n\n`;
       text += buildDayBlock({ sales_details, breakdown, summary });
       text += `\n`;
     } else {
@@ -464,7 +466,7 @@ const Report = () => {
       text += `\n`;
     }
 
-    text += `------------------------------------\n`;
+    text += `${SEPARATOR}\n`;
     if (admin_bank_account_details) {
       text += `${admin_bank_account_details}\n`;
     }
@@ -718,22 +720,6 @@ const Report = () => {
           </View>
         )}
 
-        {/* Number counts for the whole period / day */}
-        <View className="px-4 mb-3">
-          <View
-            className="rounded-2xl overflow-hidden"
-            style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 }}
-          >
-            <View className="px-4 py-3" style={{ backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
-              <Text className="text-sm font-bold text-gray-700">Number Counts</Text>
-              <Text className="text-[10px] text-gray-400 mt-0.5">
-                Super and Box are part of the 3-Digit total
-              </Text>
-            </View>
-            <BreakdownTable breakdown={breakdown} />
-          </View>
-        </View>
-
         {/* Per-day reports (range mode) */}
         {isRangeMode && dayReports.length > 0 && (
           <View className="px-4 mb-3">
@@ -782,15 +768,6 @@ const Report = () => {
                           />
                         </View>
                       )}
-                      <View
-                        className="rounded-2xl overflow-hidden mb-3"
-                        style={{ borderWidth: 1, borderColor: '#e2e8f0' }}
-                      >
-                        <View className="px-3 py-2" style={{ backgroundColor: '#f8fafc' }}>
-                          <Text className="text-xs font-bold text-gray-700">Number Counts</Text>
-                        </View>
-                        <BreakdownTable breakdown={report?.breakdown} />
-                      </View>
                       <View className="px-1">
                         <SummaryRow label="Total Sell" value={fmtCurrency(report?.summary?.total_sell)} color="#4f46e5" />
                         <SummaryRow label="Total Prize" value={fmtCurrency(report?.summary?.total_price)} color="#b45309" />
