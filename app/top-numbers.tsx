@@ -50,6 +50,14 @@ type Draw = {
   name: string;
 };
 
+// Local calendar date as YYYY-MM-DD (never UTC — toISOString() would shift the day).
+const toIsoDate = (d: Date): string => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 export default function TopNumbers() {
   const { user } = useAuthStore();
   const { selectedDraw } = useDrawStore();
@@ -76,9 +84,11 @@ export default function TopNumbers() {
   const [showToast, setShowToast] = useState(false);
   const toastOpacity = useMemo(() => new Animated.Value(0), []);
 
-  // Date filter state
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  // Date filter state — `fromDate` alone means a single day, `fromDate` + `toDate` a range
+  const [fromDate, setFromDate] = useState<Date | null>(null);
+  const [toDate, setToDate] = useState<Date | null>(null);
+  const [showFromDatePicker, setShowFromDatePicker] = useState(false);
+  const [showToDatePicker, setShowToDatePicker] = useState(false);
 
   // Time filter state
   const [fromTime, setFromTime] = useState<string>("");
@@ -136,11 +146,12 @@ export default function TopNumbers() {
     if (excludedDealerIds.length) {
       params.exclude_dealer = excludedDealerIds.join(",");
     }
-    if (selectedDate) {
-      const year = selectedDate.getFullYear();
-      const month = String(selectedDate.getMonth() + 1).padStart(2, "0");
-      const day = String(selectedDate.getDate()).padStart(2, "0");
-      params.date = `${year}-${month}-${day}`;
+    // Range wins when both ends are set; a lone From Date keeps the single-day behaviour.
+    if (fromDate && toDate) {
+      params.from_date = toIsoDate(fromDate);
+      params.to_date = toIsoDate(toDate);
+    } else if (fromDate) {
+      params.date = toIsoDate(fromDate);
     }
     if (fromTime) {
       params.time = fromTime;
@@ -250,7 +261,8 @@ export default function TopNumbers() {
     setMinCountBox("");
     setSuperActive(true);
     setBoxActive(true);
-    setSelectedDate(null);
+    setFromDate(null);
+    setToDate(null);
     setFromTime("");
 
 
@@ -711,27 +723,27 @@ export default function TopNumbers() {
             </View>
           </View>
 
-          {/* Row 3: Date / Min count */}
+          {/* Row 3: From Date / To Date */}
           <View className="flex-row gap-3 mt-3">
             <View className="flex-1">
-              <Text className="text-[11px] text-gray-500 mb-1">Date</Text>
+              <Text className="text-[11px] text-gray-500 mb-1">From Date</Text>
               <View className="flex-row items-center gap-2">
                 <TouchableOpacity
-                  onPress={() => setShowDatePicker(true)}
+                  onPress={() => setShowFromDatePicker(true)}
                   className="flex-1 border border-gray-200 rounded-lg px-3 py-2 flex-row justify-between items-center bg-white"
                   activeOpacity={0.7}
                 >
                   <Text className="text-xs text-gray-700">
-                    {selectedDate ? formatDateDDMMYYYY(selectedDate) : "Select date"}
+                    {fromDate ? formatDateDDMMYYYY(fromDate) : "Select date"}
                   </Text>
                   <Calendar size={14} color="#6366f1" />
                 </TouchableOpacity>
-                {selectedDate && (
+                {fromDate && (
                   <TouchableOpacity
                     onPress={() => {
-                      setSelectedDate(null);
-
-
+                      // Clearing the start of the range clears the end too.
+                      setFromDate(null);
+                      setToDate(null);
                     }}
                     className="px-2 py-2 rounded-lg bg-red-50 border border-red-200"
                     activeOpacity={0.7}
@@ -740,6 +752,76 @@ export default function TopNumbers() {
                   </TouchableOpacity>
                 )}
               </View>
+            </View>
+
+            <View className="flex-1">
+              <Text className="text-[11px] text-gray-500 mb-1">To Date</Text>
+              <View className="flex-row items-center gap-2">
+                <TouchableOpacity
+                  onPress={() => {
+                    if (!fromDate) {
+                      showToastMessage("Pick a From Date first");
+                      return;
+                    }
+                    setShowToDatePicker(true);
+                  }}
+                  className={`flex-1 border rounded-lg px-3 py-2 flex-row justify-between items-center ${fromDate ? "border-gray-200 bg-white" : "border-gray-200 bg-gray-100"}`}
+                  activeOpacity={0.7}
+                >
+                  <Text className={`text-xs ${fromDate ? "text-gray-700" : "text-gray-400"}`}>
+                    {toDate ? formatDateDDMMYYYY(toDate) : "Select date"}
+                  </Text>
+                  <Calendar size={14} color={fromDate ? "#6366f1" : "#9ca3af"} />
+                </TouchableOpacity>
+                {toDate && (
+                  <TouchableOpacity
+                    onPress={() => setToDate(null)}
+                    className="px-2 py-2 rounded-lg bg-red-50 border border-red-200"
+                    activeOpacity={0.7}
+                  >
+                    <Text className="text-xs font-semibold text-red-600">✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+
+          {fromDate && (
+            <Text className="mt-2 text-[10px] text-gray-500">
+              {toDate
+                ? `Totals aggregated across ${formatDateDDMMYYYY(fromDate)} → ${formatDateDDMMYYYY(toDate)}`
+                : "Single day. Set a To Date to aggregate over a range."}
+            </Text>
+          )}
+
+          {/* Row: Min count / From Time */}
+          <View className="flex-row gap-3 mt-3">
+            <View className="flex-1">
+              <Text className="text-[11px] text-gray-500 mb-1">
+                Min Count
+              </Text>
+              <TextInput
+                value={minCount}
+                onChangeText={(txt) => {
+                  const clean = txt.replace(/[^0-9]/g, "");
+                  setMinCount(clean);
+
+
+                }}
+                placeholder="Global"
+                keyboardType="numeric"
+                style={{
+                  borderColor: "#d1d5db",
+                  borderWidth: 1,
+                  borderRadius: 8,
+                  paddingHorizontal: 10,
+                  paddingVertical: 8,
+                  backgroundColor: "#fff",
+                  fontSize: 12,
+                  color: "#111827",
+                }}
+                placeholderTextColor="#9ca3af"
+              />
             </View>
 
             <View className="flex-1">
@@ -768,37 +850,6 @@ export default function TopNumbers() {
                   </TouchableOpacity>
                 )}
               </View>
-            </View>
-          </View>
-
-          {/* Row: Min count */}
-          <View className="flex-row gap-3 mt-3">
-            <View className="flex-1">
-              <Text className="text-[11px] text-gray-500 mb-1">
-                Min Count
-              </Text>
-              <TextInput
-                value={minCount}
-                onChangeText={(txt) => {
-                  const clean = txt.replace(/[^0-9]/g, "");
-                  setMinCount(clean);
-
-
-                }}
-                placeholder="Global"
-                keyboardType="numeric"
-                style={{
-                  borderColor: "#d1d5db",
-                  borderWidth: 1,
-                  borderRadius: 8,
-                  paddingHorizontal: 10,
-                  paddingVertical: 8,
-                  backgroundColor: "#fff",
-                  fontSize: 12,
-                  color: "#111827",
-                }}
-                placeholderTextColor="#9ca3af"
-              />
             </View>
           </View>
 
@@ -1284,18 +1335,36 @@ export default function TopNumbers() {
         </Animated.View>
       )}
 
-      {/* Date Picker */}
-      {showDatePicker && (
+      {/* From Date Picker */}
+      {showFromDatePicker && (
         <DateTimePicker
-          value={selectedDate || new Date()}
+          value={fromDate || new Date()}
           mode="date"
           display={Platform.OS === "android" ? "default" : "spinner"}
           onChange={(event, date) => {
-            setShowDatePicker(false);
+            setShowFromDatePicker(false);
             if (event.type === "set" && date) {
-              setSelectedDate(date);
+              setFromDate(date);
+              // Keep the range valid if the new start is past the current end.
+              if (toDate && date > toDate) {
+                setToDate(null);
+              }
+            }
+          }}
+        />
+      )}
 
-
+      {/* To Date Picker */}
+      {showToDatePicker && (
+        <DateTimePicker
+          value={toDate || fromDate || new Date()}
+          mode="date"
+          minimumDate={fromDate || undefined}
+          display={Platform.OS === "android" ? "default" : "spinner"}
+          onChange={(event, date) => {
+            setShowToDatePicker(false);
+            if (event.type === "set" && date) {
+              setToDate(date);
             }
           }}
         />
