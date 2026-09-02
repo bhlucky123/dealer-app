@@ -124,6 +124,9 @@ const BookingScreen: React.FC = () => {
     "3": ["SUPER", "BOX", "BOTH"],
   };
 
+  // A 1-digit number can only be booked with a count of at least this much.
+  const SINGLE_DIGIT_MIN_COUNT = 5;
+
   // Example: {"count": 5, "number": "356", "subType": "BOX"}
   // This function validates a parsed object like the example above.
   const isValidNumber = (parsed: any) => {
@@ -151,9 +154,9 @@ const BookingScreen: React.FC = () => {
     if (!/^\d+$/.test(parsed.number)) return false;
     if (![1, 2, 3].includes(parsed.number.length)) return false;
 
-    // For single digit, count must be at least 5
+    // For single digit, count must be at least SINGLE_DIGIT_MIN_COUNT
     if (parsed.number.length === 1) {
-      if (!Number.isInteger(parsed.count) || parsed.count < 5) return false;
+      if (!Number.isInteger(parsed.count) || parsed.count < SINGLE_DIGIT_MIN_COUNT) return false;
     }
 
     // Accept SET as a valid subType for any 3-digit number
@@ -1312,6 +1315,9 @@ const BookingScreen: React.FC = () => {
       // Regex for WhatsApp metadata prefix
       const waPrefixRegex = /^\[\d{1,2}\/\d{1,2}(?:\/\d{2,4})?,\s*\d{1,2}:\d{2}(?:\s*[APMapm\.]*)?\]\s*[^:]*:/;
 
+      // Lines like "Dear 6", "Kerala 3" — chatter, silently skipped.
+      const ignoreLineRegex = /^\s*[A-Za-z ]+\d+\s*$/;
+
       // --- VALID SUBTYPES BY NUMBER LENGTH ---
       const validSubTypesByLength: { [len: number]: string[] } = {
         1: ["A", "B", "C"],
@@ -1339,6 +1345,9 @@ const BookingScreen: React.FC = () => {
         if (isKeralaDraw && nlen !== 4) return false;
         if (isTamilNaduDraw && nlen !== 3) return false;
         if (isDefaultDraw && ![1, 2, 3].includes(nlen)) return false;
+
+        // Single-digit numbers must be booked with a count of at least 5
+        if (isDefaultDraw && nlen === 1 && Number(count) < SINGLE_DIGIT_MIN_COUNT) return false;
 
         let st = (subType || "").toUpperCase();
 
@@ -1397,80 +1406,84 @@ const BookingScreen: React.FC = () => {
         return false;
       }
 
-      // Regexes for various formats (original list)...
+      // Helper: "Abc" means every subtype for the number's length
+      function pushAbcBookings(number: string, count: number) {
+        const group = number.length === 1 ? ["A", "B", "C"] : ["AB", "AC", "BC"];
+        let allOk = true;
+        for (const st of group) {
+          if (!pushBooking(number, count, st)) allOk = false;
+        }
+        return allOk;
+      }
 
-      // 1. WhatsApp prefix
-      // 2. "Abc 0 5" style (legacy)
-      const abcRegex = /^\s*Abc\s+(\d+)\s+(\d+)\s*$/i;
-      // 3. "304  10" style (number, 2+ spaces, count)
-      const superSpaceRegex = /^\s*(\d{1,4})\s{2,}(\d+)\s*$/;
-      // 4. "054 2" (3-digit number, 1 space, count)
-      const threeDigitSpaceRegex = /^\s*(\d{3})\s+(\d+)\s*$/;
-      // 5. "number [subType] count"
-      const normalMatchRegex = /^\s*(\d{1,4})\s+([A-Za-z]+)?\s*(\d+)\s*$/;
-      // 6. "123=5", "123+5", etc
-      const superSymbolRegex = /^\s*(\d{1,4})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s*$/;
-      // 7. "041-1.2", "041-1*2", etc
-      const dualCountRegex = /^\s*(\d{1,4})\s*[-=+\/\.\#\&\*:,]\s*(\d+)[^0-9]+(\d+)\s*$/;
-      // 8. "036,2" or "036, 2" or "036-2" or etc.
-      const commaOrSymbolRegex = /^\s*(\d{1,4})\s*[,=+\-:\/\.\#\&\*]\s*(\d+)\s*$/;
-      // 9. "AB.24.2" or "BC.41.2"
-      const subtypeDotNumberDotCount = /^\s*([A-Za-z]+)[\.\-]([0-9]{1,3})[\.\-](\d+)\s*$/;
-      // 10. "100.2.2"
-      const numberDotCountDotCount = /^\s*(\d{1,4})[\.\-](\d+)[\.\-](\d+)\s*$/;
-      // 11. "021*2"
-      const numberStarCount = /^\s*(\d{1,4})\s*\*\s*(\d+)\s*$/;
-      // 12. "312.6"
-      const numberDotCount = /^\s*(\d{1,4})\s*[\.\-]\s*(\d+)\s*$/;
-      // 12a. "608..50"
-      const numberDoubleDotCount = /^\s*(\d{1,4})\s*\.\.\s*(\d+)\s*$/;
-      // 13. "123-5 box", "123=5 set", "123-5 super", "123-5 both"
-      const numberSymbolCountSubtype = /^\s*(\d{1,4})\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s+([A-Za-z]+)\s*$/;
-      // 14. "56 AC=5", "34 AB:5", ...
-      const numberSubtypeSymbolCount = /^\s*(\d{1,4})\s*([A-Za-z]+)\s*([=+\-:\/\.\#\&\*])\s*(\d+)\s*$/;
-      // 15. "A 8 20"
-      const subtypeNumberCount = /^\s*([A-Za-z]+)\s+(\d{1,4})\s+(\d+)\s*$/;
-      // 16. "Dear 6", ...
-      const ignoreLineRegex = /^\s*[A-Za-z ]+\d+\s*$/;
-      // 17. "709-5,077-6,078-5,..." 
-      const multiBookingLineRegex = /(\d{1,4})\s*[-=+\*\/\.\#\&:,]\s*(\d+)/g;
+      // ---------------------------------------------------------------------
+      // NORMALIZE + TOKENIZE
+      //
+      // Every supported line is "numbers and words separated by punctuation".
+      // Rather than one regex per format, strip the leading/trailing noise,
+      // collapse each run of separators into a single break, then decide what
+      // the line means from the *shape* of the token list. That covers
+      // repeated separators ("123--5", "123...2"), trailing punctuation
+      // ("123=30.", "123.1."), bracketed counts ("123(1)(1)"), a subtype glued
+      // to the count ("123.2set") and underscore/semicolon/quote separators
+      // ("123_5", "114;1", "123''1") without a regex for each one.
+      // ---------------------------------------------------------------------
+      type Tok = { isNum: boolean; value: string };
 
-      // --- Set 524.5 box / Set 524 5 both style ---
-      const setWordNumberCountSubtype = /^\s*Set\s+(\d{3})[\.\-\s]+(\d+)\s+([A-Za-z]+)\s*$/i;
-      // --- Set 524.1 style ---
-      const setWordNumberDotCount = /^\s*Set\s+(\d{3})\.(\d+)\s*$/i;
-      // --- "770,,1" style ---
-      const numberDoubleCommaCount = /^\s*(\d{1,4})\s*,{2,}\s*(\d+)\s*$/;
-      // --- "Abc-8-5" style ---
-      const abcDashNumberDashCount = /^\s*Abc\s*-\s*(\d+)\s*-\s*(\d+)\s*$/i;
-      // --- 3-value booking ---
-      const numberCount1Count2Regex = /^\s*(\d{1,4})\s+(\d+)\s+(\d+)\s*$/;
-      // --- "691 2+2" — number, space, then the two counts joined by a symbol.
-      // Same meaning as "691 2 2" / "691+2+2": first count SUPER, second BOX.
-      const numberSpaceDualCountRegex = /^\s*(\d{1,4})\s+(\d+)\s*[-=+:\/\.\#\&\*,]\s*(\d+)\s*$/;
-      // --- C+7+100 ---
-      const subtypePlusNumberPlusCount = /^\s*([A-Za-z]+)\+(\d+)\+(\d+)\s*$/;
-      // --- Abc=6=25 ---
-      const subtypeEqNumberEqCount = /^\s*([A-Za-z]+)=(\d+)[=]+(\d+)\s*$/;
-      // --- Abc-4,6=30 ---
-      const subtypeDashMultiNumbersEqCount = /^\s*([A-Za-z]+)-([\d, ]+)=\s*(\d+)\s*$/;
-      // --- Abc flexible combo ---
-      const abcFlexibleComboRegex = /^\s*Abc[\s=+\-]+(\d+)[\s=+\-]+(\d+)\s*$/i;
+      // Anything that can sit between a number, a count and a subtype.
+      const SEPARATORS = /[\s.\-=+:/,_;*#&|\\()\[\]{}<>'"‘’“”´`]+/;
 
-      // --- Custom regex for bc:43:15 or bc:43=15 and similar (subtype:number:count style, comma/dots etc too) ---
-      const subtypeNumberCountFlexible = /^\s*([A-Za-z]+)\s*[:=\-,.\s]+\s*(\d+)\s*[:=\-,.\s]+\s*(\d+)\s*$/i;
-      // For "AB,15,10" - subtype,number,count (comma/space/dot/slash/hyphen separated)
-      const subtypeNumberCountCommaFlexible = /^\s*([A-Za-z]+)[,:\.\-\s]+(\d+)[,:\.\-\s]+(\d+)\s*$/i;
-      // For "ac:14=10" hybrid
-      const subtypeNumberCountHybrid = /^\s*([A-Za-z]+)\s*[:=\-,.\s]+\s*(\d+)\s*[=:\-,.\s]+\s*(\d+)\s*$/i;
+      function tokenizeLine(raw: string): Tok[] | null {
+        // Drop leading/trailing noise: "123=30." -> "123=30", "(123)" -> "123"
+        const trimmed = raw.replace(/^[^0-9A-Za-z]+/, "").replace(/[^0-9A-Za-z]+$/, "");
+        if (!trimmed) return null;
 
-      // ---- Main new regex for number+count+subtype, with any separator, BOX/SET awareness ----
-      // for 123=5=box / 123-5-BOX / 123+25+box / 123:5:box / 123.20.box / 123,4,BOX / 123 2 box
-      const numberCountSubtypeFlexible = /^\s*(\d{1,4})\s*([=+\-:\/\.,\s]+)\s*(\d+)\s*([=+\-:\/\.,\s]+)\s*([A-Za-z]+)\s*$/i;
-      // also allow 123 5 set
-      const numberCountSubtypeSpaces = /^\s*(\d{1,4})\s+(\d+)\s+([A-Za-z]+)\s*$/i;
-      // 123 5 set box / 123 5 set both (number count "set" subtype)
-      const numberCountSetSubtype = /^\s*(\d{3})\s*[=+\-:\/\.,\s]+\s*(\d+)\s+set\s+([A-Za-z]+)\s*$/i;
+        const tokens: Tok[] = [];
+        for (const part of trimmed.split(SEPARATORS)) {
+          if (!part) continue;
+          // A part may still glue the count to the subtype ("2set") — split it.
+          const pieces = part.match(/\d+|[A-Za-z]+/g);
+          // Unknown characters (emoji, other scripts) — don't guess at the line.
+          if (!pieces || pieces.join("").length !== part.length) return null;
+          for (const piece of pieces) {
+            tokens.push({ isNum: /^\d+$/.test(piece), value: /^\d+$/.test(piece) ? piece : piece.toUpperCase() });
+          }
+        }
+        return tokens.length ? tokens : null;
+      }
+
+      // A word that describes how to book, not which subtype to remember.
+      const isGroupWord = (w: string) => w === "SET" || w === "BOTH" || w === "ABC";
+
+      // Book "number + count + subtype", honouring SET / BOTH / Abc.
+      function pushByWord(number: string, count: string, word: string, perEntry?: string) {
+        const st = (word || "").toUpperCase();
+        if (st === "SET") return pushSetBookings(number, Number(count), perEntry);
+        if (st === "ABC") return pushAbcBookings(number, Number(count));
+        if (st === "BOTH" && number.length === 3) {
+          const ok1 = pushBooking(number, Number(count), "SUPER");
+          const ok2 = pushBooking(number, Number(count), "BOX");
+          return ok1 && ok2;
+        }
+        return pushBooking(number, Number(count), st);
+      }
+
+      // Two counts on one number: SUPER + BOX for 3-digit, otherwise the
+      // number's default subtype twice (existing behaviour).
+      function pushTwoCounts(number: string, c1: string, c2: string) {
+        if (number.length === 3) return pushDualBooking(number, Number(c1), Number(c2));
+        return pushBooking(number, Number(c1)) && pushBooking(number, Number(c2));
+      }
+
+      // A line that is only a number ("354") inherits the count — and the
+      // subtype, where it still applies — from the last plainly-parsed line
+      // above it.
+      let lastCount: number | null = null;
+      let lastSubType: string | null = null;
+      const remember = (count: string, word?: string) => {
+        lastCount = Number(count);
+        lastSubType = word && !isGroupWord(word) ? word : null;
+      };
 
       for (const origLine of lines) {
         let line = origLine;
@@ -1489,424 +1502,110 @@ const BookingScreen: React.FC = () => {
           continue;
         }
 
-        // 0. Ignore lines like "Dear 6", "Kerala 3"
+        // Ignore lines like "Dear 6", "Kerala 3"
         if (ignoreLineRegex.test(line)) continue;
 
-        // ---- 0. "123 5 set box" / "123-5 set both" style (SET + per-entry subtype) ----
-        let m = null;
-        m = line.match(numberCountSetSubtype);
-        if (m && m[1] && m[2] && m[3]) {
-          const st = (m[3] || "").toUpperCase();
-          if (!pushSetBookings(m[1], m[2] as any, st)) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
+        const fail = () => {
+          if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
+          failedLines.push(origLine);
+        };
+
+        const tokens = tokenizeLine(line);
+        if (!tokens) {
+          fail();
           continue;
         }
 
-        // ---- 1. YOUR NEW REQUEST: bc:43:15, AB,15,10, ac:14=10 style ----
-        // Try the most-flexible: subtype:number:count (colons, commas, spaces, dots), eg. "bc:43:15", "AB,15,10"
+        const nums = tokens.filter(t => t.isNum).map(t => t.value);
+        const words = tokens.filter(t => !t.isNum).map(t => t.value);
+        const shape = tokens.map(t => (t.isNum ? "N" : "W")).join("");
 
-        // bc:43:15 or ac:14=10 or AB,15,10
-        m = line.match(subtypeNumberCountFlexible);
-        if (m && m[1] && m[2] && m[3]) {
-          // Defensive: subtype, number, count
-          if (!pushBooking(m[2], m[3] as any, m[1])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
+        let ok = false;
+
+        // "709-5,077-6,078-5" — several number/count pairs on one line.
+        if (words.length === 0 && nums.length >= 4 && nums.length % 2 === 0) {
+          for (let i = 0; i < nums.length; i += 2) {
+            if (pushBooking(nums[i], Number(nums[i + 1]))) ok = true;
           }
+          if (ok) remember(nums[nums.length - 1]);
+          else fail();
           continue;
         }
 
-        // Try comma flexible also (should be covered by above)
-        m = line.match(subtypeNumberCountCommaFlexible);
-        if (m && m[1] && m[2] && m[3]) {
-          if (!pushBooking(m[2], m[3] as any, m[1])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
+        switch (shape) {
+          // "354" — inherit the count (and subtype) from the line above.
+          case "N": {
+            if (lastCount === null) break;
+            const inherited = lastSubType && isValidSubtypeForNumber(nums[0], lastSubType)
+              ? lastSubType
+              : undefined;
+            ok = pushBooking(nums[0], lastCount, inherited);
+            break;
           }
-          continue;
-        }
 
-        // Try hybrid (should be covered, but for safety)
-        m = line.match(subtypeNumberCountHybrid);
-        if (m && m[1] && m[2] && m[3]) {
-          if (!pushBooking(m[2], m[3] as any, m[1])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
+          // "123-5", "123_5", "114;1", "123''1", "123(1)", "312.6", "1/1"
+          case "NN": {
+            ok = pushBooking(nums[0], Number(nums[1]));
+            if (ok) remember(nums[1]);
+            break;
           }
-          continue;
-        }
 
-        // ---- 2. YOUR NEW REQUEST: number + count + subtype, with separators, like 123=5=box, 123 2 box etc ----
-        m = line.match(numberCountSubtypeFlexible);
-        if (m && m[1] && m[3] && m[5]) {
-          let number = m[1];
-          let count = m[3];
-          let subtype = (m[5] || "").toUpperCase();
+          // "123 5 2", "835--1--1", "123(1)(1)", "123.3.3."
+          case "NNN": {
+            ok = pushTwoCounts(nums[0], nums[1], nums[2]);
+            if (ok) remember(nums[1]);
+            break;
+          }
 
-          // SET logic if subtype is SET
-          if (subtype === "SET") {
-            if (!pushSetBookings(number, count as any)) {
-              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-              failedLines.push(origLine);
+          // "123-5 box", "123.2set", "123=5=both", "123 5 set"
+          case "NNW": {
+            ok = pushByWord(nums[0], nums[1], words[0]);
+            if (ok) remember(nums[1], words[0]);
+            break;
+          }
+
+          // "123.set.1", "56 AC=5", "123 AB 5"
+          case "NWN": {
+            ok = pushByWord(nums[0], nums[1], words[0]);
+            if (ok) remember(nums[1], words[0]);
+            break;
+          }
+
+          // "123 5 set box" — SET, plus the subtype each permutation is booked as.
+          case "NNWW": {
+            if (words[0] === "SET") ok = pushSetBookings(nums[0], Number(nums[1]), words[1]);
+            if (ok) remember(nums[1]);
+            break;
+          }
+
+          // "A 8 150", "bc:43:15", "Abc=6=25", "Set 524.1", "C+7+100"
+          case "WNN": {
+            ok = pushByWord(nums[0], nums[1], words[0]);
+            if (ok) remember(nums[1], words[0]);
+            break;
+          }
+
+          // "Set 524 5 box" — same as "123 5 set box", SET named first.
+          case "WNNW": {
+            if (words[0] === "SET") ok = pushSetBookings(nums[0], Number(nums[1]), words[1]);
+            if (ok) remember(nums[1]);
+            break;
+          }
+
+          default: {
+            // "Abc-4,6=30" — one subtype, several numbers, then the count.
+            if (shape === "W" + "N".repeat(nums.length) && nums.length > 2) {
+              const count = nums[nums.length - 1];
+              for (const num of nums.slice(0, -1)) {
+                if (pushByWord(num, count, words[0])) ok = true;
+              }
+              if (ok) remember(count, words[0]);
             }
-          } else if (subtype === "BOTH" && number.length === 3) {
-            let ok1 = pushBooking(number, count as any, "SUPER");
-            let ok2 = pushBooking(number, count as any, "BOX");
-            if (!(ok1 && ok2)) {
-              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-              failedLines.push(origLine);
-            }
-          } else {
-            if (!pushBooking(number, count as any, subtype)) {
-              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-              failedLines.push(origLine);
-            }
+            break;
           }
-          continue;
         }
 
-        m = line.match(numberCountSubtypeSpaces);
-        if (m && m[1] && m[2] && m[3]) {
-          let number = m[1];
-          let count = m[2];
-          let subtype = (m[3] || "").toUpperCase();
-          if (subtype === "SET") {
-            if (!pushSetBookings(number, count as any)) {
-              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-              failedLines.push(origLine);
-            }
-          } else if (subtype === "BOTH" && number.length === 3) {
-            let ok1 = pushBooking(number, count as any, "SUPER");
-            let ok2 = pushBooking(number, count as any, "BOX");
-            if (!(ok1 && ok2)) {
-              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-              failedLines.push(origLine);
-            }
-          } else {
-            if (!pushBooking(number, count as any, subtype)) {
-              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-              failedLines.push(origLine);
-            }
-          }
-          continue;
-        }
-
-        // --- 1. Handle "Abc=25=5", "Abc-32-10", "Abc 56 15", "Abc+5=10", "Abc=6=25" as AB, BC, AC ---
-        m = line.match(abcFlexibleComboRegex);
-        if (m) {
-          let ok1 = pushBooking(m[1], m[2] as any, "AB");
-          let ok2 = pushBooking(m[1], m[2] as any, "BC");
-          let ok3 = pushBooking(m[1], m[2] as any, "AC");
-          if (!(ok1 && ok2 && ok3)) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // --- Existing ABC legacy (strict) ---
-        m = line.match(abcDashNumberDashCount);
-        if (m) {
-          let ok = pushBooking(m[1], m[2] as any, "A") && pushBooking(m[1], m[2] as any, "B") && pushBooking(m[1], m[2] as any, "C");
-          if (!ok) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // --- Set 524.5 box / Set 524 5 both style ---
-        m = line.match(setWordNumberCountSubtype);
-        if (m) {
-          const num = m[1];
-          const count = m[2];
-          const st = (m[3] || "").toUpperCase();
-          if (!pushSetBookings(num, count, st)) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // --- Set 524.1 style ---
-        m = line.match(setWordNumberDotCount);
-        if (m) {
-          const num = m[1];
-          const count = m[2];
-          if (!pushSetBookings(num, count)) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // --- "770,,1" style ---
-        m = line.match(numberDoubleCommaCount);
-        if (m) {
-          if (!pushBooking(m[1], m[2])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // --- 3-value booking: "123 5 2"
-        m = line.match(numberCount1Count2Regex);
-        if (m) {
-          if (m[1].length === 3) {
-            let ok = pushBooking(m[1], m[2], "SUPER") && pushBooking(m[1], m[3], "BOX");
-            if (!ok) {
-              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-              failedLines.push(origLine);
-            }
-          } else {
-            let ok = pushBooking(m[1], m[2]) && pushBooking(m[1], m[3]);
-            if (!ok) {
-              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-              failedLines.push(origLine);
-            }
-          }
-          continue;
-        }
-
-        // --- "691 2+2" (also "691 2-2", "691 2 + 2") — space before the counts,
-        // symbol between them. Handled like the "691 2 2" case above.
-        m = line.match(numberSpaceDualCountRegex);
-        if (m) {
-          if (m[1].length === 3) {
-            let ok = pushBooking(m[1], Number(m[2]), "SUPER") && pushBooking(m[1], Number(m[3]), "BOX");
-            if (!ok) {
-              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-              failedLines.push(origLine);
-            }
-          } else {
-            let ok = pushBooking(m[1], Number(m[2])) && pushBooking(m[1], Number(m[3]));
-            if (!ok) {
-              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-              failedLines.push(origLine);
-            }
-          }
-          continue;
-        }
-
-        // --- C+7+100 --- (subtype, number, count)
-        m = line.match(subtypePlusNumberPlusCount);
-        if (m) {
-          if (!pushBooking(m[2], m[3], m[1])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // --- Abc=6=25 --- (subtype, = number, = count)
-        m = line.match(subtypeEqNumberEqCount);
-        if (m) {
-          if (!pushBooking(m[2], m[3], m[1])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // --- Abc-4,6=30 --- (subtype, numbers (comma/space separated), count)
-        m = line.match(subtypeDashMultiNumbersEqCount);
-        if (m) {
-          let numbers = m[2].split(/[\s,]+/).map(num => num.trim()).filter(Boolean);
-          let count = m[3];
-          let anyOk = false;
-          for (let num of numbers) {
-            if (pushBooking(num, count, m[1])) anyOk = true;
-          }
-          if (!anyOk) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // -- Multi-booking line: "709-5,077-6,078-5,..."
-        let multiMatch = [...line.matchAll(multiBookingLineRegex)];
-        if (multiMatch.length > 1) {
-          let anyOk = false;
-          for (let m of multiMatch) {
-            if (pushBooking(m[1], m[2])) anyOk = true;
-          }
-          if (!anyOk) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // -- Dual count: "041-1.2", "041-1*2", "041-1/2", "123=3=3", "145+2+2", "156:3-5", "165+5:6"
-        m = line.match(dualCountRegex);
-        if (m) {
-          if (!pushDualBooking(m[1], m[2], m[3])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // -- "608..50"
-        m = line.match(numberDoubleDotCount);
-        if (m) {
-          if (!pushBooking(m[1], m[2])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // -- "Abc 0 5" style (legacy)
-        m = line.match(abcRegex);
-        if (m) {
-          let ok = pushBooking(m[1], m[2], "A") && pushBooking(m[1], m[2], "B") && pushBooking(m[1], m[2], "C");
-          if (!ok) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // -- "304  10" (number, 2+ spaces, count)
-        m = line.match(superSpaceRegex);
-        if (m) {
-          if (!pushBooking(m[1], m[2])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // -- "054 2" (3-digit number, 1 space, count)
-        m = line.match(threeDigitSpaceRegex);
-        if (m) {
-          if (!pushBooking(m[1], m[2])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // -- "number [subType] count"
-        m = line.match(normalMatchRegex);
-        if (m) {
-          if (!pushBooking(m[1], m[3], m[2])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // -- "123=5", "123+5", etc
-        m = line.match(superSymbolRegex);
-        if (m) {
-          if (!pushBooking(m[1], m[3])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // -- "036,2", "036-2", etc
-        m = line.match(commaOrSymbolRegex);
-        if (m) {
-          if (!pushBooking(m[1], m[2])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // -- "AB.24.2" or "BC.41.2"
-        m = line.match(subtypeDotNumberDotCount);
-        if (m) {
-          if (!pushBooking(m[2], m[3], m[1])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // -- "100.2.2"
-        m = line.match(numberDotCountDotCount);
-        if (m) {
-          let ok = pushBooking(m[1], m[2], "SUPER") && pushBooking(m[1], m[3], "BOX");
-          if (!ok) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // -- "021*2"
-        m = line.match(numberStarCount);
-        if (m) {
-          if (!pushBooking(m[1], m[2])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // -- "312.6"
-        m = line.match(numberDotCount);
-        if (m) {
-          if (!pushBooking(m[1], m[2])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // -- "123-5 box", "123=5 set", "123-5 super", "123-5 both"
-        m = line.match(numberSymbolCountSubtype);
-        if (m) {
-          let subType = m[4].toUpperCase();
-          if (subType === "SET") {
-            if (!pushSetBookings(m[1], m[3])) {
-              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-              failedLines.push(origLine);
-            }
-          } else if (subType === "BOTH" && m[1].length === 3) {
-            pushBooking(m[1], m[3], "SUPER");
-            pushBooking(m[1], m[3], "BOX");
-          } else {
-            if (!pushBooking(m[1], m[3], subType)) {
-              if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-              failedLines.push(origLine);
-            }
-          }
-          continue;
-        }
-
-        // -- "56 AC=5", "34 AB:5", "45 BC-5", "6 A=10", "8 B=15", "7 C #15"
-        m = line.match(numberSubtypeSymbolCount);
-        if (m) {
-          if (!pushBooking(m[1], m[4], m[2])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // -- "A 8 20", "A 9 20"
-        m = line.match(subtypeNumberCount);
-        if (m) {
-          if (!pushBooking(m[2], m[3], m[1])) {
-            if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-            failedLines.push(origLine);
-          }
-          continue;
-        }
-
-        // If still not matched, add WhatsApp prefix (if any) and the line to failedLines
-        if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
-        if (line.length > 0) failedLines.push(origLine);
+        if (!ok) fail();
       }
 
       // Add bookings
@@ -1922,73 +1621,11 @@ const BookingScreen: React.FC = () => {
         addBooking(booking.subType, booking.number, booking.count, booking.count);
         added++;
       }
+      // "Abc" lines are handled by the tokenizer above, so anything still here
+      // genuinely could not be parsed — show it for manual entry.
       if (failedLines.length > 0) {
-        // Pattern for lines like "Abc=6=25", "Abc-4-15", "Abc 5 25", etc.
-        const abcPattern = /^\s*abc\s*[\=\-\+\:\s]\s*(\d+)\s*[\=\-\+\:\s]\s*(\d+)\s*$/i;
-        // WhatsApp prefix and possible trailing message, capture message after prefix
-        const waPrefixCaptureMessage = /^\[.*?\][^:]*:\s*(.*)$/;
-        const newFailedLines: string[] = [];
-        for (const failedLine of failedLines) {
-          let handled = false;
-          // If line is a WA prefix (with or without message)
-          const waMatch = failedLine.match(waPrefixCaptureMessage);
-          if (waMatch) {
-            // waMatch[1] is the message after the prefix (may be empty)
-            const possibleMessage = waMatch[1] ? waMatch[1].trim() : "";
-            if (possibleMessage.length > 0) {
-              // If the message matches the ABC pattern, process it just like a normal text
-              const match = possibleMessage.match(abcPattern);
-              if (match) {
-                const number = match[1];
-                const count = Number(match[2]);
-                if (!isNaN(count)) {
-                  if (number.length === 1) {
-                    addBooking("A", number, count, count);
-                    addBooking("B", number, count, count);
-                    addBooking("C", number, count, count);
-                  } else {
-                    addBooking("AB", number, count, count);
-                    addBooking("AC", number, count, count);
-                    addBooking("BC", number, count, count);
-                  }
-                  added++;
-                  handled = true;
-                }
-              }
-            }
-            // If not handled (either empty after prefix or not ABC), keep the failed line
-            if (!handled) {
-              newFailedLines.push(failedLine);
-            }
-            continue;
-          }
-          // If not a WhatsApp line, try matching the main ABC pattern
-          const match = failedLine.match(abcPattern);
-          if (match) {
-            const number = match[1];
-            const count = Number(match[2]);
-            if (!isNaN(count)) {
-              if (number.length === 1) {
-                addBooking("A", number, count, count);
-                addBooking("B", number, count, count);
-                addBooking("C", number, count, count);
-              } else {
-                addBooking("AB", number, count, count);
-                addBooking("AC", number, count, count);
-                addBooking("BC", number, count, count);
-              }
-              added++;
-              handled = true;
-            }
-          }
-          if (!handled) {
-            newFailedLines.push(failedLine);
-          }
-        }
-        if (newFailedLines.length > 0) {
-          setFailedPasteLines(newFailedLines);
-          setFailedPasteModalVisible(true);
-        }
+        setFailedPasteLines(failedLines);
+        setFailedPasteModalVisible(true);
       }
 
       if (added === 0) {
