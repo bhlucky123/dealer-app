@@ -236,6 +236,22 @@ export default function RootLayout() {
             headerShadowVisible: false,
           }} />
 
+          {/* Paid / Received drill-down from the dashboard's Payments card.
+              The screen swaps the title to "Paid Payments" / "Received
+              Payments" once it knows the direction. */}
+          <Stack.Screen name="payments/[type]" options={{
+            headerShown: true,
+            title: "Payments",
+            headerStyle: { backgroundColor: themeColors.headerBackground },
+            headerTitleStyle: {
+              color: themeColors.headerTitle,
+              fontWeight: "bold",
+              fontSize: 22,
+            },
+            headerTintColor: themeColors.headerTint,
+            headerShadowVisible: false,
+          }} />
+
           <Stack.Screen
             name="booking-details"
             options={{
