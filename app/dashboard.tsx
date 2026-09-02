@@ -1,6 +1,7 @@
 import api from "@/utils/axios";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery } from "@tanstack/react-query";
+import { router } from "expo-router";
 import { BarChart3, Calendar, PieChart, TrendingUp, Wallet, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -495,6 +496,19 @@ export default function AdminDashboard() {
     },
   });
 
+  // Paid / Received rows of the Payments card open the matching payment list.
+  // Reusing apiParams keeps the list's date range identical to the totals the
+  // card is showing.
+  const openPaymentsList = useCallback(
+    (direction: "paid" | "received") => {
+      router.push({
+        pathname: "/payments/[type]",
+        params: { type: direction, ...apiParams },
+      });
+    },
+    [apiParams]
+  );
+
   const onDateChange = useCallback(
     (event: { type: string }, selectedDate?: Date) => {
       setShowDatePicker(null);
@@ -875,23 +889,35 @@ export default function AdminDashboard() {
                   </Text>
                   <Wallet size={14} color="#047857" />
                 </View>
+                {/* Both rows drill down to the matching payment list, carrying
+                    the date range the card was calculated with. */}
                 <View className="mt-1">
-                  <View className="flex-row items-center justify-between">
+                  <TouchableOpacity
+                    className="flex-row items-center justify-between"
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    onPress={() => openPaymentsList("paid")}
+                  >
                     <Text className="text-[10px] text-emerald-600">
                       Paid:
                     </Text>
                     <Text className="text-sm font-semibold text-emerald-900">
                       {formatAmount(summary?.total_paid_amount)}
                     </Text>
-                  </View>
-                  <View className="flex-row items-center justify-between mt-1.5">
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    className="flex-row items-center justify-between mt-1.5"
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    onPress={() => openPaymentsList("received")}
+                  >
                     <Text className="text-[10px] text-emerald-600">
                       Received:
                     </Text>
                     <Text className="text-sm font-semibold text-emerald-900">
                       {formatAmount(summary?.total_received_amount)}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 </View>
               </View>
             </View>
