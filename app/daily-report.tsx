@@ -82,14 +82,20 @@ const DailyReport = () => {
 
   const { data: agents = [] } = useQuery<Agent[]>({
     queryKey: ["agents"],
-    queryFn: () => api.get("/agent/manage/").then((res) => res.data),
+    queryFn: () => api.get("/agent/manage/").then((res) => {
+      const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
+      return payload;
+    }),
     enabled: user?.user_type === "DEALER" && !cachedAgents,
     initialData: user?.user_type === "DEALER" ? cachedAgents : undefined,
   });
 
   const { data: dealers = [] } = useQuery<Agent[]>({
     queryKey: ["dealers"],
-    queryFn: () => api.get("/administrator/dealer/").then((res) => res.data),
+    queryFn: () => api.get("/administrator/dealer/").then((res) => {
+      const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
+      return payload;
+    }),
     enabled: user?.user_type === "ADMIN" && !cachedDealers,
     initialData: user?.user_type === "ADMIN" ? cachedDealers : undefined,
   });

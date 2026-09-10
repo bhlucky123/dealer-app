@@ -224,7 +224,10 @@ const LimitCountScreen = () => {
 
     const { data: dealers = [] as Dealer[] } = useQuery<Dealer[]>({
         queryKey: ["dealers"],
-        queryFn: () => api.get("/administrator/dealer/").then((res) => res.data),
+        queryFn: () => api.get("/administrator/dealer/").then((res) => {
+            const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
+            return payload;
+        }),
         enabled: user?.user_type === "ADMIN",
     });
 
