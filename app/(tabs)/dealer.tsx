@@ -3,7 +3,7 @@ import useDealer from "@/hooks/use-dealer";
 import { useAuthStore } from "@/store/auth";
 import { amountHandler } from "@/utils/amount";
 import api from "@/utils/axios";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Eye, EyeOff, MoveLeft } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
@@ -47,6 +47,15 @@ type Dealer = {
     "super_second_prize": string,
     "super_third_prize": string
 };
+
+type DealerPage = {
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: Dealer[];
+};
+
+const DEALER_PAGE_SIZE = 20;
 
 const CALC_OPERATORS = [
     { label: "+", value: "+" },
@@ -688,31 +697,59 @@ export default function DealerManagement() {
     const [showForm, setShowForm] = useState(false);
     const [editData, setEditData] = useState<Dealer | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
+    const [debouncedSearch, setDebouncedSearch] = useState("");
     const [refreshing, setRefreshing] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
+    // Debounce search input so we don't hit the API on every keystroke.
+    useEffect(() => {
+        const timeout = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 400);
+        return () => clearTimeout(timeout);
+    }, [searchQuery]);
+
     const {
-        data: dealers = [],
+        data,
         isLoading,
         isError,
         error,
         isFetching,
+        isFetchingNextPage,
+        hasNextPage,
+        fetchNextPage,
         refetch
-    } = useQuery<Dealer[]>({
-        queryKey: ["dealers"],
-        queryFn: () => api.get("/administrator/dealer/").then((res) => res.data),
+    } = useInfiniteQuery<DealerPage>({
+        queryKey: ["dealers", debouncedSearch],
+        queryFn: ({ pageParam }) =>
+            api
+                .get("/administrator/dealer/", {
+                    params: {
+                        limit: DEALER_PAGE_SIZE,
+                        offset: pageParam,
+                        search: debouncedSearch || undefined,
+                    },
+                })
+                .then((res) => res.data),
+        initialPageParam: 0,
+        getNextPageParam: (lastPage, allPages) =>
+            lastPage.next ? allPages.length * DEALER_PAGE_SIZE : undefined,
         retry: false, // Do not retry on error, only call once
     });
     const { createDealer, editDealer, deleteDealer } = useDealer();
 
-    const filteredDealers = dealers.filter(d => d.username.toLowerCase().includes(searchQuery.toLowerCase()));
+    const filteredDealers = data?.pages.flatMap((page) => page.results) ?? [];
+
+    const loadMoreDealers = () => {
+        if (hasNextPage && !isFetchingNextPage) {
+            fetchNextPage();
+        }
+    };
 
     const handleCreate = (data: any) => {
         setSubmitting(true)
         createDealer(data, {
-            onSuccess: (newDealer) => {
+            onSuccess: () => {
                 setSubmitting(false)
-                queryClient.setQueryData<any[]>(["dealers"], (old) => [newDealer, ...(old || [])]);
+                queryClient.invalidateQueries({ queryKey: ["dealers"] });
                 setShowForm(false);
             },
             onError: (error) => {
@@ -745,8 +782,16 @@ export default function DealerManagement() {
             onSuccess: (updated) => {
                 setShowForm(false);
                 setSubmitting(false)
-                queryClient.setQueryData<any[]>(["dealers"], (old) =>
-                    old?.map(d => (d.id === updated.id ? updated : d)) || []
+                queryClient.setQueriesData<{ pages: DealerPage[]; pageParams: unknown[] }>(
+                    { queryKey: ["dealers"] },
+                    (old) =>
+                        old && {
+                            ...old,
+                            pages: old.pages.map((page) => ({
+                                ...page,
+                                results: page.results.map((d) => (d.id === updated.id ? updated : d)),
+                            })),
+                        }
                 );
                 setEditData(null);
             },
@@ -882,9 +927,18 @@ export default function DealerManagement() {
                             onDelete={() => handleDelete(item.id.toString())}
                         />
                     )}
+                    onEndReached={loadMoreDealers}
+                    onEndReachedThreshold={0.5}
+                    ListFooterComponent={
+                        isFetchingNextPage ? (
+                            <View className="py-6">
+                                <ActivityIndicator size="small" color="#3B82F6" />
+                            </View>
+                        ) : null
+                    }
                     refreshControl={
                         <RefreshControl
-                            refreshing={isFetching || refreshing}
+                            refreshing={(isFetching && !isFetchingNextPage) || refreshing}
                             onRefresh={onRefresh}
                             colors={["#3B82F6"]}
                             tintColor="#3B82F6"
