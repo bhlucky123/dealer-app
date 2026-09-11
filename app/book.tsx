@@ -224,7 +224,8 @@ const BookingScreen: React.FC = () => {
           url += `?assigned_dealer__id=${encodeURIComponent(Number(selectedDealer))}`;
         }
         const res = await api.get(url);
-        return res.data;
+        const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
+        return payload;
       } catch (err: any) {
         console.log("err", err);
         return [];
@@ -237,7 +238,10 @@ const BookingScreen: React.FC = () => {
 
   const { data: dealers = [] } = useQuery<Agent[]>({
     queryKey: ["dealers"],
-    queryFn: () => api.get("/administrator/dealer/").then((res) => res.data),
+    queryFn: () => api.get("/administrator/dealer/").then((res) => {
+      const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
+      return payload;
+    }),
     enabled: user?.user_type === "ADMIN" && !cachedDealers,
     initialData: user?.user_type === "ADMIN" ? cachedDealers : undefined,
   });
@@ -359,9 +363,9 @@ const BookingScreen: React.FC = () => {
       bookingTypeOverride?: BookingType
     ) => {
       const bookingType = bookingTypeOverride || getBookingTypeByLength(number.length);
-      const price = getPriceByType(bookingType);
+      const price = Number(getPriceByType(bookingType) ?? 0);
       const commission = getCommissionByType(bookingType);
-      const amt = count * (price || 0);
+      const amt = count * price;
 
       let d_amount: number;
       if (commission > 1) {
