@@ -424,7 +424,7 @@ const Report = () => {
     text += `📌 Summary:\n\n`;
     text += `Total Sell: ${fmt(s?.total_sell)}\n`;
     text += `Total Prize: ${fmt(s?.total_price)}\n`;
-    text += `Agent Comm: ${fmt(s?.agent_comm)}\n`;
+    // text += `Agent Comm: ${fmt(s?.agent_comm)}\n`;
     text += `Today's Balance: ${fmt(s?.today_balance)}\n`;
     text += `Old Balance: ${fmt(s?.old_balance)}\n`;
     text += `Received Amount: ${fmt(s?.received_amount)}\n`;
