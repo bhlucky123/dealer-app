@@ -246,6 +246,8 @@ export default function PaymentsListScreen() {
     // change up on their own next refresh.
     queryClient.invalidateQueries({ queryKey: ["/draw-payment/admin-dealer-payments/"] });
     queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
+    queryClient.invalidateQueries({ queryKey: ["sales-report"] });
+    queryClient.invalidateQueries({ queryKey: ["/draw-payment/get-my-pending-balance/"] });
   }, [queryClient]);
 
   const updateMutation = useMutation({
