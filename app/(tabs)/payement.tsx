@@ -245,6 +245,10 @@ export default function PaymentTab() {
             onRefresh();
             setModalVisible(false);
             ToastAndroid.show("Dealer balance updated successfully", ToastAndroid.SHORT);
+            queryClient.invalidateQueries({ queryKey: ["sales-report"] });
+            queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
+            queryClient.invalidateQueries({ queryKey: ["/draw-payment/admin-dealer-payments/"] });
+            queryClient.invalidateQueries({ queryKey: ["/draw-payment/get-my-pending-balance/"] });
         },
         onError: (error: any) => {
             let msg = "Failed to update dealer balance";
@@ -283,6 +287,7 @@ export default function PaymentTab() {
             onRefresh();
             setModalVisible(false);
             ToastAndroid.show("Agent balance updated successfully", ToastAndroid.SHORT);
+            queryClient.invalidateQueries({ queryKey: ["/draw-payment/get-my-pending-balance/"] });
         },
         onError: (error: any) => {
             let msg = "Failed to update agent balance";
