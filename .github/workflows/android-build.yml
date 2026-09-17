@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build: ${{ steps.check.outputs.build }}
+      notify: ${{ steps.check.outputs.notify }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,6 +28,11 @@ jobs:
           fi
           echo "build flag: $BUILD"
           echo "build=$BUILD" >> $GITHUB_OUTPUT
+          if echo "${{ github.event.head_commit.message }}" | grep -q '\[no-notify\]'; then
+            echo "notify=false" >> $GITHUB_OUTPUT
+          else
+            echo "notify=true" >> $GITHUB_OUTPUT
+          fi
 
   build:
     runs-on: ubuntu-latest
@@ -38,6 +44,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Send Telegram build started
+        if: needs.gate.outputs.notify == 'true'
         env:
           TG_TEXT: |
             🚀 *Build Started*
@@ -93,7 +100,7 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, gate]
     if: needs.build.result == 'success'
 
     steps:
@@ -204,6 +211,7 @@ jobs:
           files: apks/*.apk
 
       - name: Send email notification
+        if: needs.gate.outputs.notify == 'true'
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -270,7 +278,7 @@ jobs:
             </div>
 
       - name: Send Telegram build complete
-        if: always() && needs.build.result == 'success'
+        if: always() && needs.build.result == 'success' && needs.gate.outputs.notify == 'true'
         env:
           TG_TEXT: |
             ✅ *Build Successful*
@@ -293,8 +301,8 @@ jobs:
 
   notify-failure:
     runs-on: ubuntu-latest
-    needs: [build, release]
-    if: always() && (needs.build.result == 'failure' || needs.release.result == 'failure')
+    needs: [build, release, gate]
+    if: always() && needs.gate.outputs.notify == 'true' && (needs.build.result == 'failure' || needs.release.result == 'failure')
 
     steps:
       - name: Fetch error details
