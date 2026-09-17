@@ -1489,7 +1489,46 @@ const BookingScreen: React.FC = () => {
         lastSubType = word && !isGroupWord(word) ? word : null;
       };
 
-      for (const origLine of lines) {
+      // Recognize multiline shorthand before the existing per-line parser.
+      // Only explicit count lines consume a run; ordinary bare numbers retain
+      // the existing inherited-count behavior.
+      const cleanLines = lines.map(line => line.replace(waPrefixRegex, "").trim());
+      const multilineEntries = new Map<number, { count: string; boxCount?: string; subType?: string }>();
+      const countLines = new Set<number>();
+      if (isDefaultDraw) {
+        for (let i = 0; i < cleanLines.length; i++) {
+          if (!/^\d{3}$/.test(cleanLines[i])) continue;
+          const start = i;
+          while (i + 1 < cleanLines.length && /^\d{3}$/.test(cleanLines[i + 1])) i++;
+          const trailing = cleanLines[i + 1] || "";
+          const dual = trailing.match(/^(\d{1,2})\s*\/\s*(\d{1,2})$/);
+          const single = trailing.match(/^\/?\s*([1-9]\d?)$/);
+          if (!dual && !single) continue;
+          for (let j = start; j <= i; j++) {
+            multilineEntries.set(j, dual
+              ? { count: dual[2], boxCount: dual[1] }
+              // A slash-only count ("/1") books BOX; a plain count books SUPER.
+              : { count: single![1], subType: trailing.startsWith("/") ? "BOX" : undefined });
+          }
+          countLines.add(i + 1);
+        }
+        // A leading dual count applies to the following bare-number run.
+        for (let i = 0; i < cleanLines.length; i++) {
+          if (countLines.has(i)) continue;
+          const dual = cleanLines[i].match(/^(\d{1,2})\s*\/\s*(\d{1,2})$/);
+          if (!dual || !/^\d{3}$/.test(cleanLines[i + 1] || "")) continue;
+          for (let j = i + 1; j < cleanLines.length && /^\d{3}$/.test(cleanLines[j]); j++) {
+            if (!multilineEntries.has(j)) {
+              multilineEntries.set(j, { count: dual[2], boxCount: dual[1] });
+            }
+          }
+          countLines.add(i);
+        }
+      }
+      let sectionSubType: string | undefined;
+
+      for (const [lineIndex, origLine] of lines.entries()) {
+        if (countLines.has(lineIndex)) continue;
         let line = origLine;
         let waPrefix = "";
 
@@ -1513,6 +1552,27 @@ const BookingScreen: React.FC = () => {
           if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
           failedLines.push(origLine);
         };
+
+        const multiline = multilineEntries.get(lineIndex);
+        if (multiline) {
+          const ok = multiline.boxCount !== undefined
+            ? pushDualBooking(line, Number(multiline.count), Number(multiline.boxCount))
+            : pushBooking(line, Number(multiline.count), multiline.subType);
+          if (ok) remember(multiline.count, multiline.subType);
+          else fail();
+          continue;
+        }
+
+        if (isDefaultDraw && /^(AB|AC|BC)$/i.test(line)) {
+          sectionSubType = line.toUpperCase();
+          continue;
+        }
+
+        // Multiplication sign and triple-digit "b" suffix are additional aliases.
+        line = line.replace(/×/g, "*");
+        if (isDefaultDraw && /^\d{3}[.\s=]+\d+\s*b$/i.test(line)) {
+          line = line.replace(/b$/i, "BOX");
+        }
 
         const tokens = tokenizeLine(line);
         if (!tokens) {
@@ -1549,8 +1609,9 @@ const BookingScreen: React.FC = () => {
 
           // "123-5", "123_5", "114;1", "123''1", "123(1)", "312.6", "1/1"
           case "NN": {
-            ok = pushBooking(nums[0], Number(nums[1]));
-            if (ok) remember(nums[1]);
+            const heading = nums[0].length === 2 ? sectionSubType : undefined;
+            ok = pushBooking(nums[0], Number(nums[1]), heading);
+            if (ok) remember(nums[1], heading);
             break;
           }
 
