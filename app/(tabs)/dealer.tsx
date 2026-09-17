@@ -34,6 +34,8 @@ type Dealer = {
     commission: number;
     single_digit_number_commission: number;
     cap_amount: number;
+    whatsapp_numbers?: string[];
+    whatsapp_result_subscribed?: boolean;
 
     is_prize_set?: boolean;
     "box_direct": string,
@@ -117,6 +119,8 @@ const DealerForm = ({
         commission: defaultValues.commission?.toString() || "",
         single_digit_number_commission: defaultValues.single_digit_number_commission?.toString() || "",
         cap_amount: defaultValues.cap_amount?.toString() || "",
+        whatsapp_numbers: (defaultValues.whatsapp_numbers || []).join(", "),
+        whatsapp_result_subscribed: defaultValues.whatsapp_result_subscribed ?? false,
         is_prize_set: defaultValues?.is_prize_set || false,
         "box_direct": defaultValues?.box_direct || "",
         "box_indirect": defaultValues?.box_indirect || "",
@@ -247,6 +251,7 @@ const DealerForm = ({
             commission: Number(form.commission),
             single_digit_number_commission: Number(form.single_digit_number_commission),
             cap_amount: Number(form.cap_amount),
+            whatsapp_numbers: form.whatsapp_numbers.split(",").map((n) => n.trim()).filter(Boolean),
         };
         console.log("preparedData", preparedData)
 
@@ -275,6 +280,7 @@ const DealerForm = ({
         { key: "commission", label: "Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💰" },
         { key: "single_digit_number_commission", label: "Single Digit Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🎯" },
         { key: "cap_amount", label: "Cap Amount", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💲" },
+        { key: "whatsapp_numbers", label: "WhatsApp Numbers (comma separated)", keyboardType: "phone-pad" as const, secureTextEntry: false, optional: true, icon: "phone" },
     ];
 
     return (
@@ -536,6 +542,13 @@ const DealerForm = ({
                             </View>
                         );
                     })}
+
+                    <View className="mb-8">
+                        <Text className="text-gray-700 font-semibold mb-3 ml-1">WhatsApp Result Notifications</Text>
+                        <TouchableOpacity onPress={() => handleChange('whatsapp_result_subscribed', !form.whatsapp_result_subscribed)} className={`rounded-xl px-4 py-4 ${form.whatsapp_result_subscribed ? 'bg-green-100' : 'bg-gray-100'}`}>
+                            <Text className="text-gray-800 font-medium">{form.whatsapp_result_subscribed ? 'Subscribed' : 'Not subscribed'} — tap to change</Text>
+                        </TouchableOpacity>
+                    </View>
 
                     {/* Status Toggle */}
                     <View className="mb-8">

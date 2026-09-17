@@ -10,6 +10,8 @@ type Dealer = {
   commission: number;
   single_digit_number_commission: number;
   cap_amount: number;
+  whatsapp_numbers?: string[];
+  whatsapp_result_subscribed?: boolean;
 };
 
 type CreateDealerParams = {
@@ -21,6 +23,8 @@ type CreateDealerParams = {
   commission: number;
   single_digit_number_commission: number;
   cap_amount: number;
+  whatsapp_numbers?: string[];
+  whatsapp_result_subscribed?: boolean;
 };
 
 type EditDealerParams = Partial<CreateDealerParams> & { id: string };
