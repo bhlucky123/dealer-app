@@ -4,15 +4,16 @@ import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pre
 type Item = Record<string, any>;
 type Props = {
   data: Item[]; labelField: string; valueField: string; value: any;
-  onChange: (item: Item) => void; placeholder?: string; loading?: boolean;
+  onChange: (item: any) => void; placeholder?: string; loading?: boolean;
   disabled?: boolean; style?: StyleProp<ViewStyle>;
   selectedTextStyle?: StyleProp<TextStyle>; itemTextStyle?: StyleProp<TextStyle>;
+  placeholderStyle?: StyleProp<TextStyle>;
   containerStyle?: StyleProp<ViewStyle>; renderRightIcon?: () => React.ReactNode;
   search?: boolean; searchPlaceholder?: string; maxHeight?: number;
   inputSearchStyle?: StyleProp<TextStyle>;
 };
 
-export function Dropdown({ data, labelField, valueField, value, onChange, placeholder = "Select", loading, disabled, style, selectedTextStyle, itemTextStyle }: Props) {
+export function Dropdown({ data, labelField, valueField, value, onChange, placeholder = "Select", loading, disabled, style, selectedTextStyle, placeholderStyle, itemTextStyle, inputSearchStyle }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const selected = data.find(item => String(item[valueField]) === String(value));
@@ -21,13 +22,13 @@ export function Dropdown({ data, labelField, valueField, value, onChange, placeh
   const choose = (item: Item) => { onChange(item); close(); };
   return <>
     <Pressable accessibilityRole="button" accessibilityLabel={placeholder} disabled={disabled} onPress={() => setOpen(true)} style={[styles.trigger, style]}>
-      <Text style={[styles.text, selectedTextStyle]} numberOfLines={1}>{selected?.[labelField] ?? placeholder}</Text><Text>⌄</Text>
+      <Text style={[styles.text, selected ? selectedTextStyle : placeholderStyle]} numberOfLines={1}>{selected?.[labelField] ?? placeholder}</Text><Text>⌄</Text>
     </Pressable>
     <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
         <View accessibilityViewIsModal style={styles.panel}>
           <View style={styles.row}><Text style={styles.title}>{placeholder}</Text><Pressable accessibilityRole="button" onPress={close} style={styles.action}><Text>Close</Text></Pressable></View>
-          <TextInput accessibilityLabel="Search options" placeholder="Search…" value={search} onChangeText={setSearch} autoCorrect={false} style={styles.search} />
+          <TextInput accessibilityLabel="Search options" placeholder="Search…" value={search} onChangeText={setSearch} autoCorrect={false} style={[styles.search, inputSearchStyle]} />
           <Pressable accessibilityRole="button" onPress={() => choose({ [valueField]: data.some(item => item[valueField] === null) ? null : "", [labelField]: "" })} style={styles.action}><Text>Clear selection</Text></Pressable>
           {loading ? <ActivityIndicator accessibilityLabel="Loading options" style={styles.action} /> : <FlatList
             data={rows} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" initialNumToRender={20} windowSize={7}
