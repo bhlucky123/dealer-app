@@ -3,7 +3,7 @@ import axios from "axios";
 import { config } from "@/utils/config";
 import { useAuthStore } from "@/store/auth";
 import { useQuery } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 
 type ServerUserType = "ADMIN" | "DEALER" | "AGENT";
@@ -264,13 +264,11 @@ export const useCalculator = () => {
       }
 
       // ADMIN — stash the pre-login token and go to the username/password screen.
-      // Use router.replace (same imperative API the rest of the app relies on)
-      // so the calculator isn't left underneath to be navigated back to.
       setEquation("");
       setEquationUserType(null);
       setPinInput("");
       setPreLogin(data.token, data.user_type);
-      router.replace("/login");
+      router.push("/login");
     },
     [setPreLogin, setSessionFromV2]
   );
@@ -362,6 +360,11 @@ export const useCalculator = () => {
       setPinInput("");
     }
   }, [display, equation, pinInput]);
+
+  useFocusEffect(useCallback(() => {
+    handleClear();
+    useAuthStore.getState().clearPreLogin();
+  }, [handleClear]));
 
   return {
     display,

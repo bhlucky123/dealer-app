@@ -1118,6 +1118,11 @@ export default function MoreTab() {
         >
           {renderMyBalanceSection()}
 
+          <TouchableOpacity onPress={() => router.push("/app-updates" as any)} style={{ padding: 18, backgroundColor: "white", marginBottom: 12, borderRadius: 12 }}><Text>Check for updates</Text></TouchableOpacity>
+          {user?.user_type === "ADMIN" && !user.superuser && <View style={{ padding: 18, gap: 16, backgroundColor: "white", marginBottom: 12, borderRadius: 12 }}>
+            <TouchableOpacity onPress={() => router.push("/whatsapp-settings" as any)}><Text>Staff WhatsApp number</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push("/whatsapp-rejections" as any)}><Text>Unbooked WhatsApp numbers</Text></TouchableOpacity>
+          </View>}
           {user?.user_type === "ADMIN" && renderAdminTabs()}
 
           {user?.user_type === "ADMIN" ? (

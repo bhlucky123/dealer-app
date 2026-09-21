@@ -1,3 +1,4 @@
+import { changeDealerSelection } from "@/utils/account-selection";
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import { amountHandler } from "@/utils/amount";
@@ -17,7 +18,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Dropdown } from "react-native-element-dropdown";
+import { Dropdown } from "@/components/searchable-selector";
 import { Agent } from "./(tabs)/agent";
 
 // --- DATE HELPERS (as in sales-report.tsx) ---
@@ -80,7 +81,7 @@ const DailyReport = () => {
     enabled: !!selectedDraw?.id,
   });
 
-  const { data: agents = [] } = useQuery<Agent[]>({
+  const { data: agents = [], isFetching: selectorAgentsLoading } = useQuery<Agent[]>({
     queryKey: ["agents"],
     queryFn: () => api.get("/agent/manage/").then((res) => {
       const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
@@ -90,7 +91,7 @@ const DailyReport = () => {
     initialData: user?.user_type === "DEALER" ? cachedAgents : undefined,
   });
 
-  const { data: dealers = [] } = useQuery<Agent[]>({
+  const { data: dealers = [], isFetching: selectorDealersLoading } = useQuery<Agent[]>({
     queryKey: ["dealers"],
     queryFn: () => api.get("/administrator/dealer/").then((res) => {
       const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
@@ -266,6 +267,7 @@ const DailyReport = () => {
           {user?.user_type === "ADMIN" && (
             <View className="mb-2">
               <Dropdown
+                loading={selectorDealersLoading}
                 data={dealers.map((dealer) => ({
                   label: dealer.username,
                   value: dealer.id,
@@ -274,7 +276,7 @@ const DailyReport = () => {
                 valueField="value"
                 value={selectedDealer}
                 onChange={item => {
-                  setSelectedDealer(item.value)
+                  changeDealerSelection(item.value, setSelectedDealer, setSelectedAgent)
                 }}
                 placeholder="Select Dealer"
                 style={{
@@ -296,7 +298,7 @@ const DailyReport = () => {
                 renderRightIcon={() =>
                   selectedDealer ? (
                     <TouchableOpacity
-                      onPress={() => setSelectedDealer("")}
+                      onPress={() => changeDealerSelection("", setSelectedDealer, setSelectedAgent)}
                       style={{
                         position: "absolute",
                         right: 10,
@@ -319,6 +321,7 @@ const DailyReport = () => {
           {user?.user_type === "DEALER" && (
             <View className="mb-2">
               <Dropdown
+                loading={selectorAgentsLoading}
                 data={agents.map((agent) => ({
                   label: agent.username,
                   value: agent.id,

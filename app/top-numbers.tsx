@@ -18,7 +18,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Dropdown } from "react-native-element-dropdown";
+import { Dropdown } from "@/components/searchable-selector";
 
 type InsightItem = {
   number: string;
@@ -105,7 +105,7 @@ export default function TopNumbers() {
 
 
   // Fetch dealers for filters / exclusion list
-  const { data: dealers = [] as Dealer[] } = useQuery<Dealer[]>({
+  const { data: dealers = [] as Dealer[], isFetching: selectorDealersLoading } = useQuery<Dealer[]>({
     queryKey: ["dealers"],
     queryFn: () => api.get("/administrator/dealer/").then((res) => {
       const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
@@ -667,6 +667,7 @@ export default function TopNumbers() {
                 Dealer
               </Text>
               <Dropdown
+                loading={selectorDealersLoading}
                 data={dealers.map((d) => ({
                   label: d.username,
                   value: d.id,

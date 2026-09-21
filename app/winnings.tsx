@@ -1,3 +1,4 @@
+import { changeDealerSelection } from "@/utils/account-selection";
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
@@ -14,7 +15,7 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
-import { Dropdown } from "react-native-element-dropdown";
+import { Dropdown } from "@/components/searchable-selector";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Agent } from "./(tabs)/agent";
 
@@ -365,7 +366,8 @@ const WinnersReportScreen = () => {
                     {/* Show agent/dealer filter only for DEALER or ADMIN */}
                     {user?.user_type === "DEALER" && (
                         <Dropdown
-                            data={agents.map((agent) => ({
+                            loading={isAgentLoading}
+                data={agents.map((agent) => ({
                                 label: agent.username,
                                 value: agent.id,
                             }))}
@@ -414,14 +416,15 @@ const WinnersReportScreen = () => {
                     )}
                     {user?.user_type === "ADMIN" && (
                         <Dropdown
-                            data={dealers.map((dealer) => ({
+                            loading={isDealerLoading}
+                data={dealers.map((dealer) => ({
                                 label: dealer.username,
                                 value: dealer.id,
                             }))}
                             labelField="label"
                             valueField="value"
                             value={selectedDealer}
-                            onChange={item => setSelectedDealer(item.value)}
+                            onChange={item => changeDealerSelection(item.value, setSelectedDealer, setSelectedAgent)}
                             placeholder="Select Dealer"
                             style={{
                                 borderColor: "#9ca3af",
@@ -442,7 +445,7 @@ const WinnersReportScreen = () => {
                             renderRightIcon={() =>
                                 selectedDealer ? (
                                     <TouchableOpacity
-                                        onPress={() => setSelectedDealer("")}
+                                        onPress={() => changeDealerSelection("", setSelectedDealer, setSelectedAgent)}
                                         style={{
                                             position: "absolute",
                                             right: 10,

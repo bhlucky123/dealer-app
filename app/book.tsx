@@ -1,3 +1,4 @@
+import { changeDealerSelection } from "@/utils/account-selection";
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
@@ -20,7 +21,7 @@ import {
   View
 } from "react-native";
 import { ALERT_TYPE, Dialog } from "react-native-alert-notification";
-import { Dropdown } from 'react-native-element-dropdown';
+import { Dropdown } from '@/components/searchable-selector';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Agent } from "./(tabs)/agent";
 
@@ -200,7 +201,7 @@ const BookingScreen: React.FC = () => {
   const cachedAgents = queryClient.getQueryData<Agent[]>(["agents"]);
   const cachedDealers = queryClient.getQueryData<Agent[]>(["dealers"]);
 
-  // const { data: agents = [] } = useQuery<Agent[]>({
+  // const { data: agents = [], isFetching: selectorAgentsLoading } = useQuery<Agent[]>({
   //   queryKey: ["agents"],
   //   queryFn: () => api.get("/agent/manage/").then((res) => res.data),
   //   enabled: user?.user_type === "DEALER" && !cachedAgents,
@@ -236,7 +237,7 @@ const BookingScreen: React.FC = () => {
 
   });
 
-  const { data: dealers = [] } = useQuery<Agent[]>({
+  const { data: dealers = [], isFetching: selectorDealersLoading } = useQuery<Agent[]>({
     queryKey: ["dealers"],
     queryFn: () => api.get("/administrator/dealer/").then((res) => {
       const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
@@ -1798,7 +1799,8 @@ const BookingScreen: React.FC = () => {
                 user?.user_type === "ADMIN" && (
                   <View className="flex-1">
                     <Dropdown
-                      data={dealers.map((dealer) => ({
+                      loading={selectorDealersLoading}
+                data={dealers.map((dealer) => ({
                         label: dealer.username,
                         value: dealer.id,
                       }))}
@@ -1806,8 +1808,7 @@ const BookingScreen: React.FC = () => {
                       valueField="value"
                       value={selectedDealer}
                       onChange={item => {
-                        setSelectedDealer(item.value);
-                        setSelectedAgent("")
+                        changeDealerSelection(item.value, setSelectedDealer, setSelectedAgent);
                       }}
                       placeholder="Select Dealer"
                       search
@@ -1841,7 +1842,7 @@ const BookingScreen: React.FC = () => {
                         selectedDealer ? (
                           <TouchableOpacity
                             onPress={() => {
-                              setSelectedDealer("");
+                              changeDealerSelection("", setSelectedDealer, setSelectedAgent);
                               setSelectedAgent("")
                             }}
                             style={{
@@ -1866,7 +1867,8 @@ const BookingScreen: React.FC = () => {
               {(selectedDealer || user?.user_type === "ADMIN" || user?.user_type === "DEALER") && (
                 <View className="flex-1">
                   <Dropdown
-                    data={agents.map((agent) => ({
+                    loading={isAgentFetching}
+                data={agents.map((agent) => ({
                       label: agent.username,
                       value: agent.id,
                     }))}

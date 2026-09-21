@@ -1,3 +1,4 @@
+import { WhatsAppContacts, WhatsAppContact, initialContacts, contactErrors, normalizePhone } from "@/components/whatsapp-contacts";
 import { PrizeConfigBlock } from "@/components/prize-config";
 import useAgent from "@/hooks/use-agent";
 import { useAuthStore } from "@/store/auth";
@@ -36,7 +37,7 @@ function parseApiErrors(errorObj: any): Record<string, string> {
   const result: Record<string, string> = {};
   for (const key in errorObj) {
     if (Array.isArray(errorObj[key])) {
-      result[key] = errorObj[key].join(" ");
+      result[key] = errorObj[key].some((item: any) => typeof item === "object") ? JSON.stringify(errorObj[key]) : errorObj[key].join(" ");
     } else if (typeof errorObj[key] === "string") {
       result[key] = errorObj[key];
     } else if (typeof errorObj[key] === "object") {
@@ -50,6 +51,7 @@ function parseApiErrors(errorObj: any): Record<string, string> {
 // Agent type
 export type Agent = {
   id: number;
+  whatsapp_contacts?: WhatsAppContact[];
   password: string;
   last_login: string | null;
   is_superuser: boolean;
@@ -105,6 +107,7 @@ const AgentForm = ({
     }
   }
 
+  const [contacts, setContacts] = useState<WhatsAppContact[]>(initialContacts(defaultValues));
   const [form, setForm] = useState<any>({
     username: defaultValues.username || "",
     password: "",
@@ -182,6 +185,7 @@ const AgentForm = ({
   };
 
   const validate = () => {
+    if (contactErrors(contacts).some(Boolean)) return false;
     const newErrors: Record<string, string> = {};
     if (!form.assigned_dealer || !form.assigned_dealer.trim()) {
       newErrors.assigned_dealer = "Dealer ID is required";
@@ -247,6 +251,7 @@ const AgentForm = ({
     const calculate_str = `${form.calculate_operator}${form.calculate_second_number}`;
 
     const preparedData: any = {
+      whatsapp_contacts: contacts.map(row => ({ ...row, phone_number: normalizePhone(row.phone_number) })),
       username: form.username,
       is_active: form.is_active,
       calculate_str,
@@ -409,6 +414,7 @@ const AgentForm = ({
             </View>
           </View>
 
+          <WhatsAppContacts value={contacts} onChange={rows => { setContacts(rows); setErrors(previous => ({ ...previous, whatsapp_contacts: "" })); }} serverErrors={errors.whatsapp_contacts} />
           {inputFields.map(({ key, label, keyboardType, secureTextEntry, optional, icon }) => {
             const isFocused = focusedField === key;
             const hasError = !!errors[key];

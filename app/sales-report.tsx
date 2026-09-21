@@ -21,7 +21,7 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
-import { Dropdown } from "react-native-element-dropdown";
+import { Dropdown } from "@/components/searchable-selector";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Agent } from "./(tabs)/agent";
 
@@ -166,7 +166,7 @@ const SalesReportScreen = () => {
     const cachedAgents = queryClient.getQueryData<Agent[]>(["agents"]);
     const cachedDealers = queryClient.getQueryData<Agent[]>(["dealers"]);
 
-    const { data: agents = [] } = useQuery<Agent[]>({
+    const { data: agents = [], isFetching: selectorAgentsLoading } = useQuery<Agent[]>({
         queryKey: ["agents"],
         queryFn: () => api.get("/agent/manage/").then((res) => {
             const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
@@ -176,7 +176,7 @@ const SalesReportScreen = () => {
         initialData: user?.user_type === "DEALER" ? cachedAgents : undefined,
     });
 
-    const { data: dealers = [] } = useQuery<Agent[]>({
+    const { data: dealers = [], isFetching: selectorDealersLoading } = useQuery<Agent[]>({
         queryKey: ["dealers"],
         queryFn: () => api.get("/administrator/dealer/").then((res) => {
             const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
@@ -625,7 +625,8 @@ const SalesReportScreen = () => {
                     {user?.user_type === "ADMIN" && (
                         <View className="mb-2">
                             <Dropdown
-                                data={dealers.map((dealer) => ({
+                                loading={selectorDealersLoading}
+                data={dealers.map((dealer) => ({
                                     label: dealer.username,
                                     value: dealer.id,
                                 }))}
@@ -678,7 +679,8 @@ const SalesReportScreen = () => {
                     {user?.user_type === "DEALER" && (
                         <View className="mb-2">
                             <Dropdown
-                                data={agents.map((agent) => ({
+                                loading={selectorAgentsLoading}
+                data={agents.map((agent) => ({
                                     label: agent.username,
                                     value: agent.id,
                                 }))}

@@ -1,5 +1,6 @@
 import { useAuthStore } from "@/store/auth";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
 import {
   ActivityIndicator,
   Keyboard,
@@ -18,6 +19,11 @@ export default function LoginScreen() {
   const [errorMsg, setErrorMsg] = useState("");
 
   const { login, loading, error, preLoginUserType } = useAuthStore();
+  useFocusEffect(useCallback(() => () => {
+    setUsername("");
+    setPassword("");
+    useAuthStore.getState().clearPreLogin();
+  }, []));
 
   const handleLogin = () => {
     setErrorMsg("");
@@ -37,6 +43,9 @@ export default function LoginScreen() {
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View className="flex-1 bg-gradient-to-b from-blue-900 to-blue-600 px-6 py-8 items-center justify-center">
           <View className="w-full max-w-sm bg-white/90 rounded-2xl shadow-lg p-8 space-y-6">
+            <TouchableOpacity accessibilityRole="button" onPress={() => router.canGoBack() ? router.back() : router.replace("/")} className="py-3">
+              <Text className="text-blue-700">← Back to calculator</Text>
+            </TouchableOpacity>
             <View className="items-center mb-2">
               <Text className="text-blue-900 text-3xl font-extrabold tracking-wide mb-1 capitalize">
                 {preLoginUserType ? `${preLoginUserType.toLowerCase()} Login` : "Login"}

@@ -19,7 +19,7 @@ import {
     View,
 } from "react-native";
 import { ALERT_TYPE, Dialog } from "react-native-alert-notification";
-import { Dropdown } from "react-native-element-dropdown";
+import { Dropdown } from "@/components/searchable-selector";
 
 type Dealer = { id: number; username: string };
 
@@ -222,7 +222,7 @@ const LimitCountScreen = () => {
     const [filterDealerId, setFilterDealerId] = useState<number | "">("");
     const [selectedDealerForCreate, setSelectedDealerForCreate] = useState<number | null>(null);
 
-    const { data: dealers = [] as Dealer[] } = useQuery<Dealer[]>({
+    const { data: dealers = [] as Dealer[], isFetching: selectorDealersLoading } = useQuery<Dealer[]>({
         queryKey: ["dealers"],
         queryFn: () => api.get("/administrator/dealer/").then((res) => {
             const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
@@ -621,7 +621,8 @@ const LimitCountScreen = () => {
             {/* Dealer (admin only) */}
             {isAdmin && (
                 <Dropdown
-                    data={[{ label: "Global (all dealers)", value: null }, ...dealers.map((d) => ({ label: d.username, value: d.id }))]}
+                    loading={selectorDealersLoading}
+                data={[{ label: "Global (all dealers)", value: null }, ...dealers.map((d) => ({ label: d.username, value: d.id }))]}
                     labelField="label"
                     valueField="value"
                     value={selectedDealerForCreate}
@@ -917,7 +918,8 @@ const LimitCountScreen = () => {
 
                                     {isAdmin && (
                                         <Dropdown
-                                            data={[{ label: "All dealers", value: "" }, ...dealers.map((d) => ({ label: d.username, value: d.id }))]}
+                                            loading={selectorDealersLoading}
+                data={[{ label: "All dealers", value: "" }, ...dealers.map((d) => ({ label: d.username, value: d.id }))]}
                                             labelField="label"
                                             valueField="value"
                                             value={filterDealerId}

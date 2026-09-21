@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: android-release-dealer-app
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -77,10 +81,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Assign increasing native version
+        run: node scripts/prepare-release.cjs version
+
       - name: Expo prebuild
         run: npx expo prebuild --platform android --clean
 
+      - name: Restore existing signing identity
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_DISTRIBUTED_CERT_SHA256: ${{ secrets.ANDROID_DISTRIBUTED_CERT_SHA256 }}
+        run: node scripts/prepare-release.cjs signing
+
       - name: Build Release APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         working-directory: android
         run: |
           chmod +x gradlew
@@ -90,6 +110,25 @@ jobs:
         run: |
           APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
           cp "$APK_PATH" "calculator-app.apk"
+
+      - name: Verify certificate against distributed APK
+        env:
+          EXPECTED_CERT: ${{ secrets.ANDROID_DISTRIBUTED_CERT_SHA256 }}
+        run: |
+          SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+          ACTUAL_CERT=$("$SIGNER" verify --print-certs "calculator-app.apk" | sed -n 's/Signer #1 certificate SHA-256 digest: //p')
+          test "${ACTUAL_CERT,,}" = "${EXPECTED_CERT,,}"
+
+      - name: Publish verified APK on backend
+        if: vars.APK_PUBLISH_ENABLED == 'true'
+        env:
+          RELEASE_SSH_KEY: ${{ secrets.RELEASE_SSH_KEY }}
+          RELEASE_KNOWN_HOSTS: ${{ secrets.RELEASE_KNOWN_HOSTS }}
+          RELEASE_HOST: ${{ secrets.RELEASE_HOST }}
+          ANDROID_DISTRIBUTED_CERT_SHA256: ${{ secrets.ANDROID_DISTRIBUTED_CERT_SHA256 }}
+          APK_PACKAGE: com.luckybh.calculator
+          APK_FILE: calculator-app.apk
+        run: bash scripts/publish-apk.sh
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

@@ -1,3 +1,4 @@
+import { WhatsAppContacts, WhatsAppContact, initialContacts, contactErrors, normalizePhone } from "@/components/whatsapp-contacts";
 import { PrizeConfigBlock } from "@/components/prize-config";
 import useDealer from "@/hooks/use-dealer";
 import { useAuthStore } from "@/store/auth";
@@ -35,6 +36,7 @@ type Dealer = {
     single_digit_number_commission: number;
     cap_amount: number;
     whatsapp_numbers?: string[];
+  whatsapp_contacts?: WhatsAppContact[];
     whatsapp_result_subscribed?: boolean;
 
     is_prize_set?: boolean;
@@ -85,7 +87,7 @@ const DealerForm = ({
     onCancel,
     submitting = false
 }: {
-    onSubmit: (data: any) => void;
+    onSubmit: (data: any, contactErrors: (errors: any) => void) => void;
     defaultValues?: Partial<Dealer>;
     onCancel: () => void;
     submitting?: boolean
@@ -107,7 +109,9 @@ const DealerForm = ({
         }
     }
 
-    const [form, setForm] = useState({
+    const [contactApiErrors, setContactApiErrors] = useState<any>(null);
+    const [contacts, setContacts] = useState<WhatsAppContact[]>(initialContacts(defaultValues));
+  const [form, setForm] = useState({
         username: defaultValues.username || "",
         // password: "", // Always start with an empty password for security
         is_active: defaultValues.is_active ?? true,
@@ -119,8 +123,6 @@ const DealerForm = ({
         commission: defaultValues.commission?.toString() || "",
         single_digit_number_commission: defaultValues.single_digit_number_commission?.toString() || "",
         cap_amount: defaultValues.cap_amount?.toString() || "",
-        whatsapp_numbers: (defaultValues.whatsapp_numbers || []).join(", "),
-        whatsapp_result_subscribed: defaultValues.whatsapp_result_subscribed ?? false,
         is_prize_set: defaultValues?.is_prize_set || false,
         "box_direct": defaultValues?.box_direct || "",
         "box_indirect": defaultValues?.box_indirect || "",
@@ -180,6 +182,7 @@ const DealerForm = ({
     }, [newUserIdData, skipCalculateIdFetch]);
 
     const validate = () => {
+    if (contactErrors(contacts).some(Boolean)) return false;
         const newErrors: Record<string, string> = {};
         if (!form.username.trim()) {
             newErrors.username = "Username is required";
@@ -246,12 +249,12 @@ const DealerForm = ({
 
         const preparedData: Partial<Dealer> = {
             ...form,
+            whatsapp_contacts: contacts.map(row => ({ ...row, phone_number: normalizePhone(row.phone_number) })),
             calculate_str: str,
             secret_pin: Number(form.secret_pin),
             commission: Number(form.commission),
             single_digit_number_commission: Number(form.single_digit_number_commission),
             cap_amount: Number(form.cap_amount),
-            whatsapp_numbers: form.whatsapp_numbers.split(",").map((n) => n.trim()).filter(Boolean),
         };
         console.log("preparedData", preparedData)
 
@@ -268,7 +271,7 @@ const DealerForm = ({
         delete (preparedData as any).calculate_operator;
         delete (preparedData as any).calculate_second_number;
 
-        onSubmit(preparedData);
+        onSubmit(preparedData, setContactApiErrors);
     };
 
     // Setup input fields except calculate_str; calculate_str field will be rendered custom below.
@@ -543,12 +546,7 @@ const DealerForm = ({
                         );
                     })}
 
-                    <View className="mb-8">
-                        <Text className="text-gray-700 font-semibold mb-3 ml-1">WhatsApp Result Notifications</Text>
-                        <TouchableOpacity onPress={() => handleChange('whatsapp_result_subscribed', !form.whatsapp_result_subscribed)} className={`rounded-xl px-4 py-4 ${form.whatsapp_result_subscribed ? 'bg-green-100' : 'bg-gray-100'}`}>
-                            <Text className="text-gray-800 font-medium">{form.whatsapp_result_subscribed ? 'Subscribed' : 'Not subscribed'} — tap to change</Text>
-                        </TouchableOpacity>
-                    </View>
+                    <WhatsAppContacts value={contacts} onChange={rows => { setContacts(rows); setContactApiErrors(null); }} serverErrors={contactApiErrors} />
 
                     {/* Status Toggle */}
                     <View className="mb-8">
@@ -757,7 +755,7 @@ export default function DealerManagement() {
         }
     };
 
-    const handleCreate = (data: any) => {
+    const handleCreate = (data: any, setContactErrors: (errors: any) => void) => {
         setSubmitting(true)
         createDealer(data, {
             onSuccess: () => {
@@ -789,7 +787,7 @@ export default function DealerManagement() {
         });
     };
 
-    const handleEdit = (data: any) => {
+    const handleEdit = (data: any, setContactErrors: (errors: any) => void) => {
         setSubmitting(true);
         editDealer({ ...data, id: editData?.id }, {
             onSuccess: (updated) => {
@@ -810,6 +808,8 @@ export default function DealerManagement() {
             },
             onError: (err) => {
                 setSubmitting(false);
+                const contactErrors = (err as any)?.response?.data?.whatsapp_contacts ?? (err as any)?.message?.whatsapp_contacts;
+                if (contactErrors) { setContactErrors(contactErrors); return; }
                 let errorMsg = "Failed to update dealer.";
 
                 if (err?.message) {

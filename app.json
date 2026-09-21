@@ -20,7 +20,8 @@
       "expo-router",
       "expo-splash-screen",
       "expo-web-browser",
-      "react-native-edge-to-edge"
+      "react-native-edge-to-edge",
+      "./plugins/with-apk-updates"
     ],
     "experiments": {
       "typedRoutes": true

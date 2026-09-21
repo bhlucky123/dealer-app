@@ -27,6 +27,7 @@ interface AuthState {
   logout: () => void;
   setUser: (user: User | null) => void;
   setPreLogin: (token: string, userType: UserType) => void;
+  clearPreLogin: () => void;
   application_status: boolean;
   setApplicationStatus: (status: boolean) => void;
   hasFeature: (codename: string) => boolean;
@@ -49,6 +50,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
     application_status: true,
 
     setPreLogin: (token, userType) => set({ preLoginToken: token, preLoginUserType: userType }),
+    clearPreLogin: () => set({ preLoginToken: null, preLoginUserType: null, error: null, loading: false }),
 
     setSessionFromV2: (data, userType) => {
       queryClient.clear();
@@ -65,7 +67,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
         preLoginToken: null,
         preLoginUserType: null,
       });
-      router.push("/(tabs)");
+      router.dismissAll();
+      router.replace("/(tabs)");
     },
 
     login: async (username, password) => {
@@ -94,6 +97,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
           }),
         });
 
+        if (get().preLoginToken !== preLoginToken) return;
         if (!response.ok) {
           let errorMsg = `Login failed: ${response.status}`;
           try {
@@ -139,6 +143,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         }
 
         const data = await response.json();
+        if (get().preLoginToken !== preLoginToken) return;
         queryClient.clear();
         set({
           user: {
@@ -153,8 +158,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
           preLoginToken: null,
           preLoginUserType: null,
         });
-        router.push("/(tabs)");
+        router.dismissAll();
+        router.replace("/(tabs)");
       } catch (err: any) {
+        if (get().preLoginToken !== preLoginToken) return;
         console.log("err", err);
         set({ error: err.message || "Login failed", loading: false });
       }
