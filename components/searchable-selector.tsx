@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react-native";
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleProp, StyleSheet, Text, TextInput, TextStyle, View, ViewStyle } from "react-native";
 
 type Item = Record<string, any>;
@@ -22,7 +23,10 @@ export function Dropdown({ data, labelField, valueField, value, onChange, placeh
   const choose = (item: Item) => { onChange(item); close(); };
   return <>
     <Pressable accessibilityRole="button" accessibilityLabel={placeholder} disabled={disabled} onPress={() => setOpen(true)} style={[styles.trigger, style]}>
-      <Text style={[styles.text, selected ? selectedTextStyle : placeholderStyle]} numberOfLines={1}>{selected?.[labelField] ?? placeholder}</Text><Text>⌄</Text>
+      <Text style={[styles.text, selected ? selectedTextStyle : placeholderStyle]} numberOfLines={1}>{selected?.[labelField] ?? placeholder}</Text>
+      <View style={styles.chevron} pointerEvents="none">
+        <ChevronDown size={18} color="#64748b" strokeWidth={2.5} />
+      </View>
     </Pressable>
     <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
@@ -43,7 +47,8 @@ export function Dropdown({ data, labelField, valueField, value, onChange, placeh
 }
 
 const styles = StyleSheet.create({
-  trigger: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 12, backgroundColor: "white" },
+  trigger: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 12, backgroundColor: "white" },
+  chevron: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "#f1f5f9" },
   text: { flex: 1, color: "#111827" }, overlay: { flex: 1, backgroundColor: "#0008", justifyContent: "center", padding: 20 },
   panel: { height: "80%", maxHeight: 600, backgroundColor: "white", borderRadius: 16, padding: 12 },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, title: { fontWeight: "600", fontSize: 18, flex: 1 },
