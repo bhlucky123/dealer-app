@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 concurrency:
@@ -42,6 +42,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: gate
     if: needs.gate.outputs.build == 'true'
+    env:
+      EXPO_PUBLIC_API_BASE_URL: ${{ github.ref_name == 'dev' && 'https://api-production-e335.up.railway.app' || 'https://alfarah.in' }}
 
     steps:
       - name: Checkout repository
@@ -79,7 +81,7 @@ jobs:
           java-version: 17
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
       - name: Assign increasing native version
         run: node scripts/prepare-release.cjs version
@@ -250,7 +252,7 @@ jobs:
           files: apks/*.apk
 
       - name: Send email notification
-        if: needs.gate.outputs.notify == 'true'
+        if: github.ref_name == 'main' && needs.gate.outputs.notify == 'true'
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
