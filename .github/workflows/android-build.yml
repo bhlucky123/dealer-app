@@ -44,10 +44,15 @@ jobs:
     if: needs.gate.outputs.build == 'true'
     env:
       EXPO_PUBLIC_API_BASE_URL: ${{ github.ref_name == 'dev' && 'https://api-production-e335.up.railway.app' || 'https://alfarah.in' }}
+      HAS_PERSISTENT_SIGNING: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' && secrets.ANDROID_DISTRIBUTED_CERT_SHA256 != '' && 'true' || 'false' }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Use default signing when persistent signing is unavailable
+        if: env.HAS_PERSISTENT_SIGNING != 'true'
+        run: echo "Persistent signing credentials are not fully configured; using the existing default Android signing configuration."
 
       - name: Send Telegram build started
         if: needs.gate.outputs.notify == 'true'
@@ -90,6 +95,7 @@ jobs:
         run: npx expo prebuild --platform android --clean
 
       - name: Restore existing signing identity
+        if: env.HAS_PERSISTENT_SIGNING == 'true'
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -114,6 +120,7 @@ jobs:
           cp "$APK_PATH" "calculator-app.apk"
 
       - name: Verify certificate against distributed APK
+        if: env.HAS_PERSISTENT_SIGNING == 'true'
         env:
           EXPECTED_CERT: ${{ secrets.ANDROID_DISTRIBUTED_CERT_SHA256 }}
         run: |
@@ -122,7 +129,7 @@ jobs:
           test "${ACTUAL_CERT,,}" = "${EXPECTED_CERT,,}"
 
       - name: Publish verified APK on backend
-        if: vars.APK_PUBLISH_ENABLED == 'true'
+        if: env.HAS_PERSISTENT_SIGNING == 'true' && vars.APK_PUBLISH_ENABLED == 'true'
         env:
           RELEASE_SSH_KEY: ${{ secrets.RELEASE_SSH_KEY }}
           RELEASE_KNOWN_HOSTS: ${{ secrets.RELEASE_KNOWN_HOSTS }}
