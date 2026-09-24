@@ -1,7 +1,7 @@
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import { router } from "expo-router";
-import { Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, Text, TouchableOpacity } from "react-native";
 
 const OptionsPage = () => {
   const { selectedDraw } = useDrawStore();
@@ -40,7 +40,12 @@ const OptionsPage = () => {
   ];
 
   return (
-    <View className="flex-1 bg-white px-6 py-8">
+    <ScrollView
+      className="flex-1 bg-white"
+      contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 32, paddingBottom: 72 }}
+      showsVerticalScrollIndicator
+      persistentScrollbar
+    >
       <Text className="text-xl font-semibold text-center mb-6 text-black">
         {selectedDraw?.name || "Draw Options"}
       </Text>
@@ -143,7 +148,7 @@ const OptionsPage = () => {
           <Text className="text-center text-base text-black">Unbooked WhatsApp Numbers</Text>
         </TouchableOpacity>
       )}
-    </View>
+    </ScrollView>
   );
 };
 
