@@ -15,4 +15,4 @@ chmod 600 "$task_dir/key"
 ssh_options=(-i "$task_dir/key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$task_dir/known_hosts")
 remote_file="/srv/luckybh/releases/incoming/$APK_PACKAGE-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.apk"
 scp "${ssh_options[@]}" "$APK_FILE" "$RELEASE_HOST:$remote_file"
-ssh "${ssh_options[@]}" "$RELEASE_HOST" "/srv/luckybh/backend/venv/bin/python /srv/luckybh/backend/deploy/publish_apk.py '$remote_file' --package '$APK_PACKAGE' --certificate '$ANDROID_DISTRIBUTED_CERT_SHA256' --root /srv/luckybh/releases --base-url https://alfarah.in"
+ssh "${ssh_options[@]}" "$RELEASE_HOST" "/usr/bin/python3 /usr/local/lib/luckybh/publish_apk.py '$remote_file' --package '$APK_PACKAGE' --certificate '$ANDROID_DISTRIBUTED_CERT_SHA256' --root /srv/luckybh/releases --base-url https://alfarah.in"
