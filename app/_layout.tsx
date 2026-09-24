@@ -37,6 +37,7 @@ export default function RootLayout() {
           <Stack.Screen name="app-updates" options={{ headerShown: true, title: "App updates", headerStyle: { backgroundColor: themeColors.headerBackground }, headerTitleStyle: { color: themeColors.headerTitle, fontWeight: "bold", fontSize: 22 }, headerTintColor: themeColors.headerTint, headerShadowVisible: false }} />
           <Stack.Screen name="whatsapp-settings" options={{ headerShown: true, title: "Staff WhatsApp number", headerStyle: { backgroundColor: themeColors.headerBackground }, headerTitleStyle: { color: themeColors.headerTitle, fontWeight: "bold", fontSize: 22 }, headerTintColor: themeColors.headerTint, headerShadowVisible: false }} />
           <Stack.Screen name="whatsapp-rejections" options={{ headerShown: true, title: "Unbooked WhatsApp numbers", headerStyle: { backgroundColor: themeColors.headerBackground }, headerTitleStyle: { color: themeColors.headerTitle, fontWeight: "bold", fontSize: 22 }, headerTintColor: themeColors.headerTint, headerShadowVisible: false }} />
+          <Stack.Screen name="whatsapp-rejections/[id]" options={{ headerShown: true, title: "Unbooked details", headerStyle: { backgroundColor: themeColors.headerBackground }, headerTitleStyle: { color: themeColors.headerTitle, fontWeight: "bold", fontSize: 22 }, headerTintColor: themeColors.headerTint, headerShadowVisible: false }} />
           <Stack.Screen
             name="options"
             options={{

@@ -120,25 +120,6 @@ const OptionsPage = () => {
         )
       }
 
-      {
-        user?.user_type === "ADMIN" && (
-          <TouchableOpacity
-            className="bg-gray-100 rounded-lg py-4 px-4 mb-3"
-            activeOpacity={0.7}
-            onPress={() => {
-              // Pre-filter to the draw whose options screen this is.
-              router.push(
-                (selectedDraw?.id
-                  ? `/booking-deletions?draw=${selectedDraw.id}`
-                  : "/booking-deletions") as any
-              );
-            }}
-          >
-            <Text className="text-center text-base text-black">Deleted Bookings</Text>
-          </TouchableOpacity>
-        )
-      }
-
       {user?.user_type === "ADMIN" && !user.superuser && (
         <TouchableOpacity
           className="bg-gray-100 rounded-lg py-4 px-4 mb-3"
