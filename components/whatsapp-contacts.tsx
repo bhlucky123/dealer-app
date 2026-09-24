@@ -1,6 +1,6 @@
 import { CirclePlus, MessageCircle, Phone, Trash2 } from "lucide-react-native";
 import React from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, Switch, Text, TextInput, View } from "react-native";
 
 export type WhatsAppContact = { phone_number: string; receive_results: boolean; is_active: boolean };
 
@@ -29,10 +29,24 @@ export function initialContacts(user: { whatsapp_contacts?: WhatsAppContact[]; w
   if (Array.isArray(user.whatsapp_contacts)) return normalizedContacts(user.whatsapp_contacts);
   const whatsappNumbers = Array.isArray(user.whatsapp_numbers) ? user.whatsapp_numbers : [];
   const phones = [...new Set([user.phone_number, ...whatsappNumbers].filter(Boolean))] as string[];
-  return phones.map((phone) => ({ phone_number: phone, is_active: true, receive_results: !!user.whatsapp_result_subscribed }));
+  return phones.map((phone, index) => ({ phone_number: phone, is_active: true, receive_results: !!user.whatsapp_result_subscribed && index === 0 }));
 }
 
-export function WhatsAppContacts({ value, onChange, serverErrors }: { value?: WhatsAppContact[] | null; onChange: (rows: WhatsAppContact[]) => void; serverErrors?: any }) {
+export function WhatsAppContacts({
+  value,
+  onChange,
+  serverErrors,
+  resultSubscription,
+  onResultSubscriptionChange,
+  resultReceiver,
+}: {
+  value?: WhatsAppContact[] | null;
+  onChange: (rows: WhatsAppContact[]) => void;
+  serverErrors?: any;
+  resultSubscription?: boolean;
+  onResultSubscriptionChange?: (enabled: boolean) => void;
+  resultReceiver?: React.ReactNode;
+}) {
   if (typeof serverErrors === "string") {
     try { serverErrors = JSON.parse(serverErrors); } catch { /* Render the general API error below. */ }
   }
@@ -42,19 +56,39 @@ export function WhatsAppContacts({ value, onChange, serverErrors }: { value?: Wh
   const changeNumber = (index: number, phone_number: string) => onChange(contacts.map((row, itemIndex) => itemIndex === index ? { ...row, phone_number } : row));
   const addNumber = () => onChange([...contacts, { phone_number: "", receive_results: false, is_active: true }]);
 
+  const showResultSettings = typeof resultSubscription === "boolean" && !!onResultSubscriptionChange;
+
   return <View className="bg-white border border-gray-200 rounded-2xl p-4 mb-8 shadow-sm">
     <View className="flex-row items-start justify-between mb-4">
-      <View className="flex-1 mr-4">
-        <View className="flex-row items-center mb-1">
+      <View className="flex-1 mr-3">
+        <View className="flex-row items-center">
           <MessageCircle size={18} color="#2563EB" />
           <Text className="text-gray-800 font-semibold text-base ml-2">WhatsApp numbers</Text>
         </View>
-        <Text className="text-gray-500 text-sm leading-5">Add each booking number separately. Edit a number directly, then save the dealer.</Text>
       </View>
       <View className="bg-blue-50 border border-blue-100 rounded-full px-3 py-1">
         <Text className="text-blue-700 font-semibold text-xs">{contacts.length} {contacts.length === 1 ? "number" : "numbers"}</Text>
       </View>
     </View>
+
+    {showResultSettings && <View className="border-y border-gray-100 py-3.5 mb-4">
+      <View className="flex-row items-center justify-between">
+        <Text className="text-gray-800 font-semibold">WhatsApp result subscription</Text>
+        <Switch
+          accessibilityLabel="WhatsApp result subscription"
+          accessibilityState={{ checked: resultSubscription, disabled: contacts.length === 0 }}
+          value={resultSubscription}
+          disabled={contacts.length === 0}
+          onValueChange={onResultSubscriptionChange}
+          trackColor={{ false: "#CBD5E1", true: "#2563EB" }}
+          thumbColor="#FFFFFF"
+        />
+      </View>
+      {resultSubscription && <View className="mt-3">
+        <Text className="text-gray-500 text-xs font-medium mb-1">Result receiver</Text>
+        {resultReceiver}
+      </View>}
+    </View>}
 
     {typeof serverErrors === "string" && !!serverErrors && <Text className="text-red-600 text-sm mb-3">{serverErrors}</Text>}
 

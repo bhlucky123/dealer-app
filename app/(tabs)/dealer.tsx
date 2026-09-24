@@ -1,4 +1,5 @@
 import { WhatsAppContacts, WhatsAppContact, initialContacts, contactErrors, normalizePhone } from "@/components/whatsapp-contacts";
+import { Dropdown } from "@/components/searchable-selector";
 import { PrizeConfigBlock } from "@/components/prize-config";
 import useDealer from "@/hooks/use-dealer";
 import { useAuthStore } from "@/store/auth";
@@ -239,8 +240,26 @@ const DealerForm = ({
         setErrors((prev) => ({ ...prev, [key]: "" }));
     };
 
+    const validResultContacts = contacts.filter((contact) => /^\+[1-9][0-9]{7,14}$/.test(normalizePhone(contact.phone_number)));
+    const selectedResultReceiver = contacts.find((contact) => contact.receive_results)?.phone_number ?? "";
+
+    const selectResultReceiver = (phoneNumber: string) => {
+        const selected = normalizePhone(phoneNumber);
+        setContacts((previous) => previous.map((contact) => ({
+            ...contact,
+            receive_results: normalizePhone(contact.phone_number) === selected,
+        })));
+    };
+
     const setResultSubscription = (enabled: boolean) => {
         handleChange("whatsapp_result_subscribed", enabled);
+        if (!enabled) {
+            setContacts((previous) => previous.map((contact) => ({ ...contact, receive_results: false })));
+            return;
+        }
+
+        const currentReceiver = validResultContacts.find((contact) => normalizePhone(contact.phone_number) === normalizePhone(selectedResultReceiver));
+        selectResultReceiver(currentReceiver?.phone_number ?? validResultContacts[0]?.phone_number ?? "");
     };
 
     const handleSubmit = () => {
@@ -257,7 +276,7 @@ const DealerForm = ({
             whatsapp_contacts: contacts.map(row => ({
                 ...row,
                 phone_number: normalizePhone(row.phone_number),
-                receive_results: !!form.whatsapp_result_subscribed,
+                receive_results: !!form.whatsapp_result_subscribed && normalizePhone(row.phone_number) === normalizePhone(selectedResultReceiver),
             })),
             calculate_str: str,
             secret_pin: Number(form.secret_pin),
@@ -563,35 +582,23 @@ const DealerForm = ({
 
                     <WhatsAppContacts value={contacts} onChange={rows => {
                         setContacts(rows);
+                        if (form.whatsapp_result_subscribed && !rows.some((row) => row.receive_results)) {
+                            handleChange("whatsapp_result_subscribed", false);
+                        }
                         setContactApiErrors(null);
-                    }} serverErrors={contactApiErrors} />
-
-                    <View className="bg-white border border-gray-200 rounded-2xl p-4 mb-8 shadow-sm">
-                        <Text className="text-gray-800 font-semibold mb-2">WhatsApp result subscription</Text>
-                        <Text className="text-gray-500 text-sm mb-3">Choose whether this dealer receives published draw results on WhatsApp.</Text>
-                        <View className="flex-row bg-gray-100 rounded-xl p-1">
-                            <TouchableOpacity
-                                accessibilityRole="button"
-                                accessibilityLabel="Enable WhatsApp result subscription"
-                                accessibilityState={{ selected: !!form.whatsapp_result_subscribed, disabled: contacts.length === 0 }}
-                                disabled={contacts.length === 0}
-                                onPress={() => setResultSubscription(true)}
-                                className={`flex-1 rounded-lg py-3 items-center ${form.whatsapp_result_subscribed ? "bg-green-600" : "bg-transparent"} ${contacts.length === 0 ? "opacity-50" : ""}`}
-                            >
-                                <Text className={`font-semibold ${form.whatsapp_result_subscribed ? "text-white" : "text-gray-500"}`}>Enabled</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                accessibilityRole="button"
-                                accessibilityLabel="Disable WhatsApp result subscription"
-                                accessibilityState={{ selected: !form.whatsapp_result_subscribed }}
-                                onPress={() => setResultSubscription(false)}
-                                className={`flex-1 rounded-lg py-3 items-center ${!form.whatsapp_result_subscribed ? "bg-white shadow-sm" : "bg-transparent"}`}
-                            >
-                                <Text className={`font-semibold ${!form.whatsapp_result_subscribed ? "text-gray-700" : "text-gray-500"}`}>Disabled</Text>
-                            </TouchableOpacity>
-                        </View>
-                        {contacts.length === 0 && <Text className="text-amber-700 text-xs mt-2">Add a WhatsApp number before enabling result updates.</Text>}
-                    </View>
+                    }} serverErrors={contactApiErrors}
+                        resultSubscription={!!form.whatsapp_result_subscribed}
+                        onResultSubscriptionChange={setResultSubscription}
+                        resultReceiver={validResultContacts.length > 0 ? <Dropdown
+                            data={validResultContacts.map((contact) => ({ label: normalizePhone(contact.phone_number), value: normalizePhone(contact.phone_number) }))}
+                            labelField="label"
+                            valueField="value"
+                            value={normalizePhone(selectedResultReceiver)}
+                            onChange={(item) => selectResultReceiver(item.value)}
+                            placeholder="Select WhatsApp number"
+                            style={{ borderColor: "#BFDBFE", borderRadius: 12, backgroundColor: "#EFF6FF", paddingVertical: 10 }}
+                        /> : <View className="border border-gray-200 bg-gray-50 rounded-xl px-3.5 py-3"><Text className="text-gray-500 text-sm">Enter a valid WhatsApp number to choose the receiver.</Text></View>}
+                    />
 
                     {/* Status Toggle */}
                     <View className="mb-8">
