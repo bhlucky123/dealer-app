@@ -191,6 +191,8 @@ const WinnersReportScreen = () => {
     const {
         data: agents = [],
         isLoading: isAgentLoading,
+        isFetching: isAgentFetching,
+        refetch: refetchAgents,
     } = useQuery<Agent[]>({
         queryKey: ["agents"],
         queryFn: () => api.get("/agent/manage/").then((res) => {
@@ -205,6 +207,8 @@ const WinnersReportScreen = () => {
     const {
         data: dealers = [],
         isLoading: isDealerLoading,
+        isFetching: isDealerFetching,
+        refetch: refetchDealers,
     } = useQuery<Agent[]>({
         queryKey: ["dealers"],
         queryFn: () => api.get("/administrator/dealer/").then((res) => {
@@ -376,6 +380,8 @@ const WinnersReportScreen = () => {
                             value={selectedAgent}
                             onChange={item => setSelectedAgent(item.value)}
                             placeholder="Select Agent"
+                            onRefresh={refetchAgents}
+                            refreshing={isAgentFetching}
                             style={{
                                 borderColor: "#9ca3af",
                                 borderWidth: 1,
@@ -426,6 +432,8 @@ const WinnersReportScreen = () => {
                             value={selectedDealer}
                             onChange={item => changeDealerSelection(item.value, setSelectedDealer, setSelectedAgent)}
                             placeholder="Select Dealer"
+                            onRefresh={refetchDealers}
+                            refreshing={isDealerFetching}
                             style={{
                                 borderColor: "#9ca3af",
                                 borderWidth: 1,

@@ -1,40 +1,39 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, NativeEventEmitter, NativeModules, Platform, Pressable, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { ActivityIndicator, NativeEventEmitter, NativeModules, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { CheckCircle2, Download, RefreshCw, ShieldCheck, Smartphone, X } from "lucide-react-native";
 import { config } from "@/utils/config";
 
 type Version = { package_id: string; version_name: string; version_code: number };
 type Release = Version & { download_url: string; size: number; sha256: string };
 const updater = NativeModules.ApkUpdate;
-const updaterReady = Platform.OS === "android" && typeof updater?.installed === "function" && typeof updater?.download === "function" && typeof updater?.install === "function";
+
 export default function AppUpdates() {
   const [installed, setInstalled] = useState<Version | null>(null);
   const [release, setRelease] = useState<Release | null>(null);
-  const [state, setState] = useState<"idle" | "checking" | "downloading" | "installing">("idle");
+  const [state, setState] = useState("idle");
   const [message, setMessage] = useState("");
   const [progress, setProgress] = useState(0);
   const [ready, setReady] = useState(false);
+
   useEffect(() => {
-    if (!updaterReady) return;
+    if (!updater) return;
     const sub = new NativeEventEmitter(updater).addListener("ApkUpdateProgress", event => setProgress(event.progress));
-    return () => { sub.remove(); updater.cancelDownload?.(); };
+    return () => { sub.remove(); updater.cancelDownload(); };
   }, []);
+
   const check = async () => {
     setState("checking"); setMessage(""); setReady(false); setRelease(null);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
     try {
       const current: Version = await updater.installed(); setInstalled(current);
-      const response = await fetch(`${config.apiBaseUrl}/app-releases/${encodeURIComponent(current.package_id)}/latest/`, { signal: controller.signal });
+      const response = await fetch(`${config.apiBaseUrl}/app-releases/${encodeURIComponent(current.package_id)}/latest/`, { signal: AbortSignal.timeout(20000) });
       if (response.status === 404) { setMessage("No update has been published yet."); return; }
       if (!response.ok) throw new Error("Could not check for updates. Please retry.");
       const next: Release = await response.json();
       if (next.package_id !== current.package_id || !Number.isSafeInteger(next.version_code) || next.size <= 0 || !/^[a-f0-9]{64}$/i.test(next.sha256) || !next.download_url.startsWith(`${config.apiBaseUrl}/app-releases/`)) throw new Error("Invalid update metadata.");
-      if (next.version_code <= current.version_code) setMessage("Already up to date.");
+      if (next.version_code <= current.version_code) setMessage("You are already using the latest version.");
       else setRelease(next);
-    } catch (error: any) { setMessage(error?.name === "AbortError" ? "The update check timed out. Please try again." : error?.message || "Update check failed. Please retry."); }
-    finally { clearTimeout(timeout); setState("idle"); }
+    } catch (error: any) { setMessage(error.message || "Update check failed. Please retry."); }
+    finally { setState("idle"); }
   };
   const download = async () => {
     setState("downloading"); setMessage(""); setProgress(0);
@@ -48,18 +47,26 @@ export default function AppUpdates() {
     catch (error: any) { setMessage(error.message || "Installation cancelled. You can retry."); if (error.code === "VERIFY") setReady(false); }
     finally { setState("idle"); }
   };
-  if (!updaterReady) return <SafeAreaView className="flex-1 bg-gray-100 items-center justify-center p-6" edges={["bottom"]}><View className="bg-white border border-gray-200 rounded-2xl p-6 items-center w-full max-w-md"><View className="w-14 h-14 rounded-2xl bg-blue-50 items-center justify-center"><Ionicons name="phone-portrait-outline" size={28} color="#2563eb" /></View><Text className="text-gray-800 text-lg font-bold mt-4">Updates unavailable in this build</Text><Text className="text-gray-500 text-sm text-center leading-5 mt-2">Install the latest Android build from your usual distribution link, then check again.</Text></View></SafeAreaView>;
+
+  if (Platform.OS !== "android" || !updater) return <View style={styles.unsupported}><Smartphone size={32} color="#4f46e5" /><Text style={styles.unsupportedTitle}>Android update required</Text><Text style={styles.unsupportedText}>Use an Android build to check for and install app updates.</Text></View>;
   const busy = state !== "idle";
-  return <SafeAreaView className="flex-1 bg-gray-100" edges={["bottom"]}><View className="flex-1 p-4 justify-center" style={{ maxWidth: 520, width: "100%", alignSelf: "center" }}><View className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-    <View className="w-12 h-12 rounded-xl bg-blue-50 items-center justify-center"><Ionicons name="cloud-download-outline" size={25} color="#2563eb" /></View>
-    <Text className="text-gray-900 text-xl font-bold mt-4">Keep your app current</Text>
-    <Text className="text-gray-500 text-sm leading-5 mt-1">Check for the latest approved Android version and install it when you are ready.</Text>
-    {installed && <View className="bg-gray-50 rounded-xl p-3 mt-5"><Text className="text-gray-500 text-xs font-semibold uppercase">Current version</Text><Text className="text-gray-800 font-bold mt-1">{installed.version_name} <Text className="text-gray-500 font-normal">({installed.version_code})</Text></Text></View>}
-    {release && <Text>Available: {release.version_name} ({release.version_code}) · {(release.size / 1048576).toFixed(1)} MB</Text>}
-    {!!message && <View accessibilityRole="alert" className="flex-row bg-blue-50 border border-blue-100 rounded-xl p-3 mt-4"><Ionicons name="information-circle-outline" size={20} color="#2563eb" /><Text className="flex-1 text-blue-800 text-sm leading-5 ml-2">{message}</Text></View>}
-    {busy && <View className="flex-row items-center mt-5"><ActivityIndicator color="#2563eb" /><Text className="text-gray-600 text-sm ml-3">{state === "checking" ? "Checking for updates…" : state === "downloading" ? `Downloading ${Math.round(progress * 100)}%…` : "Opening installer…"}</Text></View>}
-    <Pressable disabled={busy} onPress={check} className={`flex-row items-center justify-center rounded-xl py-3.5 mt-5 ${busy ? "bg-blue-300" : "bg-blue-600"}`}><Ionicons name="refresh-outline" size={19} color="#fff" /><Text className="text-white font-bold ml-2">Check for updates</Text></Pressable>
-    {state === "downloading" && <Pressable onPress={() => updater.cancelDownload()} className="items-center py-3"><Text className="text-red-600 font-semibold">Cancel download</Text></Pressable>}
-    {release && <Pressable disabled={busy} onPress={ready ? install : download} className={`flex-row items-center justify-center rounded-xl py-3.5 mt-3 border ${busy ? "bg-gray-100 border-gray-200" : "bg-white border-blue-200"}`}><Ionicons name="cloud-download-outline" size={19} color={busy ? "#94a3b8" : "#2563eb"} /><Text className={`font-bold ml-2 ${busy ? "text-gray-400" : "text-blue-700"}`}>{ready ? "Install update" : "Download update"}</Text></Pressable>}
-  </View></View></SafeAreaView>;
+  return <View style={styles.screen}>
+    <View style={styles.hero}><View style={styles.heroIcon}><RefreshCw size={27} color="#fff" /></View><View style={{ flex: 1 }}><Text style={styles.eyebrow}>APP MAINTENANCE</Text><Text style={styles.heroTitle}>Keep Lucky BH up to date</Text><Text style={styles.heroCopy}>Get the latest fixes and improvements securely.</Text></View></View>
+    <View style={styles.card}>
+      <View style={styles.row}><View style={styles.cardIcon}><Smartphone size={21} color="#4f46e5" /></View><View style={{ flex: 1 }}><Text style={styles.label}>INSTALLED VERSION</Text><Text style={styles.value}>{installed ? `v${installed.version_name} · Build ${installed.version_code}` : "Check to view your version"}</Text></View></View>
+      {release && <View style={styles.available}><Download size={19} color="#047857" /><View><Text style={styles.availableLabel}>UPDATE AVAILABLE</Text><Text style={styles.availableText}>v{release.version_name} · {(release.size / 1048576).toFixed(1)} MB</Text></View></View>}
+    </View>
+    {!!message && <View accessibilityRole="alert" style={styles.notice}><CheckCircle2 size={19} color="#4338ca" /><Text style={styles.noticeText}>{message}</Text></View>}
+    {state === "downloading" && <View style={styles.progressCard}><View style={styles.progressHead}><Text style={styles.progressText}>Downloading update</Text><Text style={styles.progressPercent}>{Math.round(progress * 100)}%</Text></View><View style={styles.track}><View style={[styles.fill, { width: `${Math.round(progress * 100)}%` }]} /></View><Pressable onPress={() => updater.cancelDownload()} style={styles.cancel}><X size={16} color="#b91c1c" /><Text style={styles.cancelText}>Cancel download</Text></Pressable></View>}
+    <Pressable accessibilityRole="button" disabled={busy} onPress={check} style={[styles.primary, busy && styles.disabled]}><View style={styles.buttonContent}>{state === "checking" ? <ActivityIndicator color="#fff" /> : <RefreshCw size={20} color="#fff" />}<Text style={styles.primaryText}>{state === "checking" ? "Checking for updates…" : "Check for updates"}</Text></View></Pressable>
+    {release && <Pressable accessibilityRole="button" disabled={busy} onPress={ready ? install : download} style={[styles.secondary, busy && styles.disabled]}><View style={styles.buttonContent}>{ready ? <ShieldCheck size={20} color="#4338ca" /> : <Download size={20} color="#4338ca" />}<Text style={styles.secondaryText}>{ready ? "Install verified update" : "Download update"}</Text></View></Pressable>}
+  </View>;
 }
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: "#f8fafc", padding: 20, gap: 14 }, hero: { flexDirection: "row", alignItems: "center", gap: 14, padding: 20, borderRadius: 24, backgroundColor: "#312e81" }, heroIcon: { width: 54, height: 54, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: "#6366f1" }, eyebrow: { color: "#c7d2fe", fontSize: 11, fontWeight: "700", letterSpacing: 1 }, heroTitle: { color: "#fff", fontSize: 19, fontWeight: "700", marginTop: 3 }, heroCopy: { color: "#e0e7ff", fontSize: 13, marginTop: 3 },
+  card: { backgroundColor: "#fff", borderRadius: 20, padding: 16, borderWidth: 1, borderColor: "#e2e8f0", gap: 14 }, row: { flexDirection: "row", alignItems: "center", gap: 12 }, cardIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "#eef2ff" }, label: { color: "#64748b", fontSize: 11, fontWeight: "700", letterSpacing: 0.6 }, value: { color: "#0f172a", fontSize: 15, fontWeight: "700", marginTop: 3 }, available: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#ecfdf5", borderRadius: 14, padding: 12 }, availableLabel: { color: "#047857", fontSize: 11, fontWeight: "700", letterSpacing: 0.5 }, availableText: { color: "#065f46", fontSize: 14, fontWeight: "600", marginTop: 2 },
+  notice: { flexDirection: "row", alignItems: "center", gap: 9, padding: 13, borderRadius: 14, backgroundColor: "#eef2ff" }, noticeText: { flex: 1, color: "#3730a3", fontSize: 13, fontWeight: "500" }, progressCard: { backgroundColor: "#fff", borderRadius: 16, padding: 15, borderWidth: 1, borderColor: "#e2e8f0" }, progressHead: { flexDirection: "row", justifyContent: "space-between", marginBottom: 9 }, progressText: { color: "#334155", fontWeight: "600" }, progressPercent: { color: "#4f46e5", fontWeight: "700" }, track: { height: 8, backgroundColor: "#e2e8f0", borderRadius: 999, overflow: "hidden" }, fill: { height: "100%", backgroundColor: "#4f46e5", borderRadius: 999 }, cancel: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", marginTop: 12 }, cancelText: { color: "#b91c1c", fontSize: 13, fontWeight: "600" },
+  primary: { borderRadius: 16, backgroundColor: "#4f46e5", paddingVertical: 16, alignItems: "center" }, secondary: { borderRadius: 16, backgroundColor: "#eef2ff", borderWidth: 1, borderColor: "#c7d2fe", paddingVertical: 16, alignItems: "center" }, disabled: { opacity: 0.65 }, buttonContent: { flexDirection: "row", alignItems: "center", gap: 9 }, primaryText: { color: "#fff", fontSize: 15, fontWeight: "700" }, secondaryText: { color: "#4338ca", fontSize: 15, fontWeight: "700" },
+  unsupported: { flex: 1, backgroundColor: "#f8fafc", alignItems: "center", justifyContent: "center", padding: 28, gap: 10 }, unsupportedTitle: { color: "#0f172a", fontSize: 19, fontWeight: "700" }, unsupportedText: { color: "#64748b", textAlign: "center", lineHeight: 20 },
+});

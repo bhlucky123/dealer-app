@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react-native";
+import { ChevronDown, X } from "lucide-react-native";
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleProp, StyleSheet, Text, TextInput, TextStyle, View, ViewStyle } from "react-native";
 
 type Item = Record<string, any>;
@@ -12,12 +12,15 @@ type Props = {
   containerStyle?: StyleProp<ViewStyle>; renderRightIcon?: () => React.ReactNode;
   search?: boolean; searchPlaceholder?: string; maxHeight?: number;
   inputSearchStyle?: StyleProp<TextStyle>;
+  onRefresh?: () => unknown; refreshing?: boolean;
+  searchPlaceholderTextColor?: string;
 };
 
-export function Dropdown({ data, labelField, valueField, value, onChange, placeholder = "Select", loading, disabled, style, selectedTextStyle, placeholderStyle, itemTextStyle, inputSearchStyle }: Props) {
+export function Dropdown({ data, labelField, valueField, value, onChange, placeholder = "Select", loading, disabled, style, selectedTextStyle, placeholderStyle, itemTextStyle, inputSearchStyle, searchPlaceholder = "Search", searchPlaceholderTextColor = "#000", onRefresh, refreshing }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const selected = data.find(item => String(item[valueField]) === String(value));
+  const hasSelection = value !== null && value !== undefined && String(value) !== "";
   const rows = useMemo(() => data.filter(item => String(item[labelField] ?? "").toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())), [data, labelField, search]);
   const close = () => { setOpen(false); setSearch(""); };
   const choose = (item: Item) => { onChange(item); close(); };
@@ -31,11 +34,21 @@ export function Dropdown({ data, labelField, valueField, value, onChange, placeh
     <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
         <View accessibilityViewIsModal style={styles.panel}>
-          <View style={styles.row}><Text style={styles.title}>{placeholder}</Text><Pressable accessibilityRole="button" onPress={close} style={styles.action}><Text>Close</Text></Pressable></View>
-          <TextInput accessibilityLabel="Search options" placeholder="Search…" value={search} onChangeText={setSearch} autoCorrect={false} style={[styles.search, inputSearchStyle]} />
-          <Pressable accessibilityRole="button" onPress={() => choose({ [valueField]: data.some(item => item[valueField] === null) ? null : "", [labelField]: "" })} style={styles.action}><Text>Clear selection</Text></Pressable>
-          {loading ? <ActivityIndicator accessibilityLabel="Loading options" style={styles.action} /> : <FlatList
+          <View style={styles.header}>
+            <Text style={styles.title}>{placeholder}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close selector" onPress={close} style={styles.closeButton} hitSlop={8}>
+              <X size={20} color="#374151" strokeWidth={2.5} />
+            </Pressable>
+          </View>
+          <View style={styles.searchRow}>
+            <TextInput accessibilityLabel="Search options" placeholder={searchPlaceholder} placeholderTextColor={searchPlaceholderTextColor} value={search} onChangeText={setSearch} autoCorrect={false} style={[styles.search, inputSearchStyle]} />
+            {hasSelection && <Pressable accessibilityRole="button" accessibilityLabel="Clear selection" onPress={() => choose({ [valueField]: data.some(item => item[valueField] === null) ? null : "", [labelField]: "" })} style={styles.clearButton}>
+              <Text style={styles.clearText}>Clear</Text>
+            </Pressable>}
+          </View>
+          {loading && !data.length ? <ActivityIndicator accessibilityLabel="Loading options" style={styles.action} /> : <FlatList
             data={rows} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" initialNumToRender={20} windowSize={7}
+            {...(onRefresh ? { onRefresh: () => { void onRefresh(); }, refreshing: refreshing ?? Boolean(loading) } : {})}
             keyExtractor={(item, index) => `${item[valueField]}-${index}`}
             ListEmptyComponent={<Text style={styles.action}>{search ? "No matching options" : "No options available"}</Text>}
             renderItem={({ item }) => { const active = String(item[valueField]) === String(value); return <Pressable accessibilityRole="button" accessibilityState={{ selected: active }} onPress={() => choose(item)} style={[styles.option, active && styles.selected]}><Text style={[styles.text, itemTextStyle]}>{item[labelField]}</Text>{active && <Text>✓</Text>}</Pressable>; }}
@@ -51,7 +64,10 @@ const styles = StyleSheet.create({
   chevron: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "#f1f5f9" },
   text: { flex: 1, color: "#111827" }, overlay: { flex: 1, backgroundColor: "#0008", justifyContent: "center", padding: 20 },
   panel: { height: "80%", maxHeight: 600, backgroundColor: "white", borderRadius: 16, padding: 12 },
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, title: { fontWeight: "600", fontSize: 18, flex: 1 },
-  action: { padding: 14 }, search: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 12, color: "#111827" },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }, title: { fontWeight: "600", fontSize: 18, flex: 1, color: "#111827" },
+  closeButton: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 18, backgroundColor: "#f3f4f6" },
+  searchRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }, search: { flex: 1, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8, padding: 12, color: "#111827" },
+  clearButton: { minHeight: 44, justifyContent: "center", paddingHorizontal: 12, borderRadius: 8, backgroundColor: "#fef2f2", borderWidth: 1, borderColor: "#fecaca" }, clearText: { color: "#dc2626", fontWeight: "600" },
+  action: { padding: 14 },
   option: { minHeight: 52, padding: 14, flexDirection: "row", alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, borderColor: "#e2e8f0" }, selected: { backgroundColor: "#dff4ef" },
 });

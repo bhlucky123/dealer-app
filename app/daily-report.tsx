@@ -81,7 +81,7 @@ const DailyReport = () => {
     enabled: !!selectedDraw?.id,
   });
 
-  const { data: agents = [], isFetching: selectorAgentsLoading } = useQuery<Agent[]>({
+  const { data: agents = [], isFetching: selectorAgentsLoading, refetch: refetchAgents } = useQuery<Agent[]>({
     queryKey: ["agents"],
     queryFn: () => api.get("/agent/manage/").then((res) => {
       const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
@@ -91,7 +91,7 @@ const DailyReport = () => {
     initialData: user?.user_type === "DEALER" ? cachedAgents : undefined,
   });
 
-  const { data: dealers = [], isFetching: selectorDealersLoading } = useQuery<Agent[]>({
+  const { data: dealers = [], isFetching: selectorDealersLoading, refetch: refetchDealers } = useQuery<Agent[]>({
     queryKey: ["dealers"],
     queryFn: () => api.get("/administrator/dealer/").then((res) => {
       const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
@@ -279,6 +279,8 @@ const DailyReport = () => {
                   changeDealerSelection(item.value, setSelectedDealer, setSelectedAgent)
                 }}
                 placeholder="Select Dealer"
+                onRefresh={refetchDealers}
+                refreshing={selectorDealersLoading}
                 style={{
                   borderColor: "#9ca3af",
                   borderWidth: 1,
@@ -333,6 +335,8 @@ const DailyReport = () => {
                   setSelectedAgent(item.value)
                 }}
                 placeholder="Select Agent"
+                onRefresh={refetchAgents}
+                refreshing={selectorAgentsLoading}
                 style={{
                   borderColor: "#9ca3af",
                   borderWidth: 1,

@@ -8,7 +8,8 @@ interface Config {
 }
 
 export const config: Config = {
-  apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || productionApiBaseUrl,
+  apiBaseUrl: productionApiBaseUrl,
+  // apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || productionApiBaseUrl,
   build: true,
 };
 // claude --dangerously-skip-permissions --model claude-opus-4-6

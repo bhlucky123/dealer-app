@@ -105,7 +105,7 @@ export default function TopNumbers() {
 
 
   // Fetch dealers for filters / exclusion list
-  const { data: dealers = [] as Dealer[], isFetching: selectorDealersLoading } = useQuery<Dealer[]>({
+  const { data: dealers = [] as Dealer[], isFetching: selectorDealersLoading, refetch: refetchDealers } = useQuery<Dealer[]>({
     queryKey: ["dealers"],
     queryFn: () => api.get("/administrator/dealer/").then((res) => {
       const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
@@ -676,6 +676,8 @@ export default function TopNumbers() {
                 valueField="value"
                 value={dealerId}
                 placeholder="All dealers"
+                onRefresh={refetchDealers}
+                refreshing={selectorDealersLoading}
                 onChange={(item: any) => {
                   setDealerId(item.value);
                   setExcludedDealerIds([]);
@@ -1403,4 +1405,3 @@ export default function TopNumbers() {
     </View>
   );
 }
-

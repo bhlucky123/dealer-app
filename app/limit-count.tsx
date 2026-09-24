@@ -222,7 +222,7 @@ const LimitCountScreen = () => {
     const [filterDealerId, setFilterDealerId] = useState<number | "">("");
     const [selectedDealerForCreate, setSelectedDealerForCreate] = useState<number | null>(null);
 
-    const { data: dealers = [] as Dealer[], isFetching: selectorDealersLoading } = useQuery<Dealer[]>({
+    const { data: dealers = [] as Dealer[], isFetching: selectorDealersLoading, refetch: refetchDealers } = useQuery<Dealer[]>({
         queryKey: ["dealers"],
         queryFn: () => api.get("/administrator/dealer/").then((res) => {
             const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
@@ -627,6 +627,8 @@ const LimitCountScreen = () => {
                     valueField="value"
                     value={selectedDealerForCreate}
                     placeholder="Select dealer"
+                    onRefresh={refetchDealers}
+                    refreshing={selectorDealersLoading}
                     onChange={(item: { value: number | null }) => {
                         clearValidation();
                         setSelectedDealerForCreate(item.value);
@@ -924,6 +926,8 @@ const LimitCountScreen = () => {
                                             valueField="value"
                                             value={filterDealerId}
                                             placeholder="All dealers"
+                                            onRefresh={refetchDealers}
+                                            refreshing={selectorDealersLoading}
                                             onChange={(item: { value: number | "" }) => setFilterDealerId(item.value)}
                                             style={{
                                                 borderWidth: 1,
