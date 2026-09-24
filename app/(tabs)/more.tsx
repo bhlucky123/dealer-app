@@ -70,6 +70,30 @@ export const PRIZE_CONFIG_FIELDS: { key: keyof PrizeConfig; label: string }[] = 
 ];
 
 // --- Reusable Components ---
+function MoreNavigationItem({
+  icon,
+  iconColor = "#2563eb",
+  iconBackground = "#eff6ff",
+  title,
+  description,
+  onPress,
+  last = false,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor?: string;
+  iconBackground?: string;
+  title: string;
+  description: string;
+  onPress: () => void;
+  last?: boolean;
+}) {
+  return <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: last ? 0 : 1, borderBottomColor: "#f1f5f9" }}>
+    <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: iconBackground, alignItems: "center", justifyContent: "center", marginRight: 13 }}><Ionicons name={icon} size={21} color={iconColor} /></View>
+    <View style={{ flex: 1, paddingRight: 10 }}><Text style={{ color: "#1f2937", fontWeight: "700", fontSize: 15 }}>{title}</Text><Text style={{ color: "#6b7280", fontSize: 12, marginTop: 3, lineHeight: 17 }}>{description}</Text></View>
+    <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
+  </TouchableOpacity>;
+}
+
 export function Card({ title, children, style = {} }: { title?: string; children: React.ReactNode; style?: any }) {
   return (
     <View
@@ -259,6 +283,7 @@ const BankDetailsBlock = React.memo(
     );
   }
 );
+BankDetailsBlock.displayName = "BankDetailsBlock";
 
 // --- Admin Username/Password Update Component ---
 function AdminCredentialsBlock() {
@@ -1118,11 +1143,17 @@ export default function MoreTab() {
         >
           {renderMyBalanceSection()}
 
-          <TouchableOpacity onPress={() => router.push("/app-updates" as any)} style={{ padding: 18, backgroundColor: "white", marginBottom: 12, borderRadius: 12 }}><Text>Check for updates</Text></TouchableOpacity>
-          {user?.user_type === "ADMIN" && !user.superuser && <View style={{ padding: 18, gap: 16, backgroundColor: "white", marginBottom: 12, borderRadius: 12 }}>
-            <TouchableOpacity onPress={() => router.push("/whatsapp-settings" as any)}><Text>Staff WhatsApp number</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push("/whatsapp-rejections" as any)}><Text>Unbooked WhatsApp numbers</Text></TouchableOpacity>
-          </View>}
+          <Card style={{ paddingVertical: 4 }}>
+            <View style={{ paddingTop: 11, paddingHorizontal: 2 }}>
+              <Text style={{ color: "#2563eb", fontSize: 16, fontWeight: "bold", letterSpacing: 0.3 }}>App tools</Text>
+              <Text style={{ color: "#6b7280", fontSize: 12, marginTop: 4, marginBottom: 3 }}>Updates and WhatsApp booking controls</Text>
+            </View>
+            <MoreNavigationItem icon="cloud-download-outline" title="Check for updates" description="See whether a newer app version is available" onPress={() => router.push("/app-updates" as any)} last={user?.user_type !== "ADMIN" || !!user.superuser} />
+            {user?.user_type === "ADMIN" && !user.superuser && <>
+              <MoreNavigationItem icon="logo-whatsapp" iconColor="#16a34a" iconBackground="#f0fdf4" title="Staff WhatsApp number" description="Choose where unbooked-number notifications are sent" onPress={() => router.push("/whatsapp-settings" as any)} />
+              <MoreNavigationItem icon="receipt-outline" iconColor="#ea580c" iconBackground="#fff7ed" title="Unbooked WhatsApp numbers" description="Review booking requests that were not fully booked" onPress={() => router.push("/whatsapp-rejections" as any)} last />
+            </>}
+          </Card>
           {user?.user_type === "ADMIN" && renderAdminTabs()}
 
           {user?.user_type === "ADMIN" ? (
