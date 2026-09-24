@@ -20,3 +20,9 @@ test("normalizes international numbers and marks duplicate rows", () => {
   expect(rows.map(row => row.receive_results)).toEqual([true, false]);
   expect(contactErrors(rows)).toEqual(["This number is entered more than once", "This number is entered more than once"]);
 });
+
+test("tolerates dealer responses without a contacts array", () => {
+  expect(initialContacts({ whatsapp_contacts: undefined, whatsapp_numbers: undefined })).toEqual([]);
+  expect(contactErrors(undefined)).toEqual([]);
+  expect(() => render(<WhatsAppContacts value={undefined} onChange={() => {}} />)).not.toThrow();
+});
