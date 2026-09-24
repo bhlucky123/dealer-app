@@ -4,6 +4,15 @@ on:
   push:
     branches: [main, dev]
   workflow_dispatch:
+    inputs:
+      architectures:
+        description: 'APK device support (fewer architectures compile faster)'
+        type: choice
+        default: all
+        options:
+          - all
+          - arm
+          - arm64
 
 concurrency:
   group: android-release-dealer-app
@@ -24,6 +33,8 @@ jobs:
 
       - name: Read build flag from utils/config.ts
         id: check
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           BUILD=$(grep -E '^\s*build:\s*(true|false)' utils/config.ts | head -1 | sed -E 's/.*build:[[:space:]]*(true|false).*/\1/')
           if [ -z "$BUILD" ]; then
@@ -32,17 +43,24 @@ jobs:
           fi
           echo "build flag: $BUILD"
           echo "build=$BUILD" >> $GITHUB_OUTPUT
-          if echo "${{ github.event.head_commit.message }}" | grep -q '\[no-notify\]'; then
+          if echo "$COMMIT_MESSAGE" | grep -q '\[no-notify\]'; then
             echo "notify=false" >> $GITHUB_OUTPUT
           else
             echo "notify=true" >> $GITHUB_OUTPUT
           fi
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: gate
     if: needs.gate.outputs.build == 'true'
     env:
+      CI: 'true'
+      # Set repository variable ANDROID_BUILD_TARGET to arm or arm64 to narrow push builds.
+      ANDROID_BUILD_TARGET: ${{ inputs.architectures || vars.ANDROID_BUILD_TARGET || 'all' }}
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_MAXSIZE: 2G
+      CCACHE_COMPILERCHECK: content
       EXPO_PUBLIC_API_BASE_URL: ${{ github.ref_name == 'dev' && 'https://api-production-e335.up.railway.app' || 'https://alfarah.in' }}
       HAS_PERSISTENT_SIGNING: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' && secrets.ANDROID_DISTRIBUTED_CERT_SHA256 != '' && 'true' || 'false' }}
 
@@ -85,14 +103,36 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # Both main and dev builds should populate their branch's cache.
+          cache-read-only: false
+
+      - name: Install native compiler cache
+        run: |
+          if ! command -v ccache >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends ccache
+          fi
+
+      - name: Restore native compiler cache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.ANDROID_BUILD_TARGET }}-${{ hashFiles('package-lock.json', 'android/gradle/wrapper/gradle-wrapper.properties') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.ANDROID_BUILD_TARGET }}-${{ hashFiles('package-lock.json', 'android/gradle/wrapper/gradle-wrapper.properties') }}-
+
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci --legacy-peer-deps --prefer-offline --no-audit --no-fund
 
       - name: Assign increasing native version
         run: node scripts/prepare-release.cjs version
 
       - name: Expo prebuild
-        run: npx expo prebuild --platform android --clean
+        # Regenerate native configuration/plugins without repeating npm installation.
+        run: npx expo prebuild --platform android --clean --no-install
 
       - name: Restore existing signing identity
         if: env.HAS_PERSISTENT_SIGNING == 'true'
@@ -112,7 +152,25 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease
+          case "$ANDROID_BUILD_TARGET" in
+            all) ARCHITECTURES=armeabi-v7a,arm64-v8a,x86,x86_64 ;;
+            arm) ARCHITECTURES=armeabi-v7a,arm64-v8a ;;
+            arm64) ARCHITECTURES=arm64-v8a ;;
+            *) echo "Invalid ANDROID_BUILD_TARGET: $ANDROID_BUILD_TARGET"; exit 1 ;;
+          esac
+          ccache --zero-stats
+          START=$SECONDS
+          ./gradlew :app:assembleRelease --build-cache --parallel --max-workers=2 \
+            -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError" \
+            -PreactNativeArchitectures="$ARCHITECTURES"
+          echo "Gradle release build: $((SECONDS - START)) seconds ($ARCHITECTURES)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report native cache statistics
+        if: always()
+        run: |
+          if command -v ccache >/dev/null; then
+            ccache --show-stats >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Rename APK
         run: |
@@ -144,6 +202,8 @@ jobs:
         with:
           name: calculator-apk
           path: "calculator-app.apk"
+          # APK files are ZIP archives already; recompressing wastes runner time.
+          compression-level: 0
           retention-days: 5
 
   release:
