@@ -133,6 +133,16 @@ const OptionsPage = () => {
           </TouchableOpacity>
         )
       }
+
+      {user?.user_type === "ADMIN" && !user.superuser && (
+        <TouchableOpacity
+          className="bg-gray-100 rounded-lg py-4 px-4 mb-3"
+          activeOpacity={0.7}
+          onPress={() => router.push("/whatsapp-rejections" as any)}
+        >
+          <Text className="text-center text-base text-black">Unbooked WhatsApp Numbers</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };

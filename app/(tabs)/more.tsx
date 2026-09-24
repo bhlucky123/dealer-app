@@ -1146,13 +1146,9 @@ export default function MoreTab() {
           <Card style={{ paddingVertical: 4 }}>
             <View style={{ paddingTop: 11, paddingHorizontal: 2 }}>
               <Text style={{ color: "#2563eb", fontSize: 16, fontWeight: "bold", letterSpacing: 0.3 }}>App tools</Text>
-              <Text style={{ color: "#6b7280", fontSize: 12, marginTop: 4, marginBottom: 3 }}>Updates and WhatsApp booking controls</Text>
+              <Text style={{ color: "#6b7280", fontSize: 12, marginTop: 4, marginBottom: 3 }}>Application update controls</Text>
             </View>
-            <MoreNavigationItem icon="cloud-download-outline" title="Check for updates" description="See whether a newer app version is available" onPress={() => router.push("/app-updates" as any)} last={user?.user_type !== "ADMIN" || !!user.superuser} />
-            {user?.user_type === "ADMIN" && !user.superuser && <>
-              <MoreNavigationItem icon="logo-whatsapp" iconColor="#16a34a" iconBackground="#f0fdf4" title="Staff WhatsApp number" description="Choose where unbooked-number notifications are sent" onPress={() => router.push("/whatsapp-settings" as any)} />
-              <MoreNavigationItem icon="receipt-outline" iconColor="#ea580c" iconBackground="#fff7ed" title="Unbooked WhatsApp numbers" description="Review booking requests that were not fully booked" onPress={() => router.push("/whatsapp-rejections" as any)} last />
-            </>}
+            <MoreNavigationItem icon="cloud-download-outline" title="Check for updates" description="See whether a newer app version is available" onPress={() => router.push("/app-updates" as any)} last />
           </Card>
           {user?.user_type === "ADMIN" && renderAdminTabs()}
 
