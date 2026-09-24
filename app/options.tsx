@@ -106,7 +106,7 @@ const OptionsPage = () => {
         )
       }
 
-{
+      {
         user?.user_type === "ADMIN" && (
           <TouchableOpacity
             className="bg-gray-100 rounded-lg py-4 px-4 mb-3"
@@ -119,6 +119,22 @@ const OptionsPage = () => {
           </TouchableOpacity>
         )
       }
+
+      {user?.user_type === "ADMIN" && (
+        <TouchableOpacity
+          className="bg-gray-100 rounded-lg py-4 px-4 mb-3"
+          activeOpacity={0.7}
+          onPress={() => {
+            router.push(
+              (selectedDraw?.id
+                ? `/booking-deletions?draw=${selectedDraw.id}`
+                : "/booking-deletions") as any
+            );
+          }}
+        >
+          <Text className="text-center text-base text-black">Booking Deletion History</Text>
+        </TouchableOpacity>
+      )}
 
       {user?.user_type === "ADMIN" && !user.superuser && (
         <TouchableOpacity
