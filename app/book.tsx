@@ -232,12 +232,12 @@ const BookingScreen: React.FC = () => {
         return [];
       }
     },
-    enabled: !!selectedDealer,
+    enabled: user?.user_type === "DEALER" || !!selectedDealer,
     initialData: [],
 
   });
 
-  const { data: dealers = [], isFetching: selectorDealersLoading } = useQuery<Agent[]>({
+  const { data: dealers = [], isFetching: selectorDealersLoading, refetch: refetchDealers } = useQuery<Agent[]>({
     queryKey: ["dealers"],
     queryFn: () => api.get("/administrator/dealer/").then((res) => {
       const payload = Array.isArray(res.data) ? res.data : res.data?.results || [];
@@ -1813,6 +1813,8 @@ const BookingScreen: React.FC = () => {
                       placeholder="Select Dealer"
                       search
                       searchPlaceholder="Search dealer..."
+                      onRefresh={refetchDealers}
+                      refreshing={selectorDealersLoading}
                       inputSearchStyle={{
                         height: 40,
                         borderRadius: 6,
@@ -1881,6 +1883,8 @@ const BookingScreen: React.FC = () => {
                     placeholder="Select Agent"
                     search
                     searchPlaceholder="Search agent..."
+                    onRefresh={refetchAgents}
+                    refreshing={isAgentFetching}
                     inputSearchStyle={{
                       height: 40,
                       borderRadius: 6,
