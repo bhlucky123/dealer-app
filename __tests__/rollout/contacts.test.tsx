@@ -2,16 +2,15 @@ import React, { useState } from "react";
 import { fireEvent, render } from "@testing-library/react-native";
 import { WhatsAppContacts, WhatsAppContact, contactErrors, initialContacts } from "../../components/whatsapp-contacts";
 
-test("adds unsubscribed contacts, edits subscription and removes rows", () => {
+test("adds, edits and removes WhatsApp contact rows", () => {
   let current: WhatsAppContact[] = [];
   function Form() { const [rows, setRows] = useState<WhatsAppContact[]>([]); current = rows; return <WhatsAppContacts value={rows} onChange={setRows} />; }
   const screen = render(<Form />);
-  fireEvent.press(screen.getByText("+ Add number"));
+  fireEvent.press(screen.getByLabelText("Add WhatsApp number"));
   expect(current[0].receive_results).toBe(false);
   fireEvent.changeText(screen.getByLabelText("Phone number 1"), "+919876543210");
-  fireEvent(screen.getByLabelText("Receive results 1"), "valueChange", true);
-  expect(current[0].receive_results).toBe(true);
-  fireEvent.press(screen.getByText("Remove number"));
+  expect(current[0].phone_number).toBe("+919876543210");
+  fireEvent.press(screen.getByLabelText("Remove number 1"));
   expect(current).toEqual([]);
 });
 

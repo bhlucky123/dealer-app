@@ -123,6 +123,7 @@ const DealerForm = ({
         commission: defaultValues.commission?.toString() || "",
         single_digit_number_commission: defaultValues.single_digit_number_commission?.toString() || "",
         cap_amount: defaultValues.cap_amount?.toString() || "",
+        whatsapp_result_subscribed: defaultValues.whatsapp_result_subscribed ?? contacts.some((contact) => contact.receive_results),
         is_prize_set: defaultValues?.is_prize_set || false,
         "box_direct": defaultValues?.box_direct || "",
         "box_indirect": defaultValues?.box_indirect || "",
@@ -238,6 +239,10 @@ const DealerForm = ({
         setErrors((prev) => ({ ...prev, [key]: "" }));
     };
 
+    const setResultSubscription = (enabled: boolean) => {
+        handleChange("whatsapp_result_subscribed", enabled);
+    };
+
     const handleSubmit = () => {
         console.log("on submit")
         if (!validate()) {
@@ -249,7 +254,11 @@ const DealerForm = ({
 
         const preparedData: Partial<Dealer> = {
             ...form,
-            whatsapp_contacts: contacts.map(row => ({ ...row, phone_number: normalizePhone(row.phone_number) })),
+            whatsapp_contacts: contacts.map(row => ({
+                ...row,
+                phone_number: normalizePhone(row.phone_number),
+                receive_results: !!form.whatsapp_result_subscribed,
+            })),
             calculate_str: str,
             secret_pin: Number(form.secret_pin),
             commission: Number(form.commission),
@@ -275,7 +284,14 @@ const DealerForm = ({
     };
 
     // Setup input fields except calculate_str; calculate_str field will be rendered custom below.
-    const inputFields = [
+    const inputFields: {
+        key: string;
+        label: string;
+        keyboardType: "default" | "numeric";
+        secureTextEntry: boolean;
+        optional?: boolean;
+        icon: string;
+    }[] = [
         { key: "username", label: "Username", keyboardType: "default" as const, secureTextEntry: false, icon: "👤" },
         // { key: "password", label: "Password", keyboardType: "default" as const, secureTextEntry: true, optional: !!defaultValues?.id, icon: "🔒" },
         // { key: "calculate_str", label: "Calculate String", ...} // Omit, we now custom
@@ -283,7 +299,6 @@ const DealerForm = ({
         { key: "commission", label: "Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💰" },
         { key: "single_digit_number_commission", label: "Single Digit Commission", keyboardType: "numeric" as const, secureTextEntry: false, icon: "🎯" },
         { key: "cap_amount", label: "Cap Amount", keyboardType: "numeric" as const, secureTextEntry: false, icon: "💲" },
-        { key: "whatsapp_numbers", label: "WhatsApp Numbers (comma separated)", keyboardType: "phone-pad" as const, secureTextEntry: false, optional: true, icon: "phone" },
     ];
 
     return (
@@ -546,7 +561,37 @@ const DealerForm = ({
                         );
                     })}
 
-                    <WhatsAppContacts value={contacts} onChange={rows => { setContacts(rows); setContactApiErrors(null); }} serverErrors={contactApiErrors} />
+                    <WhatsAppContacts value={contacts} onChange={rows => {
+                        setContacts(rows);
+                        setContactApiErrors(null);
+                    }} serverErrors={contactApiErrors} />
+
+                    <View className="bg-white border border-gray-200 rounded-2xl p-4 mb-8 shadow-sm">
+                        <Text className="text-gray-800 font-semibold mb-2">WhatsApp result subscription</Text>
+                        <Text className="text-gray-500 text-sm mb-3">Choose whether this dealer receives published draw results on WhatsApp.</Text>
+                        <View className="flex-row bg-gray-100 rounded-xl p-1">
+                            <TouchableOpacity
+                                accessibilityRole="button"
+                                accessibilityLabel="Enable WhatsApp result subscription"
+                                accessibilityState={{ selected: !!form.whatsapp_result_subscribed, disabled: contacts.length === 0 }}
+                                disabled={contacts.length === 0}
+                                onPress={() => setResultSubscription(true)}
+                                className={`flex-1 rounded-lg py-3 items-center ${form.whatsapp_result_subscribed ? "bg-green-600" : "bg-transparent"} ${contacts.length === 0 ? "opacity-50" : ""}`}
+                            >
+                                <Text className={`font-semibold ${form.whatsapp_result_subscribed ? "text-white" : "text-gray-500"}`}>Enabled</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                accessibilityRole="button"
+                                accessibilityLabel="Disable WhatsApp result subscription"
+                                accessibilityState={{ selected: !form.whatsapp_result_subscribed }}
+                                onPress={() => setResultSubscription(false)}
+                                className={`flex-1 rounded-lg py-3 items-center ${!form.whatsapp_result_subscribed ? "bg-white shadow-sm" : "bg-transparent"}`}
+                            >
+                                <Text className={`font-semibold ${!form.whatsapp_result_subscribed ? "text-gray-700" : "text-gray-500"}`}>Disabled</Text>
+                            </TouchableOpacity>
+                        </View>
+                        {contacts.length === 0 && <Text className="text-amber-700 text-xs mt-2">Add a WhatsApp number before enabling result updates.</Text>}
+                    </View>
 
                     {/* Status Toggle */}
                     <View className="mb-8">
