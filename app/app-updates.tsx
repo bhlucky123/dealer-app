@@ -7,6 +7,20 @@ type Version = { package_id: string; version_name: string; version_code: number 
 type Release = Version & { download_url: string; size: number; sha256: string };
 const updater = NativeModules.ApkUpdate;
 
+async function fetchWithTimeout(url: string, timeoutMs: number) {
+  const controller = typeof AbortController === "undefined" ? undefined : new AbortController();
+  const timeout = setTimeout(() => controller?.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, controller ? { signal: controller.signal } : undefined);
+  } catch (error) {
+    if (controller?.signal.aborted) throw new Error("Update check timed out. Please retry.");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export default function AppUpdates() {
   const [installed, setInstalled] = useState<Version | null>(null);
   const [release, setRelease] = useState<Release | null>(null);
@@ -25,7 +39,7 @@ export default function AppUpdates() {
     setState("checking"); setMessage(""); setReady(false); setRelease(null);
     try {
       const current: Version = await updater.installed(); setInstalled(current);
-      const response = await fetch(`${config.apiBaseUrl}/app-releases/${encodeURIComponent(current.package_id)}/latest/`, { signal: AbortSignal.timeout(20000) });
+      const response = await fetchWithTimeout(`${config.apiBaseUrl}/app-releases/${encodeURIComponent(current.package_id)}/latest/`, 20000);
       if (response.status === 404) { setMessage("No update has been published yet."); return; }
       if (!response.ok) throw new Error("Could not check for updates. Please retry.");
       const next: Release = await response.json();

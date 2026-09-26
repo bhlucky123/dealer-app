@@ -11,7 +11,7 @@ import api from "@/utils/axios";
 
 const path = "/integrations/whatsapp/rejections/";
 type BookingStatus = "booking_failed" | "partially_booked" | "completely_booked";
-type UnbookedMessage = { id: number; dealer: string; phone_number: string; draw_name: string; status: BookingStatus };
+type UnbookedMessage = { id: number; dealer: string; phone_number: string; draw_name: string; status: BookingStatus; rejection_reason: string };
 type Page = { count: number; next: string | null; results: UnbookedMessage[] };
 type PickerField = "from" | "to" | null;
 
@@ -67,9 +67,9 @@ export default function Rejections() {
           {!!error && <Text className="text-red-600 text-[11px] mt-1.5">{error}</Text>}
           {picker && <DateTimePicker value={fromApiDate(picker === "from" ? draftDates.date_from : draftDates.date_to)} mode="date" display="default" onChange={(_, date) => updatePicker(picker, date)} />}
         </View>
-        <View className="bg-gray-50 border border-gray-200 border-b-0 rounded-t-xl flex-row px-3 py-2"><Text className="w-[28%] text-[10px] text-gray-500 font-bold uppercase">Dealer</Text><Text className="w-[25%] text-[10px] text-gray-500 font-bold uppercase">Number</Text><Text className="w-[27%] text-[10px] text-gray-500 font-bold uppercase">Draw</Text><Text className="w-[20%] text-[10px] text-gray-500 font-bold uppercase">Status</Text></View>
+        <View className="bg-gray-50 border border-gray-200 border-b-0 rounded-t-xl flex-row px-3 py-2"><Text className="w-[20%] text-[10px] text-gray-500 font-bold uppercase">Dealer</Text><Text className="w-[18%] text-[10px] text-gray-500 font-bold uppercase">Number</Text><Text className="w-[18%] text-[10px] text-gray-500 font-bold uppercase">Draw</Text><Text className="w-[29%] text-[10px] text-gray-500 font-bold uppercase">Reason</Text><Text className="w-[15%] text-[10px] text-gray-500 font-bold uppercase">Status</Text></View>
       </View>}
-      renderItem={({ item, index }) => <Pressable accessibilityRole="button" accessibilityLabel={`Open unbooked request from ${item.dealer || item.phone_number}`} onPress={() => router.push({ pathname: "/whatsapp-rejections/[id]", params: { id: String(item.id) } } as any)} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"} border-x border-b border-gray-200 px-3 py-3 flex-row`} style={{ maxWidth: 720, width: "100%", alignSelf: "center" }}><Text className="w-[28%] text-xs font-semibold text-gray-800 pr-2" numberOfLines={1}>{item.dealer || "Unknown"}</Text><Text className="w-[25%] text-xs text-gray-700 pr-2" numberOfLines={1}>{item.phone_number}</Text><Text className="w-[27%] text-xs text-gray-700 pr-2" numberOfLines={1}>{item.draw_name || "-"}</Text><View className="w-[20%] justify-center"><StatusPill status={item.status} /></View></Pressable>}
+      renderItem={({ item, index }) => <Pressable accessibilityRole="button" accessibilityLabel={`Open unbooked request from ${item.dealer || item.phone_number}`} onPress={() => router.push({ pathname: "/whatsapp-rejections/[id]", params: { id: String(item.id) } } as any)} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"} border-x border-b border-gray-200 px-3 py-3 flex-row`} style={{ maxWidth: 720, width: "100%", alignSelf: "center" }}><Text className="w-[20%] text-xs font-semibold text-gray-800 pr-2" numberOfLines={1}>{item.dealer || "Unknown"}</Text><Text className="w-[18%] text-xs text-gray-700 pr-2" numberOfLines={1}>{item.phone_number}</Text><Text className="w-[18%] text-xs text-gray-700 pr-2" numberOfLines={1}>{item.draw_name || "-"}</Text><Text className="w-[29%] text-xs text-red-700 pr-2">{item.rejection_reason || "Not recorded"}</Text><View className="w-[15%] justify-center"><StatusPill status={item.status} /></View></Pressable>}
       onEndReached={loadMore}
       onEndReachedThreshold={0.35}
       initialNumToRender={20}

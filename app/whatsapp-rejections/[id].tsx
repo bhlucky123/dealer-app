@@ -10,7 +10,7 @@ import api from "@/utils/axios";
 
 const path = "/integrations/whatsapp/rejections/";
 type BookingStatus = "booking_failed" | "partially_booked" | "completely_booked";
-type Detail = { number: string; sub_type: string; type: string; count: number };
+type Detail = { number: string; sub_type: string; type: string; count: number; reason: string };
 type NumberPage = { count: number; next: string | null; results: Detail[] };
 type UnbookedMessage = { id: number; dealer: string; phone_number: string; draw_name: string; status: BookingStatus; received_at: string };
 
@@ -64,11 +64,11 @@ export default function WhatsAppRejectionDetail() {
       </View>
 
       <View className="flex-1 mx-4 border border-gray-200 rounded-xl overflow-hidden bg-white">
-        <View className="flex-row bg-gray-50 px-3 py-2 border-b border-gray-200"><Text className="w-[38%] text-[10px] text-gray-500 font-bold uppercase">Number</Text><Text className="w-[35%] text-[10px] text-gray-500 font-bold uppercase">Type</Text><Text className="w-[27%] text-[10px] text-gray-500 font-bold uppercase text-right">Count</Text></View>
+        <View className="flex-row bg-gray-50 px-3 py-2 border-b border-gray-200"><Text className="w-[20%] text-[10px] text-gray-500 font-bold uppercase">Number</Text><Text className="w-[18%] text-[10px] text-gray-500 font-bold uppercase">Type</Text><Text className="w-[13%] text-[10px] text-gray-500 font-bold uppercase text-right">Count</Text><Text className="w-[49%] pl-3 text-[10px] text-gray-500 font-bold uppercase">Rejection reason</Text></View>
         <FlatList
           data={details}
           keyExtractor={(item, index) => `${item.number}-${item.sub_type}-${index}`}
-          renderItem={({ item, index }) => <View className={`${index % 2 ? "bg-gray-50" : "bg-white"} flex-row px-3 py-3 border-b border-gray-100`}><Text className="w-[38%] text-sm text-gray-900 font-bold">{item.number}</Text><Text className="w-[35%] text-sm text-gray-700">{item.sub_type || item.type || "-"}</Text><Text className="w-[27%] text-sm text-gray-800 font-semibold text-right">{item.count}</Text></View>}
+          renderItem={({ item, index }) => <View className={`${index % 2 ? "bg-gray-50" : "bg-white"} flex-row px-3 py-3 border-b border-gray-100`}><Text className="w-[20%] text-sm text-gray-900 font-bold">{item.number}</Text><Text className="w-[18%] text-sm text-gray-700">{item.sub_type || item.type || "-"}</Text><Text className="w-[13%] text-sm text-gray-800 font-semibold text-right">{item.count}</Text><Text className="w-[49%] pl-3 text-sm text-red-700">{item.reason || "Not recorded"}</Text></View>}
           onEndReached={loadMore}
           onEndReachedThreshold={0.35}
           initialNumToRender={20}
