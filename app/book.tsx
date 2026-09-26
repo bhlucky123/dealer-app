@@ -1507,7 +1507,8 @@ const BookingScreen: React.FC = () => {
           if (!dual && !single) continue;
           for (let j = start; j <= i; j++) {
             multilineEntries.set(j, dual
-              ? { count: dual[2], boxCount: dual[1] }
+              // In `SUPER/BOX` shorthand, the first count is SUPER and the second is BOX.
+              ? { count: dual[1], boxCount: dual[2] }
               // A slash-only count ("/1") books BOX; a plain count books SUPER.
               : { count: single![1], subType: trailing.startsWith("/") ? "BOX" : undefined });
           }
@@ -1520,7 +1521,7 @@ const BookingScreen: React.FC = () => {
           if (!dual || !/^\d{3}$/.test(cleanLines[i + 1] || "")) continue;
           for (let j = i + 1; j < cleanLines.length && /^\d{3}$/.test(cleanLines[j]); j++) {
             if (!multilineEntries.has(j)) {
-              multilineEntries.set(j, { count: dual[2], boxCount: dual[1] });
+              multilineEntries.set(j, { count: dual[1], boxCount: dual[2] });
             }
           }
           countLines.add(i);
