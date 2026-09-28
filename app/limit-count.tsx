@@ -230,6 +230,7 @@ const LimitCountScreen = () => {
     const [numberType, setNumberType] = useState<NumberType>(numberTypeOptions[0].value);
     const [subType, setSubType] = useState<SubType>("A");
     const [filterNumberType, setFilterNumberType] = useState<NumberType | "all">("all");
+    const [filterSubType, setFilterSubType] = useState<SubType | "all">("all");
     const [filterDealerId, setFilterDealerId] = useState<number | "">("");
     const [selectedDealerForCreate, setSelectedDealerForCreate] = useState<number | null>(null);
 
@@ -259,12 +260,15 @@ const LimitCountScreen = () => {
     };
 
     const { data: limitCounts, isLoading, isFetching, error } = useQuery<LimitCount[]>({
-        queryKey: [apiBase, selectedDraw?.id, filterNumberType, filterDealerId],
+        queryKey: [apiBase, selectedDraw?.id, filterNumberType, filterSubType, filterDealerId],
         queryFn: async () => {
             if (!selectedDraw?.id) return [];
             let url = `${apiBase}/?draw__id=${selectedDraw.id}`;
             if (filterNumberType !== "all") {
                 url += `&number_type=${filterNumberType}`;
+            }
+            if (filterSubType !== "all") {
+                url += `&sub_type=${filterSubType}`;
             }
             if (user?.user_type === "ADMIN" && filterDealerId) {
                 url += `&dealer__id=${filterDealerId}`;
@@ -629,6 +633,9 @@ const LimitCountScreen = () => {
     const borderColor = (hasError: boolean) => hasError ? "#EF4444" : "#E5E7EB";
 
     const isAdmin = user?.user_type === "ADMIN";
+    const filterSubTypeOptions = filterNumberType === "all"
+        ? Object.values(SUBTYPE_OPTIONS).flat()
+        : SUBTYPE_OPTIONS[filterNumberType];
 
     const renderHeader = () => (
         <View className="bg-white rounded-lg p-4 mb-3 border border-gray-100">
@@ -753,6 +760,21 @@ const LimitCountScreen = () => {
                 />
             </View>
 
+            {SUBTYPE_OPTIONS[numberType].length > 0 && (
+                <View className="mb-3">
+                    <Text className="text-xs font-bold text-gray-500 uppercase mb-2">Sub Type</Text>
+                    <PillTabs
+                        options={SUBTYPE_OPTIONS[numberType]}
+                        selected={subType}
+                        onSelect={(v) => {
+                            clearValidation();
+                            setSubType(v as SubType);
+                        }}
+                        disabled={isSubmitting}
+                    />
+                </View>
+            )}
+
             {/* Time window (optional) */}
             <View className="mb-3">
                 <Text className="text-xs font-bold text-gray-500 uppercase mb-2">
@@ -839,20 +861,6 @@ const LimitCountScreen = () => {
                 />
             )}
 
-            {SUBTYPE_OPTIONS[numberType].length > 0 && (
-                <View className="mb-3">
-                    <Text className="text-xs font-bold text-gray-500 uppercase mb-2">Sub Type</Text>
-                    <PillTabs
-                        options={SUBTYPE_OPTIONS[numberType]}
-                        selected={subType}
-                        onSelect={(v) => {
-                            clearValidation();
-                            setSubType(v as SubType);
-                        }}
-                        disabled={isSubmitting}
-                    />
-                </View>
-            )}
         </View>
     );
 
@@ -929,18 +937,37 @@ const LimitCountScreen = () => {
                                 <View>
                                     {renderHeader()}
 
-                                    {/* Filters row */}
+                                    {/* Table filters */}
                                     {numberTypeOptions.length > 1 && (
-                                        <View className="mb-3">
+                                        <View className="mb-3 bg-white rounded-lg p-3 border border-gray-100">
+                                            <Text className="text-xs font-bold text-gray-500 uppercase mb-2">Filter Limits</Text>
+                                            <Text className="text-xs font-bold text-gray-500 uppercase mb-2">Number Type</Text>
                                             <PillTabs
                                                 options={[
                                                     { value: "all", label: "All" },
                                                     ...numberTypeOptions,
                                                 ]}
                                                 selected={filterNumberType}
-                                                onSelect={(v) => setFilterNumberType(v as any)}
+                                                onSelect={(v) => {
+                                                    setFilterNumberType(v as NumberType | "all");
+                                                    setFilterSubType("all");
+                                                }}
                                                 disabled={isLoading}
                                             />
+                                            {filterSubTypeOptions.length > 0 && (
+                                                <View className="mt-3">
+                                                    <Text className="text-xs font-bold text-gray-500 uppercase mb-2">Sub Type</Text>
+                                                    <PillTabs
+                                                        options={[
+                                                            { value: "all", label: "All" },
+                                                            ...filterSubTypeOptions,
+                                                        ]}
+                                                        selected={filterSubType}
+                                                        onSelect={(v) => setFilterSubType(v as SubType | "all")}
+                                                        disabled={isLoading}
+                                                    />
+                                                </View>
+                                            )}
                                             {isFetching && (
                                                 <View className="items-center mt-2">
                                                     <ActivityIndicator size="small" color="#3B82F6" />
