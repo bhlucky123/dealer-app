@@ -24,6 +24,7 @@ import { Dropdown } from "@/components/searchable-selector";
 type Dealer = { id: number; username: string };
 
 type NumberType = "single_digit" | "double_digit" | "triple_digit" | "four_digit";
+type SubType = "A" | "B" | "C" | "AB" | "BC" | "AC" | "SUPER" | "BOX";
 type DrawType = "default" | "kerala" | "tamil_nadu";
 
 type LimitCount = {
@@ -35,6 +36,7 @@ type LimitCount = {
     range_start: string | null;
     range_end: string | null;
     number_type?: NumberType;
+    sub_type?: SubType | null;
     dealer_details?: { id: number; username: string; user_type?: string } | null;
     window_start_time?: string | null;
     window_end_time?: string | null;
@@ -82,6 +84,14 @@ const DRAW_TYPE_NUMBER_TYPES: Record<DrawType, { value: NumberType; label: strin
     tamil_nadu: [
         { value: "triple_digit", label: "3 Digit" },
     ],
+};
+
+// Restored from the former subtype-limit screen.
+const SUBTYPE_OPTIONS: Record<NumberType, { value: SubType; label: string }[]> = {
+    single_digit: [{ value: "A", label: "A" }, { value: "B", label: "B" }, { value: "C", label: "C" }],
+    double_digit: [{ value: "AB", label: "AB" }, { value: "BC", label: "BC" }, { value: "AC", label: "AC" }],
+    triple_digit: [{ value: "SUPER", label: "SUPER" }, { value: "BOX", label: "BOX" }],
+    four_digit: [],
 };
 
 // Full-width pill tab
@@ -134,9 +144,9 @@ const LimitCountRow = memo(
                 ? `${item.range_start}-${item.range_end}`
                 : item.number;
 
-        const typeLabel = item.number_type
+        const typeLabel = item.sub_type || (item.number_type
             ? { single_digit: "1D", double_digit: "2D", triple_digit: "3D", four_digit: "4D" }[item.number_type]
-            : "";
+            : "");
 
         const colWidths = showDealer
             ? { number: "25%", type: "12%", dealer: "20%", count: "18%", actions: "25%" }
@@ -218,6 +228,7 @@ const LimitCountScreen = () => {
 
     const [limitType, setLimitType] = useState<"single_number" | "range">("single_number");
     const [numberType, setNumberType] = useState<NumberType>(numberTypeOptions[0].value);
+    const [subType, setSubType] = useState<SubType>("A");
     const [filterNumberType, setFilterNumberType] = useState<NumberType | "all">("all");
     const [filterDealerId, setFilterDealerId] = useState<number | "">("");
     const [selectedDealerForCreate, setSelectedDealerForCreate] = useState<number | null>(null);
@@ -274,6 +285,7 @@ const LimitCountScreen = () => {
             range_end: string;
             draw: number;
             number_type: NumberType;
+            sub_type?: SubType | null;
             dealer?: number | null;
             window_start_time: string | null;
             window_end_time: string | null;
@@ -574,6 +586,7 @@ const LimitCountScreen = () => {
                 range_end: "",
                 draw: selectedDraw.id,
                 number_type: numberType,
+                sub_type: SUBTYPE_OPTIONS[numberType].length ? subType : null,
                 dealer: user?.user_type === "ADMIN" ? selectedDealerForCreate : undefined,
                 ...windowFields,
             });
@@ -606,6 +619,7 @@ const LimitCountScreen = () => {
                 range_end: trimmedEnd,
                 draw: selectedDraw.id,
                 number_type: numberType,
+                sub_type: SUBTYPE_OPTIONS[numberType].length ? subType : null,
                 dealer: user?.user_type === "ADMIN" ? selectedDealerForCreate : undefined,
                 ...windowFields,
             });
@@ -656,7 +670,9 @@ const LimitCountScreen = () => {
                         selected={numberType}
                         onSelect={(v) => {
                             clearValidation();
-                            setNumberType(v as NumberType);
+                            const nextType = v as NumberType;
+                            setNumberType(nextType);
+                            setSubType(SUBTYPE_OPTIONS[nextType][0]?.value || "A");
                             setNewNumber("");
                             setNewRangeStart("");
                             setNewRangeEnd("");
@@ -821,6 +837,21 @@ const LimitCountScreen = () => {
                         setShowTimePicker(null);
                     }}
                 />
+            )}
+
+            {SUBTYPE_OPTIONS[numberType].length > 0 && (
+                <View className="mb-3">
+                    <Text className="text-xs font-bold text-gray-500 uppercase mb-2">Sub Type</Text>
+                    <PillTabs
+                        options={SUBTYPE_OPTIONS[numberType]}
+                        selected={subType}
+                        onSelect={(v) => {
+                            clearValidation();
+                            setSubType(v as SubType);
+                        }}
+                        disabled={isSubmitting}
+                    />
+                </View>
             )}
         </View>
     );
