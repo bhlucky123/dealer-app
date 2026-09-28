@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { ChevronDown, X } from "lucide-react-native";
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleProp, StyleSheet, Text, TextInput, TextStyle, View, ViewStyle } from "react-native";
 
@@ -16,14 +16,24 @@ type Props = {
   searchPlaceholderTextColor?: string;
 };
 
-export function Dropdown({ data, labelField, valueField, value, onChange, placeholder = "Select", loading, disabled, style, selectedTextStyle, placeholderStyle, itemTextStyle, inputSearchStyle, searchPlaceholder = "Search", searchPlaceholderTextColor = "#000", onRefresh, refreshing }: Props) {
+export function Dropdown({ data, labelField, valueField, value, onChange, placeholder = "Select", loading, disabled, style, selectedTextStyle, placeholderStyle, itemTextStyle, inputSearchStyle, searchPlaceholder = "Search", searchPlaceholderTextColor = "#000", onRefresh }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const selected = data.find(item => String(item[valueField]) === String(value));
   const hasSelection = value !== null && value !== undefined && String(value) !== "";
   const rows = useMemo(() => data.filter(item => String(item[labelField] ?? "").toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())), [data, labelField, search]);
-  const close = () => { setOpen(false); setSearch(""); };
+  const close = useCallback(() => { setOpen(false); setSearch(""); }, []);
   const choose = (item: Item) => { onChange(item); close(); };
+  const refresh = useCallback(async () => {
+    if (!onRefresh || isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, onRefresh]);
   return <>
     <Pressable accessibilityRole="button" accessibilityLabel={placeholder} disabled={disabled} onPress={() => setOpen(true)} style={[styles.trigger, style]}>
       <Text style={[styles.text, selected ? selectedTextStyle : placeholderStyle]} numberOfLines={1}>{selected?.[labelField] ?? placeholder}</Text>
@@ -31,8 +41,14 @@ export function Dropdown({ data, labelField, valueField, value, onChange, placeh
         <ChevronDown size={18} color="#64748b" strokeWidth={2.5} />
       </View>
     </Pressable>
-    <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
+    <Modal
+      visible={open}
+      transparent
+      animationType="none"
+      hardwareAccelerated={Platform.OS === "android"}
+      onRequestClose={close}
+    >
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.overlay}>
         <View accessibilityViewIsModal style={styles.panel}>
           <View style={styles.header}>
             <Text style={styles.title}>{placeholder}</Text>
@@ -48,7 +64,7 @@ export function Dropdown({ data, labelField, valueField, value, onChange, placeh
           </View>
           {loading && !data.length ? <ActivityIndicator accessibilityLabel="Loading options" style={styles.action} /> : <FlatList
             data={rows} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" initialNumToRender={20} windowSize={7}
-            {...(onRefresh ? { onRefresh: () => { void onRefresh(); }, refreshing: refreshing ?? Boolean(loading) } : {})}
+            {...(onRefresh ? { onRefresh: refresh, refreshing: isRefreshing } : {})}
             keyExtractor={(item, index) => `${item[valueField]}-${index}`}
             ListEmptyComponent={<Text style={styles.action}>{search ? "No matching options" : "No options available"}</Text>}
             renderItem={({ item }) => { const active = String(item[valueField]) === String(value); return <Pressable accessibilityRole="button" accessibilityState={{ selected: active }} onPress={() => choose(item)} style={[styles.option, active && styles.selected]}><Text style={[styles.text, itemTextStyle]}>{item[labelField]}</Text>{active && <Text>✓</Text>}</Pressable>; }}
