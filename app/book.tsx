@@ -1322,6 +1322,9 @@ const BookingScreen: React.FC = () => {
 
       // Lines like "Dear 6", "Kerala 3" — chatter, silently skipped.
       const ignoreLineRegex = /^\s*[A-Za-z ]+\d+\s*$/;
+      // Partial WhatsApp booking replies start with this heading. Ignore it so
+      // staff can paste the entire reply without a failed-line warning.
+      const pendingHeaderRegex = /^\s*pending\s*:?\s*$/i;
 
       // --- VALID SUBTYPES BY NUMBER LENGTH ---
       const validSubTypesByLength: { [len: number]: string[] } = {
@@ -1548,7 +1551,7 @@ const BookingScreen: React.FC = () => {
         }
 
         // Ignore lines like "Dear 6", "Kerala 3"
-        if (ignoreLineRegex.test(line)) continue;
+        if (ignoreLineRegex.test(line) || pendingHeaderRegex.test(line)) continue;
 
         const fail = () => {
           if (waPrefix.length > 0) failedLines.push(waPrefix.trim());
