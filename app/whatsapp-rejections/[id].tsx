@@ -15,17 +15,18 @@ type NumberPage = { count: number; next: string | null; results: Detail[] };
 type UnbookedMessage = { id: number; dealer: string; phone_number: string; draw_name: string; status: BookingStatus; received_at: string; rejection_reason: string };
 
 export default function WhatsAppRejectionDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, date_from, date_to } = useLocalSearchParams<{ id: string; date_from?: string; date_to?: string }>();
   const user = useAuthStore((state) => state.user);
   const allowed = user?.user_type === "ADMIN" && !user.superuser;
   const [copying, setCopying] = useState(false);
   const [notice, setNotice] = useState("");
-  const query = useQuery<UnbookedMessage>({ queryKey: [path, id], enabled: allowed && !!id, queryFn: async () => (await api.get(`${path}${id}/`)).data });
+  const dateParams = { date_from: date_from || undefined, date_to: date_to || undefined };
+  const query = useQuery<UnbookedMessage>({ queryKey: [path, id, date_from, date_to], enabled: allowed && !!id, queryFn: async () => (await api.get(`${path}${id}/`, { params: dateParams })).data });
   const numbersQuery = useInfiniteQuery<NumberPage>({
-    queryKey: [path, id, "numbers"],
+    queryKey: [path, id, "numbers", date_from, date_to],
     enabled: allowed && !!id,
     initialPageParam: 1,
-    queryFn: async ({ pageParam }) => (await api.get(`${path}${id}/numbers/`, { params: { page: pageParam } })).data,
+    queryFn: async ({ pageParam }) => (await api.get(`${path}${id}/numbers/`, { params: { page: pageParam, ...dateParams } })).data,
     getNextPageParam: (lastPage, _pages, lastPageParam) => lastPage.next ? Number(lastPageParam) + 1 : undefined,
   });
   const details = useMemo(() => numbersQuery.data?.pages.flatMap((page) => page.results) ?? [], [numbersQuery.data]);
@@ -36,7 +37,7 @@ export default function WhatsAppRejectionDetail() {
     if (!id || copying) return;
     setCopying(true);
     try {
-      const { data } = await api.get<string[]>(`${path}${id}/copy/`);
+      const { data } = await api.get<string[]>(`${path}${id}/copy/`, { params: dateParams });
       if (!data.length) { showNotice("No copyable numbers found"); return; }
       Clipboard.setString(data.join("\n"));
       showNotice(`Copied ${data.length} number${data.length === 1 ? "" : "s"}`);
