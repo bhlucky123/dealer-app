@@ -2,6 +2,7 @@ import { changeDealerSelection } from "@/utils/account-selection";
 import { useAuthStore } from "@/store/auth";
 import useDrawStore from "@/store/draw";
 import api from "@/utils/axios";
+import { parseClipboardLocally, type ClipboardParseResult } from "@/utils/clipboard-parser";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
@@ -1326,19 +1327,29 @@ const BookingScreen: React.FC = () => {
         return;
       }
 
-      let parsed: { bookings: { number: string; count: number; sub_type: string }[]; failed_lines: string[] };
+      let parsed: ClipboardParseResult;
+      let usedFallback = false;
       try {
         const response = await api.post("/draw-booking/parse-clipboard/", {
           draw_id: selectedDraw.id,
           text: clipboardText,
         });
         parsed = response.data;
-        if (!Array.isArray(parsed?.bookings) || !Array.isArray(parsed?.failed_lines)) {
+        if (!Array.isArray(parsed?.bookings) || !Array.isArray(parsed?.failed_lines) ||
+          !parsed.bookings.every(row => typeof row?.number === "string" &&
+            typeof row?.count === "number" && Number.isFinite(row.count) && row.count > 0 &&
+            typeof row?.sub_type === "string") ||
+          !parsed.failed_lines.every(line => typeof line === "string")) {
           throw new Error("Invalid parser response");
         }
-      } catch {
-        Alert.alert("Paste unavailable", "Could not parse bookings. Check your connection and try again.");
-        return;
+      } catch (error: any) {
+        const status = error?.response?.status;
+        if (status === 400 || status === 401 || status === 403 || status === 422) {
+          Alert.alert("Paste unavailable", "The server could not accept this paste. Please check your login and selected draw.");
+          return;
+        }
+        parsed = parseClipboardLocally(clipboardText, drawType);
+        usedFallback = true;
       }
 
       for (const booking of parsed.bookings) {
@@ -1350,9 +1361,12 @@ const BookingScreen: React.FC = () => {
         setFailedPasteModalVisible(true);
       }
       const added = parsed.bookings.length;
+      const message = added
+        ? `Added ${added} booking${added > 1 ? "s" : ""} from clipboard.`
+        : "No valid bookings found in clipboard.";
       ToastAndroid.show(
-        added ? `Added ${added} booking${added > 1 ? "s" : ""} from clipboard.` : "No valid bookings found in clipboard.",
-        ToastAndroid.SHORT,
+        usedFallback ? `Saved parser: ${message} Review before booking.` : message,
+        usedFallback ? ToastAndroid.LONG : ToastAndroid.SHORT,
       );
     } catch {
       Alert.alert("Paste error", "Could not add the parsed bookings. Please try again.");
