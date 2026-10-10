@@ -27,6 +27,7 @@ Preserve booking idempotency and number formatting, BOX totals, hierarchical pri
 The unbooked WhatsApp requests page defaults to uncopied requests and can switch to copied requests. Its detail copy action uses `POST /integrations/whatsapp/rejections/<id>/copy/` to record the copied state; do not retry it automatically.
 In default-draw clipboard paste, `2/2` and `2*2` are equivalent SUPER/BOX count lines for adjacent bare three-digit numbers; the first count is SUPER and the second is BOX.
 An inline `number.SUPER.BOX` line also applies both counts to following bare three-digit numbers until the next explicit booking line.
+Paste calls authenticated `POST /draw-booking/parse-clipboard/` with the selected `draw_id` and clipboard `text`, then stages returned `bookings` and shows `failed_lines`. The shared Python WhatsApp parser owns copy/paste grammar; the app requires network access to paste. Parser-only changes deploy with the backend after this app version is installed.
 
 ## Commands and validation
 
