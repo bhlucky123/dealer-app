@@ -97,6 +97,7 @@ const BookingScreen: React.FC = () => {
   const [removedNumbersModalVisible, setRemovedNumbersModalVisible] = useState(false);
   const [removedNumbers, setRemovedNumbers] = useState<any[]>([]);
   const [submittedDetails, setSubmittedDetails] = useState<BookingDetail[]>([]);
+  const [copyCustomerName, setCopyCustomerName] = useState("");
   const [selectedDealer, setSelectedDealer] = useState("");
   const [selectedAgent, setSelectedAgent] = useState("");
 
@@ -246,6 +247,18 @@ const BookingScreen: React.FC = () => {
     enabled: user?.user_type === "ADMIN" && !cachedDealers,
     initialData: user?.user_type === "ADMIN" ? cachedDealers : undefined,
   });
+
+  const getCopyCustomerName = () => {
+    const enteredName = customerName.trim();
+    if (enteredName) return enteredName;
+
+    const dealerName = dealers.find((dealer) => String(dealer.id) === String(selectedDealer))?.username
+      || (user?.user_type === "DEALER" && String(user.id) === String(selectedDealer) ? user.username : "");
+    const agentName = agents.find((agent) => String(agent.id) === String(selectedAgent))?.username || "";
+
+    if (dealerName && agentName) return `${dealerName}/${agentName}`;
+    return dealerName || agentName;
+  };
 
   // Show error message if draw session is not active or error occurs
   useEffect(() => {
@@ -1173,6 +1186,7 @@ const BookingScreen: React.FC = () => {
         ),
         idempotency_key: idempotencyKeyRef.current,
       };
+      setCopyCustomerName(getCopyCustomerName());
       mutate(data);
     }
   };
@@ -2504,7 +2518,7 @@ const BookingScreen: React.FC = () => {
               <View className="flex-row" style={{ gap: 10 }}>
                 <TouchableOpacity
                   onPress={() => {
-                    const lines: string[] = [];
+                    const lines: string[] = copyCustomerName ? [copyCustomerName] : [];
                     removedNumbers.forEach((r: any) => {
                       if (r.booking_details?.length) {
                         r.booking_details.forEach((d: any) => {
