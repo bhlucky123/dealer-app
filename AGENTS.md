@@ -26,6 +26,7 @@ Calculator auth currently calls `/dealer/login-v2/` or `/agent/login-v2/`, and `
 Preserve booking idempotency and number formatting, BOX totals, hierarchical prizes/commissions, draw cutoffs and deletion windows. Clipboard paste for a default draw requires an explicit AB/AC/BC subtype for two-digit numbers or a preceding subtype section; ambiguous lines go to the Invalid/Skipped Bookings modal. The Axios retry policy allows only safe GET/HEAD/OPTIONS transport retries and excludes timeouts. Do not retry POST/PUT/PATCH automatically: the first request may already have changed the server.
 The unbooked WhatsApp requests page defaults to uncopied requests and can switch to copied requests. Its detail copy action uses `POST /integrations/whatsapp/rejections/<id>/copy/` to record the copied state; do not retry it automatically.
 In default-draw clipboard paste, `2/2` and `2*2` are equivalent SUPER/BOX count lines for adjacent bare three-digit numbers; the first count is SUPER and the second is BOX.
+An inline `number.SUPER.BOX` line also applies both counts to following bare three-digit numbers until the next explicit booking line.
 
 ## Commands and validation
 

@@ -1505,9 +1505,11 @@ const BookingScreen: React.FC = () => {
       // subtype, where it still applies — from the last plainly-parsed line
       // above it.
       let lastCount: number | null = null;
+      let lastBoxCount: number | null = null;
       let lastSubType: string | null = null;
-      const remember = (count: string, word?: string) => {
+      const remember = (count: string, word?: string, boxCount?: string) => {
         lastCount = Number(count);
+        lastBoxCount = boxCount === undefined ? null : Number(boxCount);
         lastSubType = word && !isGroupWord(word) ? word : null;
       };
 
@@ -1621,10 +1623,14 @@ const BookingScreen: React.FC = () => {
           // "354" — inherit the count (and subtype) from the line above.
           case "N": {
             if (lastCount === null) break;
-            const inherited = lastSubType && isValidSubtypeForNumber(nums[0], lastSubType)
-              ? lastSubType
-              : undefined;
-            ok = pushBooking(nums[0], lastCount, inherited);
+            if (isDefaultDraw && nums[0].length === 3 && lastBoxCount !== null) {
+              ok = pushDualBooking(nums[0], lastCount, lastBoxCount);
+            } else {
+              const inherited = lastSubType && isValidSubtypeForNumber(nums[0], lastSubType)
+                ? lastSubType
+                : undefined;
+              ok = pushBooking(nums[0], lastCount, inherited);
+            }
             break;
           }
 
@@ -1639,7 +1645,7 @@ const BookingScreen: React.FC = () => {
           // "123 5 2", "835--1--1", "123(1)(1)", "123.3.3."
           case "NNN": {
             ok = pushTwoCounts(nums[0], nums[1], nums[2]);
-            if (ok) remember(nums[1]);
+            if (ok) remember(nums[1], undefined, isDefaultDraw && nums[0].length === 3 ? nums[2] : undefined);
             break;
           }
 
