@@ -1,6 +1,6 @@
 import Clipboard from "@react-native-clipboard/clipboard";
 import { Ionicons } from "@expo/vector-icons";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, Text, View } from "react-native";
@@ -12,11 +12,12 @@ const path = "/integrations/whatsapp/rejections/";
 type BookingStatus = "booking_failed" | "partially_booked" | "completely_booked";
 type Detail = { number: string; sub_type: string; type: string; count: number; reason: string };
 type NumberPage = { count: number; next: string | null; results: Detail[] };
-type UnbookedMessage = { id: number; dealer: string; phone_number: string; draw_name: string; status: BookingStatus; received_at: string; rejection_reason: string };
+type UnbookedMessage = { id: number; dealer: string; phone_number: string; draw_name: string; status: BookingStatus; received_at: string; rejection_reason: string; is_copied: boolean };
 
 export default function WhatsAppRejectionDetail() {
   const { id, date } = useLocalSearchParams<{ id: string; date?: string }>();
   const user = useAuthStore((state) => state.user);
+  const queryClient = useQueryClient();
   const allowed = user?.user_type === "ADMIN" && !user.superuser;
   const [copying, setCopying] = useState(false);
   const [notice, setNotice] = useState("");
@@ -37,9 +38,10 @@ export default function WhatsAppRejectionDetail() {
     if (!id || copying) return;
     setCopying(true);
     try {
-      const { data } = await api.get<string[]>(`${path}${id}/copy/`, { params: dateParams });
+      const { data } = await api.post<string[]>(`${path}${id}/copy/`, null, { params: dateParams });
       if (!data.length) { showNotice("No copyable numbers found"); return; }
       Clipboard.setString(data.join("\n"));
+      void queryClient.invalidateQueries({ queryKey: [path] });
       showNotice(`Copied ${data.length} number${data.length === 1 ? "" : "s"}`);
     } catch {
       showNotice("Unable to copy numbers");
@@ -59,7 +61,7 @@ export default function WhatsAppRejectionDetail() {
     <View className="flex-1" style={{ maxWidth: 720, width: "100%", alignSelf: "center" }}>
       <View className="px-4 pt-4 pb-3">
         <View className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-          <View className="flex-row justify-between items-start" style={{ gap: 12 }}><View className="flex-1"><Text className="text-gray-900 text-lg font-bold" numberOfLines={1}>{message.draw_name || "No draw selected"}</Text><Text className="text-gray-500 text-xs mt-1">{new Date(message.received_at).toLocaleString()}</Text></View><StatusPill status={message.status} /></View>
+          <View className="flex-row justify-between items-start" style={{ gap: 12 }}><View className="flex-1"><Text className="text-gray-900 text-lg font-bold" numberOfLines={1}>{message.draw_name || "No draw selected"}</Text><Text className="text-gray-500 text-xs mt-1">{new Date(message.received_at).toLocaleString()}</Text><Text className="text-gray-500 text-xs mt-1">{message.is_copied ? "Copied" : "Uncopied"}</Text></View><StatusPill status={message.status} /></View>
           <View className="border-t border-gray-100 mt-4 pt-3" style={{ gap: 8 }}><Meta label="Dealer" value={message.dealer || "Unknown"} /><Meta label="WhatsApp number" value={message.phone_number} /></View>
           {!showLineReasons && <View className="mt-3 rounded-lg bg-red-50 border border-red-100 px-3 py-2"><Text className="text-[10px] font-bold uppercase text-red-700">Reason</Text><Text className="text-xs text-red-800 mt-0.5">{message.rejection_reason || "Booking was not completed."}</Text></View>}
         </View>
