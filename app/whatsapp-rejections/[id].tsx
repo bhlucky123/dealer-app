@@ -15,15 +15,15 @@ type NumberPage = { count: number; next: string | null; results: Detail[] };
 type UnbookedMessage = { id: number; dealer: string; phone_number: string; draw_name: string; status: BookingStatus; received_at: string; rejection_reason: string };
 
 export default function WhatsAppRejectionDetail() {
-  const { id, date_from, date_to } = useLocalSearchParams<{ id: string; date_from?: string; date_to?: string }>();
+  const { id, date } = useLocalSearchParams<{ id: string; date?: string }>();
   const user = useAuthStore((state) => state.user);
   const allowed = user?.user_type === "ADMIN" && !user.superuser;
   const [copying, setCopying] = useState(false);
   const [notice, setNotice] = useState("");
-  const dateParams = { date_from: date_from || undefined, date_to: date_to || undefined };
-  const query = useQuery<UnbookedMessage>({ queryKey: [path, id, date_from, date_to], enabled: allowed && !!id, queryFn: async () => (await api.get(`${path}${id}/`, { params: dateParams })).data });
+  const dateParams = { date: date || undefined };
+  const query = useQuery<UnbookedMessage>({ queryKey: [path, id, date], enabled: allowed && !!id, queryFn: async () => (await api.get(`${path}${id}/`, { params: dateParams })).data });
   const numbersQuery = useInfiniteQuery<NumberPage>({
-    queryKey: [path, id, "numbers", date_from, date_to],
+    queryKey: [path, id, "numbers", date],
     enabled: allowed && !!id,
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => (await api.get(`${path}${id}/numbers/`, { params: { page: pageParam, ...dateParams } })).data,

@@ -13,7 +13,6 @@ const path = "/integrations/whatsapp/rejections/";
 type BookingStatus = "booking_failed" | "partially_booked" | "completely_booked";
 type UnbookedMessage = { id: number; dealer: string; phone_number: string; draw_name: string; status: BookingStatus; rejection_reason: string };
 type Page = { count: number; next: string | null; results: UnbookedMessage[] };
-type PickerField = "from" | "to" | null;
 
 const toApiDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const fromApiDate = (value: string) => value ? new Date(`${value}T12:00:00`) : new Date();
@@ -25,30 +24,25 @@ export default function Rejections() {
   const selectedDraw = useDrawStore((state) => state.selectedDraw);
   const allowed = user?.user_type === "ADMIN" && !user.superuser;
   const [showAllDraws, setShowAllDraws] = useState(false);
-  const [draftDates, setDraftDates] = useState({ date_from: "", date_to: "" });
-  const [dates, setDates] = useState({ date_from: "", date_to: "" });
-  const [picker, setPicker] = useState<PickerField>(null);
-  const [error, setError] = useState("");
+  const [draftDate, setDraftDate] = useState("");
+  const [date, setDate] = useState("");
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const drawId = showAllDraws ? undefined : selectedDraw?.id;
   const query = useInfiniteQuery<Page>({
-    queryKey: [path, drawId ?? null, dates.date_from, dates.date_to],
+    queryKey: [path, drawId ?? null, date],
     enabled: allowed && (showAllDraws || !!selectedDraw?.id),
     initialPageParam: 1,
-    queryFn: async ({ pageParam }) => (await api.get(path, { params: { page: pageParam, draw: drawId, date_from: dates.date_from || undefined, date_to: dates.date_to || undefined } })).data,
+    queryFn: async ({ pageParam }) => (await api.get(path, { params: { page: pageParam, draw: drawId, date: date || undefined } })).data,
     getNextPageParam: (lastPage, _pages, lastPageParam) => lastPage.next ? Number(lastPageParam) + 1 : undefined,
   });
   const records = useMemo(() => query.data?.pages.flatMap((page) => page.results) ?? [], [query.data]);
   const total = query.data?.pages[0]?.count ?? 0;
 
-  const applyFilters = () => {
-    if (draftDates.date_from && draftDates.date_to && draftDates.date_from > draftDates.date_to) { setError("From date must be before To date."); return; }
-    setError("");
-    setDates(draftDates);
-  };
-  const clearDates = () => { setDraftDates({ date_from: "", date_to: "" }); setDates({ date_from: "", date_to: "" }); setError(""); };
-  const updatePicker = (field: Exclude<PickerField, null>, date?: Date) => {
-    if (Platform.OS === "android") setPicker(null);
-    if (date) setDraftDates((current) => ({ ...current, [field === "from" ? "date_from" : "date_to"]: toApiDate(date) }));
+  const applyFilters = () => setDate(draftDate);
+  const clearDate = () => { setDraftDate(""); setDate(""); };
+  const updatePicker = (selectedDate?: Date) => {
+    if (Platform.OS === "android") setShowDatePicker(false);
+    if (selectedDate) setDraftDate(toApiDate(selectedDate));
   };
   const loadMore = () => { if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage(); };
 
@@ -63,13 +57,12 @@ export default function Rejections() {
       ListHeaderComponent={<View style={{ maxWidth: 720, width: "100%", alignSelf: "center" }}>
         <View className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 mb-3 shadow-sm">
           <View className="flex-row items-center justify-between"><View className="flex-1 pr-3"><Text className="text-gray-800 text-xs font-bold">{showAllDraws ? "All draws" : selectedDraw?.name || "No draw selected"}</Text></View><View className="flex-row items-center"><Text className="text-gray-600 text-xs font-semibold mr-2">All draws</Text><Switch accessibilityLabel="Show all draws" value={showAllDraws} onValueChange={setShowAllDraws} trackColor={{ false: "#cbd5e1", true: "#93c5fd" }} thumbColor={showAllDraws ? "#2563eb" : "#fff"} /></View></View>
-          <View className="flex-row mt-2" style={{ gap: 8 }}><DateButton label="From" value={draftDates.date_from} onPress={() => setPicker("from")} /><DateButton label="To" value={draftDates.date_to} onPress={() => setPicker("to")} /><Pressable accessibilityLabel="Apply filters" onPress={applyFilters} className="bg-blue-600 rounded-lg px-3 justify-center"><Ionicons name="checkmark" size={18} color="#fff" /></Pressable>{(dates.date_from || dates.date_to || draftDates.date_from || draftDates.date_to) && <Pressable accessibilityLabel="Clear dates" onPress={clearDates} className="border border-blue-200 rounded-lg px-3 justify-center"><Ionicons name="close" size={18} color="#1d4ed8" /></Pressable>}</View>
-          {!!error && <Text className="text-red-600 text-[11px] mt-1.5">{error}</Text>}
-          {picker && <DateTimePicker value={fromApiDate(picker === "from" ? draftDates.date_from : draftDates.date_to)} mode="date" display="default" onChange={(_, date) => updatePicker(picker, date)} />}
+          <View className="flex-row mt-2" style={{ gap: 8 }}><DateButton label="Date" value={draftDate} onPress={() => setShowDatePicker(true)} /><Pressable accessibilityLabel="Apply filters" onPress={applyFilters} className="bg-blue-600 rounded-lg px-3 justify-center"><Ionicons name="checkmark" size={18} color="#fff" /></Pressable>{(date || draftDate) && <Pressable accessibilityLabel="Clear date" onPress={clearDate} className="border border-blue-200 rounded-lg px-3 justify-center"><Ionicons name="close" size={18} color="#1d4ed8" /></Pressable>}</View>
+          {showDatePicker && <DateTimePicker value={fromApiDate(draftDate)} mode="date" display="default" onChange={(_, selectedDate) => updatePicker(selectedDate)} />}
         </View>
         <View className="bg-gray-50 border border-gray-200 border-b-0 rounded-t-xl flex-row px-3 py-2"><Text className="w-[20%] text-[10px] text-gray-500 font-bold uppercase">Dealer</Text><Text className="w-[18%] text-[10px] text-gray-500 font-bold uppercase">Number</Text><Text className="w-[18%] text-[10px] text-gray-500 font-bold uppercase">Draw</Text><Text className="w-[29%] text-[10px] text-gray-500 font-bold uppercase">Reason</Text><Text className="w-[15%] text-[10px] text-gray-500 font-bold uppercase">Status</Text></View>
       </View>}
-      renderItem={({ item, index }) => <Pressable accessibilityRole="button" accessibilityLabel={`Open unbooked request from ${item.dealer || item.phone_number}`} onPress={() => router.push({ pathname: "/whatsapp-rejections/[id]", params: { id: String(item.id), date_from: dates.date_from || undefined, date_to: dates.date_to || undefined } } as any)} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"} border-x border-b border-gray-200 px-3 py-3 flex-row`} style={{ maxWidth: 720, width: "100%", alignSelf: "center" }}><Text className="w-[20%] text-xs font-semibold text-gray-800 pr-2" numberOfLines={1}>{item.dealer || "Unknown"}</Text><Text className="w-[18%] text-xs text-gray-700 pr-2" numberOfLines={1}>{item.phone_number}</Text><Text className="w-[18%] text-xs text-gray-700 pr-2" numberOfLines={1}>{item.draw_name || "-"}</Text><Text className="w-[29%] text-xs text-red-700 pr-2">{item.rejection_reason || "Not recorded"}</Text><View className="w-[15%] justify-center"><StatusPill status={item.status} /></View></Pressable>}
+      renderItem={({ item, index }) => <Pressable accessibilityRole="button" accessibilityLabel={`Open unbooked request from ${item.dealer || item.phone_number}`} onPress={() => router.push({ pathname: "/whatsapp-rejections/[id]", params: { id: String(item.id), date: date || undefined } } as any)} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"} border-x border-b border-gray-200 px-3 py-3 flex-row`} style={{ maxWidth: 720, width: "100%", alignSelf: "center" }}><Text className="w-[20%] text-xs font-semibold text-gray-800 pr-2" numberOfLines={1}>{item.dealer || "Unknown"}</Text><Text className="w-[18%] text-xs text-gray-700 pr-2" numberOfLines={1}>{item.phone_number}</Text><Text className="w-[18%] text-xs text-gray-700 pr-2" numberOfLines={1}>{item.draw_name || "-"}</Text><Text className="w-[29%] text-xs text-red-700 pr-2">{item.rejection_reason || "Not recorded"}</Text><View className="w-[15%] justify-center"><StatusPill status={item.status} /></View></Pressable>}
       onEndReached={loadMore}
       onEndReachedThreshold={0.35}
       initialNumToRender={20}
