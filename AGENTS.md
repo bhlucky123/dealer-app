@@ -24,6 +24,7 @@ The store uses `ADMIN | DEALER | AGENT`; backend administrators use `ADMINISTRAT
 Calculator auth currently calls `/dealer/login-v2/` or `/agent/login-v2/`, and `/user/verify-calculate-str/` for the administrator path. The store retains `preLoginToken` and `setSessionFromV2`. Do not delete these as obsolete based on old CLAUDE.md or the sibling multi-vendor guide: the current backend implements verification, PreLoginToken and `get-initial-user-creds/?type=new`. Trace client and backend together for auth work.
 
 Preserve booking idempotency and number formatting, BOX totals, hierarchical prizes/commissions, draw cutoffs and deletion windows. Clipboard paste for a default draw requires an explicit AB/AC/BC subtype for two-digit numbers or a preceding subtype section; ambiguous lines go to the Invalid/Skipped Bookings modal. The Axios retry policy allows only safe GET/HEAD/OPTIONS transport retries and excludes timeouts. Do not retry POST/PUT/PATCH automatically: the first request may already have changed the server.
+In default-draw clipboard paste, `2/2` and `2*2` are equivalent SUPER/BOX count lines for adjacent bare three-digit numbers; the first count is SUPER and the second is BOX.
 
 ## Commands and validation
 
