@@ -1346,6 +1346,7 @@ const BookingScreen: React.FC = () => {
         2: ["AB", "AC", "BC"],
         3: ["SUPER", "BOX", "SET", "BOTH"],
       };
+      let sectionSubType: string | undefined;
 
       // Helper: Validate if subType is allowed for number length
       function isValidSubtypeForNumber(number: string, subType: string) {
@@ -1379,10 +1380,13 @@ const BookingScreen: React.FC = () => {
           return true;
         }
 
-        // Default subType logic
+        // A two-digit number needs its own subtype or a preceding section.
+        if (nlen === 2 && !st) st = sectionSubType || "";
+        if (nlen === 2 && !st) return false;
+
+        // Default subType logic for single and triple digits.
         if (!st) {
           if (nlen === 1) st = "A";
-          else if (nlen === 2) st = "AB";
           else st = "SUPER";
         }
 
@@ -1544,8 +1548,6 @@ const BookingScreen: React.FC = () => {
           countLines.add(i);
         }
       }
-      let sectionSubType: string | undefined;
-
       for (const [lineIndex, origLine] of lines.entries()) {
         if (countLines.has(lineIndex)) continue;
         let line = origLine;

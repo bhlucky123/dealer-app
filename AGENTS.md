@@ -23,7 +23,7 @@ The store uses `ADMIN | DEALER | AGENT`; backend administrators use `ADMINISTRAT
 
 Calculator auth currently calls `/dealer/login-v2/` or `/agent/login-v2/`, and `/user/verify-calculate-str/` for the administrator path. The store retains `preLoginToken` and `setSessionFromV2`. Do not delete these as obsolete based on old CLAUDE.md or the sibling multi-vendor guide: the current backend implements verification, PreLoginToken and `get-initial-user-creds/?type=new`. Trace client and backend together for auth work.
 
-Preserve booking idempotency and number formatting, BOX totals, hierarchical prizes/commissions, draw cutoffs and deletion windows. The Axios retry policy allows only safe GET/HEAD/OPTIONS transport retries and excludes timeouts. Do not retry POST/PUT/PATCH automatically: the first request may already have changed the server.
+Preserve booking idempotency and number formatting, BOX totals, hierarchical prizes/commissions, draw cutoffs and deletion windows. Clipboard paste for a default draw requires an explicit AB/AC/BC subtype for two-digit numbers or a preceding subtype section; ambiguous lines go to the Invalid/Skipped Bookings modal. The Axios retry policy allows only safe GET/HEAD/OPTIONS transport retries and excludes timeouts. Do not retry POST/PUT/PATCH automatically: the first request may already have changed the server.
 
 ## Commands and validation
 
@@ -36,8 +36,9 @@ npm run android
 npm run web
 npm run lint
 npx tsc --noEmit
+npm test -- --runInBand
 ```
 
-`npm run ios` requires macOS/native iOS tooling. Android uses `expo run:android` and requires Android SDK/JDK/device or emulator. There is **no test script** in this app's package.json; do not claim `npm test` is available. Use lint/type checks for code changes and focused manual checks of affected roles, features and native workflows. Record existing failures separately. Do not run `reset-project` during maintenance: it replaces application structure.
+`npm run ios` requires macOS/native iOS tooling. Android uses `expo run:android` and requires Android SDK/JDK/device or emulator. `npm test` runs the Jest rollout tests when dev dependencies are installed. Use lint/type checks for code changes and focused manual checks of affected roles, features and native workflows. Record existing failures separately. Do not run `reset-project` during maintenance: it replaces application structure.
 
 `utils/config.ts` defaults to the live `https://alfarah.in` API. The `development` EAS profile and GitHub Actions `dev` branch set `EXPO_PUBLIC_API_BASE_URL` to the development backend. Select a development API before manual network-backed tests; do not submit live bookings/payments as checks. Keep local test URL changes out of unrelated commits. Do not expose tokens, credentials or signing files, and avoid generated dependencies/native build output. Update this guide when contracts or commands change.
