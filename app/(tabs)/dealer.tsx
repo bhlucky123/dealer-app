@@ -61,6 +61,7 @@ type DealerPage = {
 };
 
 const DEALER_PAGE_SIZE = 20;
+const DEALER_MANAGEMENT_QUERY_KEY = ["dealer-management"] as const;
 
 const CALC_OPERATORS = [
     { label: "+", value: "+" },
@@ -117,7 +118,7 @@ const DealerForm = ({
         // password: "", // Always start with an empty password for security
         is_active: defaultValues.is_active ?? true,
         // calculate_str is composed in handleSubmit from below:
-        calculate_first_number: defaultValues?.id,
+        calculate_first_number: String(defaultValues?.id ?? ""),
         calculate_operator: calculateOperatorInitial,
         calculate_second_number: calculateSecondNumInitial,
         secret_pin: defaultValues.secret_pin?.toString() || "",
@@ -781,7 +782,7 @@ export default function DealerManagement() {
         fetchNextPage,
         refetch
     } = useInfiniteQuery<DealerPage>({
-        queryKey: ["dealers", debouncedSearch],
+        queryKey: [...DEALER_MANAGEMENT_QUERY_KEY, debouncedSearch],
         queryFn: ({ pageParam }) =>
             api
                 .get("/administrator/dealer/", {
@@ -812,7 +813,8 @@ export default function DealerManagement() {
         createDealer(data, {
             onSuccess: () => {
                 setSubmitting(false)
-                queryClient.invalidateQueries({ queryKey: ["dealers"] });
+                void queryClient.invalidateQueries({ queryKey: DEALER_MANAGEMENT_QUERY_KEY });
+                void queryClient.invalidateQueries({ queryKey: ["dealers"] });
                 setShowForm(false);
             },
             onError: (error) => {
@@ -842,20 +844,11 @@ export default function DealerManagement() {
     const handleEdit = (data: any, setContactErrors: (errors: any) => void) => {
         setSubmitting(true);
         editDealer({ ...data, id: editData?.id }, {
-            onSuccess: (updated) => {
+            onSuccess: () => {
                 setShowForm(false);
                 setSubmitting(false)
-                queryClient.setQueriesData<{ pages: DealerPage[]; pageParams: unknown[] }>(
-                    { queryKey: ["dealers"] },
-                    (old) =>
-                        old && {
-                            ...old,
-                            pages: old.pages.map((page) => ({
-                                ...page,
-                                results: page.results.map((d) => (d.id === updated.id ? updated : d)),
-                            })),
-                        }
-                );
+                void queryClient.invalidateQueries({ queryKey: DEALER_MANAGEMENT_QUERY_KEY });
+                void queryClient.invalidateQueries({ queryKey: ["dealers"] });
                 setEditData(null);
             },
             onError: (err) => {
@@ -907,7 +900,8 @@ export default function DealerManagement() {
                 onPress: () => {
                     deleteDealer({ id }, {
                         onSuccess: () => {
-                            refetch()
+                            void queryClient.invalidateQueries({ queryKey: DEALER_MANAGEMENT_QUERY_KEY });
+                            void queryClient.invalidateQueries({ queryKey: ["dealers"] });
                         },
                     });
                 },

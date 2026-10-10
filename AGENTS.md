@@ -15,6 +15,7 @@ Stack: Expo 53.0.20, expo-router 5, React Native 0.79.5, React 19, TypeScript, N
 - Result, winnings, reports, payments, limit-count and transfer-log screens implement operational workflows. `components/draw-result-form.tsx`, `prize-config.tsx`, `utils/amount.ts`, `utils/date.ts`, `utils/pdf.tsx` contain shared behavior.
 - `utils/axios.ts`: authenticated API client, timing/file logging, 204 and native 2xx recovery, auth/inactive redirects and restricted transport retries. Use it for authenticated data calls; existing auth/bootstrap uses direct fetch.
 - `providers/react-query-provider.tsx`: server-data cache; `store/auth.ts`: session state. Preserve cache clearing on account/session changes so one user's cached data cannot appear for another.
+- Dealer Management uses `['dealer-management', search]` for its paginated query. Other screens use `['dealers']` for a flat selector array; keep these cache shapes separate and invalidate both after dealer mutations.
 - Styling uses `global.css` and `tailwind.config.js`. Check `app.json`, `eas.json` and native Android configuration for native/build changes; these are mobile apps, so web checks alone do not validate native modules.
 
 ## Contracts to preserve
