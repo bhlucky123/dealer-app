@@ -42,7 +42,7 @@ export default function WhatsAppRejectionDetail() {
       if (!data.length) { showNotice("No copyable numbers found"); return; }
       Clipboard.setString(data.join("\n"));
       void queryClient.invalidateQueries({ queryKey: [path] });
-      showNotice(`Copied ${data.length} number${data.length === 1 ? "" : "s"}`);
+      showNotice(`Copied ${data.length} number${data.length === 1 ? "" : "s"} and cleared from unbooked list`);
     } catch {
       showNotice("Unable to copy numbers");
     } finally {
@@ -84,7 +84,7 @@ export default function WhatsAppRejectionDetail() {
         />
       </View>
 
-      <View className="px-4 pt-3 pb-4 bg-gray-100"><Pressable disabled={copying || numbersQuery.isLoading || !numberCount} onPress={copyNumbers} className={`rounded-xl py-3.5 flex-row items-center justify-center ${copying || numbersQuery.isLoading || !numberCount ? "bg-gray-300" : "bg-blue-600 active:bg-blue-700"}`}><Ionicons name="copy-outline" size={19} color="#fff" /><Text className="text-white font-bold ml-2">{copying ? "Copying..." : "Copy unbooked numbers"}</Text></Pressable></View>
+      <View className="px-4 pt-3 pb-4 bg-gray-100"><Pressable disabled={copying || numbersQuery.isLoading || !numberCount} onPress={copyNumbers} className={`rounded-xl py-3.5 flex-row items-center justify-center ${copying || numbersQuery.isLoading || !numberCount ? "bg-gray-300" : "bg-blue-600 active:bg-blue-700"}`}><Ionicons name="copy-outline" size={19} color="#fff" /><Text className="text-white font-bold ml-2">{copying ? "Copying and clearing..." : "Copy and Clear"}</Text></Pressable></View>
     </View>
     {!!notice && <View className="absolute bottom-20 left-5 right-5 bg-gray-900 rounded-xl px-4 py-3"><Text className="text-white text-center text-sm font-semibold">{notice}</Text></View>}
   </SafeAreaView>;
